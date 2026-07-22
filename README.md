@@ -1,7 +1,4 @@
-<p align="center"><img src="https://github.com/user-attachments/assets/eca9a9ec-8534-4615-9e0f-96c5ac1d10a3" alt="LightAgent" width="420" /></p>
-
 <p align="center">
-  <a href="https://github.com/yideng966/LightAgent/releases/latest"><img src="https://img.shields.io/github/v/release/yideng966/LightAgent?cacheSeconds=3600" alt="Latest release"></a>
   <a href="https://github.com/yideng966/LightAgent/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
   <a href="https://github.com/yideng966/LightAgent"><img src="https://img.shields.io/github/stars/yideng966/LightAgent?style=flat-square&cacheSeconds=3600" alt="Stars"></a>
   <a href="https://github.com/yideng966/LightAgent/tree/master/docs"><img src="https://img.shields.io/badge/Docs-repository-blue?style=flat&logo=readthedocs&logoColor=white" alt="Docs"></a>
