@@ -6,6 +6,14 @@
 
 # LightAgent
 
+<h3 align="center">项目交流群</h3>
+
+<p align="center">
+  <a href="docs/images/wechat-group-qr.png">
+    <img src="docs/images/wechat-group-qr.png" alt="扫码加入 LightAgent 项目交流群" width="420">
+  </a>
+</p>
+
 LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目。它把 Web 控制台、即时通信平台、终端、桌面端、模型路由、工具调用、技能、长期记忆、知识库和个人微信群通道组合成一套可长期运行的 AI 助手框架。
 
 它不是单一聊天机器人，也不是只绑定某一个模型厂商的客户端。LightAgent 的核心目标是把“用户从任意渠道发来的消息”转成统一上下文，再通过普通聊天模型或 Agent 模式处理，最后把文本、图片、语音、文件或工具执行结果发回原渠道。
