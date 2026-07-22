@@ -1,0 +1,56 @@
+---
+title: web_search - Web 検索
+description: インターネットからリアルタイム情報を検索。複数の検索プロバイダーに対応
+---
+
+インターネットからリアルタイム情報、ニュース、リサーチなどを検索します。Bocha、百度 Qianfan、智谱（Zhipu）、LinkAI、Serper、Jina に対応しており、いずれか 1 社を設定すれば利用可能です。
+
+<Tip>
+  [Web コンソール](/ja/channels/web) の「モデル管理 → 検索」パネルから、プロバイダーと戦略を可視化して設定するのが推奨です。設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## プロバイダー
+
+| プロバイダー | 認証情報 | 申請窓口 |
+| --- | --- | --- |
+| Bocha | `tools.web_search.bocha_api_key` | [Bocha Open Platform](https://open.bochaai.com/) |
+| 百度 Qianfan | `qianfan_api_key` を再利用 | [Qianfan コンソール](https://cloud.baidu.com/doc/qianfan/s/2mh4su4uy) |
+| 智谱 Zhipu | `zhipu_ai_api_key` を再利用 | [Zhipu Open Platform](https://docs.bigmodel.cn/cn/guide/tools/web-search) |
+| LinkAI | `linkai_api_key` を再利用 | [LinkAI コンソール](https://link-ai.tech/console/interface) |
+| Serper | `tools.web_search.serper_api_key` | [Serper](https://serper.dev/) |
+| Jina | `tools.web_search.jina_api_key` | [Jina](https://jina.ai/) |
+
+Bocha、Serper、Jina は `tools.web_search` 配下の専用 Key を使用します。百度 Qianfan、Zhipu、LinkAI は対応するモデルプロバイダーの API Key を再利用します。
+
+## ルーティング戦略
+
+```json
+{
+  "tools": {
+    "web_search": {
+      "strategy": "auto",
+      "provider": "",
+      "bocha_api_key": "",
+      "serper_api_key": "",
+      "jina_api_key": ""
+    }
+  }
+}
+```
+
+- `auto`（デフォルト）：Agent が設定済みのプロバイダーから自動的に選択し、1 回のタスク内で複数回呼び出し、異なるプロバイダーを切り替えてより包括的な結果を取得できます。未指定の場合は `bocha → qianfan → zhipu → linkai → serper → jina` の順でフォールバックします。
+- `fixed`：`provider` で指定したプロバイダーに固定。該当プロバイダーの認証情報が欠けている場合は自動的に auto の順序にフォールバックします。
+
+## ツールパラメータ
+
+| パラメータ | 型 | 必須 | 説明 |
+| --- | --- | --- | --- |
+| `query` | string | はい | 検索キーワード |
+| `count` | integer | いいえ | 返却する結果数（1–50、デフォルト 10） |
+| `freshness` | string | いいえ | 期間指定：`noLimit`（デフォルト）、`oneDay`、`oneWeek`、`oneMonth`、`oneYear`、または `2025-01-01..2025-02-01` のような日付範囲 |
+| `summary` | boolean | いいえ | ページ要約を返すか（デフォルト false） |
+| `provider` | string | いいえ | `auto` 戦略で複数プロバイダーを設定している場合に表示。単回のプロバイダー切り替えに使用 |
+
+<Note>
+  いずれのプロバイダー認証情報も未設定の場合、このツールは Agent に登録されません。
+</Note>

@@ -1,0 +1,72 @@
+---
+title: DeepSeek
+description: DeepSeek モデル設定（テキスト対話 + 思考モード）
+---
+
+DeepSeek は現在 Agent モードでデフォルト推奨されているベンダーの 1 つで、コストパフォーマンスの高いテキスト対話とタスクプランニング能力を主力としています。
+
+## テキスト対話
+
+```json
+{
+  "model": "deepseek-v4-flash",
+  "deepseek_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `deepseek-v4-flash`（デフォルト）、`deepseek-v4-pro` をサポート |
+| `deepseek_api_key` | [DeepSeek プラットフォーム](https://platform.deepseek.com/api_keys) で作成 |
+| `deepseek_api_base` | 任意。デフォルトは `https://api.deepseek.com/v1`。サードパーティのプロキシアドレスに変更可能 |
+
+### モデル選択
+
+| モデル | 用途 |
+| --- | --- |
+| `deepseek-v4-flash` | デフォルト推奨。高速かつ低コスト |
+| `deepseek-v4-pro` | より高い知能。複雑なタスクで効果が高い |
+
+## 思考モード
+
+V4 シリーズ（`deepseek-v4-flash` / `deepseek-v4-pro`）は明示的な「思考モード」をサポートしています：モデルは最終回答を出力する前に、まず思考連鎖（`reasoning_content`）を出力することで、回答の品質を向上させます。
+
+### スイッチ
+
+グローバル設定 `enable_thinking` で制御し、Web コンソールの設定ページからも切り替えできます：
+
+```json
+{
+  "enable_thinking": true
+}
+```
+
+- `true`：すべてのチャネルでモデルが先に思考してから回答します。Web コンソールでは思考過程が表示され、IM チャネル（WeChat / 企業 WeChat / DingTalk / Lark）では表示されませんが、同様により良い回答が得られます。
+- `false`：思考をオフにし、レスポンスが速くなり、初回トークン遅延が短くなります。
+
+### 推論強度
+
+思考モードでは `reasoning_effort` で推論の強さを制御できます：
+
+```json
+{
+  "enable_thinking": true,
+  "reasoning_effort": "high"
+}
+```
+
+| 値 | 用途 |
+| --- | --- |
+| `high`（デフォルト） | 日常的な Agent タスク。思考と速度のバランス |
+| `max` | 複雑なコーディング、長いプランニング、厳しい制約を伴うタスク。推論はより深いが、所要時間と出力トークンが増える |
+
+`reasoning_effort` は `enable_thinking` が `true` の場合のみ有効です。モデルが思考モードに対応していない場合、このフィールドは自動的に無視されます。
+
+### 動作の補足
+
+- **サンプリングパラメータ**：思考モードでは `temperature`、`top_p`、`presence_penalty`、`frequency_penalty` がサーバ側で無視されます（エラーにはなりません）。LightAgent は自動的にこれらの送信をスキップします。
+- **マルチターンのツール呼び出し**：履歴にツール呼び出しが含まれる場合、DeepSeek はすべての assistant メッセージで `reasoning_content` を返却することを要求します。LightAgent は返却ロジックを自動的に処理しており、ターンをまたいで思考スイッチを切り替えてもエラーにはなりません。
+
+<Tip>
+  デフォルトでは `deepseek-v4-flash` を使用します。複雑なタスクには `deepseek-v4-pro` を使用でき、深い推論が必要な場合は `enable_thinking` をオンにできます。
+</Tip>

@@ -1,0 +1,56 @@
+---
+title: Zhipu GLM
+description: Zhipu AI GLM モデル設定（テキスト / 画像理解 / 音声認識 / ベクトル）
+---
+
+Zhipu AI はテキスト対話、画像理解、音声認識（ASR）、ベクトル（Embedding）をサポートしており、1 つの `zhipu_ai_api_key` ですべての機能を有効化できます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "model": "glm-5.2",
+  "zhipu_ai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `glm-5.2`、`glm-5.1`、`glm-5-turbo`、`glm-5`、`glm-4.7`、`glm-4-plus`、`glm-4-flash`、`glm-4-air` などを指定可能。詳細は [モデルコード](https://bigmodel.cn/dev/api/normal-model/glm-4) を参照 |
+| `zhipu_ai_api_key` | [Zhipu AI コンソール](https://www.bigmodel.cn/usercenter/proj-mgmt/apikeys) で作成 |
+| `zhipu_ai_api_base` | 任意。デフォルトは `https://open.bigmodel.cn/api/paas/v4` |
+
+## 画像理解
+
+Zhipu の chat 系モデル（`glm-5.2`、`glm-5.1`、`glm-5-turbo` など）はビジョンに対応していないため、ビジョン呼び出しは `glm-5v-turbo` に統一的にルーティングされます。`zhipu_ai_api_key` を設定すると、Agent の Vision ツールは自動的にこのモデルを使用するため、設定ファイルで明示的に指定する必要はありません。
+
+## 音声認識
+
+```json
+{
+  "voice_to_text": "zhipu",
+  "voice_to_text_model": "glm-asr-2512"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `voice_to_text` | `zhipu` に設定すると Zhipu ASR が有効になります |
+| `voice_to_text_model` | 任意。デフォルトは `glm-asr-2512` |
+
+認証情報は `zhipu_ai_api_key` を自動的に再利用します。音声ファイルは 25MB 未満を推奨します。サイズが大きすぎるファイルはサーバ側で拒否される可能性があります。
+
+## ベクトル
+
+```json
+{
+  "embedding_provider": "zhipu",
+  "embedding_model": "embedding-3"
+}
+```
+
+選択可能なモデル：`embedding-3`、`embedding-2`。embedding を変更した後は `/memory rebuild-index` コマンドを実行してインデックスを再構築する必要があります。

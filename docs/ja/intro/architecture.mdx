@@ -1,0 +1,87 @@
+---
+title: アーキテクチャ
+description: LightAgent 2.0 のシステムアーキテクチャとコア設計
+---
+
+LightAgent 2.0 は、シンプルなチャットボットから、自律的な思考、タスク計画、長期記憶、Skill の拡張性を備えた Agent アーキテクチャのスーパーインテリジェントアシスタントへと進化しました。
+
+## システムアーキテクチャ
+
+LightAgent のアーキテクチャは以下のコアモジュールで構成されています：
+
+<img src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/architecture/en/architecture.png" alt="LightAgent Architecture" />
+
+| モジュール | 説明 |
+| --- | --- |
+| **Plan** | ユーザーの意図を理解し、複雑なタスクをマルチステップの計画に分解、目標達成までツールを反復的に呼び出す |
+| **Memory** | 重要な情報をコアメモリとデイリーメモリとして自動永続化し、キーワードとベクトルのハイブリッド検索でセッション間の連続性を実現 |
+| **Knowledge** | トピック別に構造化された知識を整理。Agent が価値ある情報を Markdown ページとして自律的に整理し、インデックスと相互参照で成長するナレッジネットワークを構築 |
+| **Evolution** | 会話がアイドルになった後、隔離環境で自動レビューを実行。Skill を改善し、未完了のタスクを引き継ぎ、記憶と知識を補完して、日々の利用を通じて Agent を成長させる |
+| **Tools** | Agent が OS リソースにアクセスするための中核能力。ファイル読み書き、ターミナル、ブラウザ、スケジューラ、記憶検索、Web 検索など 10 以上の組み込みツール |
+| **Skills** | Skill の読み込み・管理。Skill Hub や GitHub からのワンクリックインストール、または会話を通じたカスタム Skill の作成をサポート |
+| **Models** | モデル層。OpenAI、Claude、Gemini、DeepSeek、MiniMax、GLM、Qwen など主要 LLM への統一アクセスを提供 |
+| **Channels** | メッセージチャネル層。Web コンソール、WeChat、Feishu、DingTalk、WeCom、公式アカウントなど複数チャネルを統一プロトコルでサポート |
+| **CLI** | コマンドラインシステム。ターミナルコマンド（`lightagent`）とチャットコマンド（`/`）で、プロセス管理、Skill インストール、設定変更、ナレッジベース管理などをサポート |
+
+## Agent モードのワークフロー
+
+Agent モードが有効な場合、LightAgent は以下のワークフローで自律的な Agent として動作します：
+
+1. **メッセージ受信** — チャネルを通じてユーザーの入力を受信
+2. **意図の理解** — タスク要件とコンテキストを分析
+3. **タスク計画** — 複雑なタスクを複数のステップに分解
+4. **ツール呼び出し** — 各ステップに適切なツールを選択・実行
+5. **記憶・ナレッジの更新** — 重要な情報を長期記憶に保存し、構造化された知識をナレッジベースに整理
+6. **結果の返却** — 実行結果をユーザーに送信
+
+## ワークスペースのディレクトリ構成
+
+Agent のワークスペースはデフォルトで `~/lightagent` にあり、システムプロンプト、記憶ファイル、Skill ファイルを格納しています：
+
+```
+~/lightagent/
+├── system.md          # Agent システムプロンプト
+├── user.md            # ユーザープロフィール
+├── MEMORY.md          # コアメモリ
+├── memory/            # 長期記憶ストレージ
+│   └── YYYY-MM-DD.md  # デイリーメモリ
+├── knowledge/         # パーソナルナレッジベース
+│   ├── index.md       # ナレッジインデックス
+│   └── <category>/    # トピック別ページ
+└── skills/            # カスタム Skill
+    ├── skill-1/
+    └── skill-2/
+```
+
+シークレットキーはセキュリティのため `~/.lightagent` ディレクトリに別途保存されます：
+
+```
+~/.lightagent/
+└── .env               # Skill 用のシークレットキー
+```
+
+## コア設定
+
+`config.json` で Agent モードのパラメータを設定します：
+
+```json
+{
+  "agent": true,
+  "agent_workspace": "~/lightagent",
+  "agent_max_context_tokens": 40000,
+  "agent_max_context_turns": 30,
+  "agent_max_steps": 15,
+  "lightagent_lang": "auto"
+}
+```
+
+| パラメータ | 説明 | デフォルト値 |
+| --- | --- | --- |
+| `agent` | Agent モードの有効化 | `true` |
+| `agent_workspace` | ワークスペースのパス | `~/lightagent` |
+| `agent_max_context_tokens` | 最大コンテキストトークン数 | `40000` |
+| `agent_max_context_turns` | 最大コンテキストターン数 | `30` |
+| `agent_max_steps` | タスクあたりの最大判断ステップ数 | `15` |
+| `knowledge` | パーソナルナレッジベースの有効化 | `true` |
+| `self_evolution_enabled` | 自己進化の有効化（新規インストールではデフォルト有効） | `false` |
+| `lightagent_lang` | UI・コマンド文言・システムプロンプトなどの言語。`auto` で自動検出、`zh` / `en` も指定可 | `auto` |

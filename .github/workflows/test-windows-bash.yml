@@ -1,0 +1,32 @@
+name: Windows Bash Streaming Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "agent/tools/bash/bash.py"
+      - "tests/test_bash_streaming.py"
+      - ".github/workflows/test-windows-bash.yml"
+
+jobs:
+  windows-bash-tests:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+          python -m pip install -r requirements.txt
+
+      - name: Run Windows Bash streaming tests
+        run: python -m pytest tests/test_bash_streaming.py -v

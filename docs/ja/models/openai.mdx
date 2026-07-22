@@ -1,0 +1,103 @@
+---
+title: OpenAI
+description: OpenAI モデル設定（テキスト / ビジョン / 画像 / 音声 / ベクトル）
+---
+
+OpenAI は最も広範な機能をカバーするベンダーで、テキスト対話、画像理解、画像生成、音声認識（ASR）、音声合成（TTS）、ベクトル（Embedding）の各機能を同時に担えます。1 つの `open_ai_api_key` で Agent はすべての機能を利用できます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+
+## テキスト対話
+
+```json
+{
+  "model": "gpt-5.5",
+  "open_ai_api_key": "YOUR_API_KEY",
+  "open_ai_api_base": "https://api.openai.com/v1"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | OpenAI API の [model パラメータ](https://platform.openai.com/docs/models) と同じです。`gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.4-nano`、`gpt-5` シリーズ、`gpt-4.1`、o シリーズなどをサポート。Agent モードのデフォルトは `gpt-5.5`、コストパフォーマンスを重視する場合は `gpt-5.4` に変更可能 |
+| `open_ai_api_key` | [OpenAI プラットフォーム](https://platform.openai.com/api-keys) で作成 |
+| `open_ai_api_base` | 任意。サードパーティのプロキシに接続するために変更可能 |
+| `bot_type` | OpenAI 公式モデルを使用する場合は不要。互換プロトコルでベンダーモデルに接続する場合は `openai` に設定 |
+
+## 画像理解
+
+`gpt-5.5`、`gpt-5.4`、`gpt-4o`、`gpt-4.1` などの OpenAI モデルはネイティブにビジョンをサポートしています。`open_ai_api_key` を設定すると、Agent の Vision ツールは自動的にメインモデルを使用して画像を認識します。メインモデルがビジョンに対応していない場合や明示的に指定したい場合は、設定ファイルで指定できます：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "gpt-5.4-mini"
+    }
+  }
+}
+```
+
+サポートする Vision モデル：`gpt-5.5`、`gpt-5.4`、`gpt-5.4-mini`、`gpt-5.4-nano`、`gpt-5`、`gpt-4.1`、`gpt-4.1-mini`、`gpt-4o`。
+
+## 画像生成
+
+設定ファイルで画像生成モデルを指定すると、Agent が画像生成スキルを呼び出す際に自動的に OpenAI にルーティングされます：
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "gpt-image-2"
+    }
+  }
+}
+```
+
+サポートする画像生成モデル：`gpt-image-2`、`gpt-image-1`。
+
+## 音声認識
+
+```json
+{
+  "voice_to_text": "openai",
+  "voice_to_text_model": "gpt-4o-mini-transcribe"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `voice_to_text` | `openai` に設定すると OpenAI 音声認識が有効になります |
+| `voice_to_text_model` | 任意。デフォルトは `gpt-4o-mini-transcribe`。`gpt-4o-transcribe`、`whisper-1` も指定可能 |
+
+認証情報は `open_ai_api_key` を自動的に再利用します。
+
+## 音声合成
+
+```json
+{
+  "text_to_voice": "openai",
+  "text_to_voice_model": "tts-1",
+  "tts_voice_id": "alloy"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `text_to_voice_model` | `tts-1`、`tts-1-hd`、`gpt-4o-mini-tts` |
+| `tts_voice_id` | 音色：`alloy`、`echo`、`fable`、`onyx`、`nova`、`shimmer`、`ash`、`ballad`、`coral`、`sage`、`verse` |
+
+## ベクトル
+
+```json
+{
+  "embedding_provider": "openai",
+  "embedding_model": "text-embedding-3-small"
+}
+```
+
+選択可能なモデル：`text-embedding-3-small`、`text-embedding-3-large`、`text-embedding-ada-002`。embedding を変更した後は `/memory rebuild-index` コマンドを実行してインデックスを再構築する必要があります。
+

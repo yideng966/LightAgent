@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data: blob: http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob: http://127.0.0.1:* http://localhost:*; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*;" />
+    <title>LightAgent</title>
+    <!-- Local fonts & icons (offline, no CDN) served from publicDir -->
+    <link rel="stylesheet" href="./vendor/fonts/inter/inter.css" />
+    <link rel="stylesheet" href="./vendor/fontawesome/css/all.min.css" />
+    <script>
+    // Resolve theme before first paint to avoid flash-of-wrong-theme.
+    (function () {
+      try {
+        var pref = localStorage.getItem('lightagent_theme');
+        if (!pref) {
+          pref = localStorage.getItem('cow_theme');
+          if (pref) {
+            localStorage.setItem('lightagent_theme', pref);
+            localStorage.removeItem('cow_theme');
+          }
+        }
+        pref = pref || 'dark';
+        var resolved = pref === 'system'
+          ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+          : pref;
+        if (resolved === 'dark') document.documentElement.classList.add('dark');
+        else document.documentElement.classList.remove('dark');
+      } catch (e) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+    </script>
+</head>
+<body class="h-screen overflow-hidden">
+    <div id="root"></div>
+    <script type="module" src="./src/main.tsx"></script>
+</body>
+</html>

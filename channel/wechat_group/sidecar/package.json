@@ -1,0 +1,16 @@
+{
+  "name": "lightagent-wechat-group-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "file-box": "^1.4.15",
+    "memory-card": "1.1.2",
+    "wechaty": "^1.20.2",
+    "wechaty-puppet-wechat4u": "^1.14.14",
+    "xml2js": "0.4.23"
+  }
+}

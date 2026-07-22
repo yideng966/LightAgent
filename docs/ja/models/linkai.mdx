@@ -1,0 +1,103 @@
+---
+title: LinkAI
+description: LinkAI プラットフォーム経由でテキスト、ビジョン、画像、音声、ベクトル機能を統一接続
+---
+
+1 つの `linkai_api_key` で、OpenAI、Claude、Gemini、DeepSeek、MiniMax、Qwen、Kimi、Doubao など主要ベンダーのすべての機能にアクセスできます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "use_linkai": true,
+  "linkai_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `use_linkai` | `true` に設定すると有効になります |
+| `linkai_api_key` | [コンソール](https://link-ai.tech/console/interface) で作成 |
+| `model` | [モデル一覧](https://link-ai.tech/console/models) の任意のコードを指定可能 |
+
+詳細は [モデルサービス](https://link-ai.tech/console/models) を参照してください。
+
+## 画像理解
+
+設定が完了すると、Agent の Vision ツールは自動的にゲートウェイ上のマルチモーダルモデルを呼び出します。追加設定は不要です。Vision モデルを手動で指定したい場合：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "gpt-5.4-mini"
+    }
+  }
+}
+```
+
+選択可能なモデル：`gpt-4.1-mini`、`gpt-5.4-mini`、`qwen3.7-plus`、`doubao-seed-2-1-pro-260628`、`kimi-k2.6`、`claude-sonnet-5`、`gemini-3.1-flash-lite-preview` など。
+
+## 画像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "gpt-image-2"
+    }
+  }
+}
+```
+
+| モデル ID | エイリアス |
+| --- | --- |
+| `gpt-image-2` | OpenAI |
+| `gemini-3.1-flash-image-preview` | Nano Banana 2 |
+| `gemini-3-pro-image-preview` | Nano Banana Pro |
+| `seedream-5.0-lite` | ByteDance Doubao Seedream |
+
+## 音声認識
+
+```json
+{
+  "voice_to_text": "linkai"
+}
+```
+
+ASR は固定で Whisper を使用します。認証情報は `linkai_api_key` を自動的に再利用します。
+
+## 音声合成
+
+音声合成ゲートウェイは複数の TTS エンジンをサポートしており、`text_to_voice_model` でエンジンを選択し、音色はエンジンに応じて切り替わります。
+
+```json
+{
+  "text_to_voice": "linkai",
+  "text_to_voice_model": "doubao",
+  "tts_voice_id": "BV001_streaming"
+}
+```
+
+| `text_to_voice_model` | エンジンの説明 |
+| --- | --- |
+| `tts-1` | OpenAI · 多言語汎用（音色 `alloy` / `nova` / `echo` など） |
+| `doubao` | ByteDance Doubao · 中国語の音色が豊富 |
+| `baidu` | Baidu · 中国語のアナウンサー音色 |
+
+エンジンによって対応する音色が異なるため、Web コンソールの「モデル管理 → 音声合成」から視覚的に選択することをおすすめします。
+
+## ベクトル
+
+```json
+{
+  "embedding_provider": "linkai",
+  "embedding_model": "text-embedding-3-small"
+}
+```
+
+デフォルトモデルは `text-embedding-3-small`（OpenAI 互換）です。embedding を変更した後は `/memory rebuild-index` コマンドを実行してインデックスを再構築する必要があります。

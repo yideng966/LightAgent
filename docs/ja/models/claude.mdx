@@ -1,0 +1,51 @@
+---
+title: Claude
+description: Anthropic Claude モデル設定（テキスト対話 + 画像理解）
+---
+
+Claude は Anthropic が提供するモデルで、テキスト対話と画像理解をサポートします。主流の Sonnet / Opus モデルはネイティブにビジョンをサポートしており、別途 Vision モデルを指定する必要はありません。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "model": "claude-sonnet-5",
+  "claude_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `claude-sonnet-5`、`claude-opus-4-8`、`claude-opus-4-7`、`claude-sonnet-4-6`、`claude-opus-4-6`、`claude-sonnet-4-5`、`claude-sonnet-4-0`、`claude-3-5-sonnet-latest` などをサポート。詳細は [公式モデル一覧](https://docs.anthropic.com/en/docs/about-claude/models/overview) を参照 |
+| `claude_api_key` | [Claude コンソール](https://console.anthropic.com/settings/keys) で作成 |
+| `claude_api_base` | 任意。デフォルトは `https://api.anthropic.com/v1`。サードパーティのプロキシに変更可能 |
+
+### モデル選択
+
+| モデル | 用途 |
+| --- | --- |
+| `claude-sonnet-5` | 最新フラッグシップ。デフォルト推奨モデルで、推論性能とコストのバランスが最も良い |
+| `claude-opus-4-8` | 前世代フラッグシップ。推論性能が最も高いが、価格は高め |
+| `claude-opus-4-7` | より以前の Opus フラッグシップ |
+| `claude-sonnet-4-6` | コストパフォーマンスと速度のバランスが良く、コストも低い |
+| `claude-opus-4-6` / `claude-sonnet-4-5` / `claude-sonnet-4-0` | より以前のフラッグシップ。価格はより安い |
+
+## 画像理解
+
+`claude_api_key` を設定すると、Agent の Vision ツールは Claude のメインモデルを使用して自動的に画像を認識します。追加設定は不要です。
+
+Vision モデルを手動で指定したい場合は、設定ファイルで明示的に指定できます：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "claude-sonnet-5"
+    }
+  }
+}
+```

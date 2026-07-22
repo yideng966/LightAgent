@@ -1,0 +1,1 @@
+"""WeChat group channel package."""

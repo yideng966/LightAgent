@@ -1,0 +1,309 @@
+name: Release Desktop
+
+# Tag-driven release: push a tag like `v1.2.0` to build and publish the
+# desktop client for macOS (arm64 + x64) and Windows (x64). The tag is the
+# single source of truth for the version — it's written into package.json at
+# build time, so the maintainer never edits the version by hand.
+on:
+  push:
+    tags:
+      - "v*"
+  # Manual trigger for testing the full pipeline without cutting a real tag.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp (e.g. 1.0.0-test). Used for package.json and R2 path."
+        type: string
+        default: "0.0.0-dev"
+      publish_r2:
+        description: "Upload installers to R2 + register in D1 (needs Cloudflare secrets)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Don't cancel the other platforms if one fails — we want to see all
+      # failures in a single run.
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-14
+            platform: mac
+            arch: arm64
+            eb_flags: --mac --arm64
+          - name: macOS x64
+            os: macos-15-intel
+            platform: mac
+            arch: x64
+            eb_flags: --mac --x64
+          - name: Windows x64
+            os: windows-latest
+            platform: win
+            arch: x64
+            eb_flags: --win --x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Derive version
+        # Tag push: strip the leading "v" from GITHUB_REF_NAME (e.g. v1.2.0).
+        # Manual dispatch: use the provided version input.
+        id: ver
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            ref="${GITHUB_REF_NAME:-}"
+            echo "version=${ref#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Build Python backend (PyInstaller)
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r desktop/build/requirements-desktop.txt
+          pip install pyinstaller
+          # Run from repo root so the spec's relative datas resolve correctly.
+          pyinstaller desktop/build/lightagent-backend.spec \
+            --noconfirm \
+            --distpath desktop/build/dist \
+            --workpath desktop/build/build-work
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Write version into package.json
+        working-directory: desktop
+        shell: bash
+        run: npm version "${{ steps.ver.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Build & publish (electron-builder)
+        working-directory: desktop
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signing secrets are passed through as-is; we only export them to the
+          # environment below when non-empty. An empty CSC_LINK would make
+          # electron-builder try to load a bogus certificate and fail, so unset
+          # is the correct state for unsigned builds.
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: |
+          npm run build
+
+          # Only export signing vars when provided. Empty strings are NOT the
+          # same as unset to electron-builder: an empty CSC_LINK is treated as
+          # a (broken) certificate path and aborts the build. Leaving them
+          # unset makes electron-builder fall back to an unsigned build.
+          if [ -n "$MAC_CSC_LINK" ]; then
+            export CSC_LINK="$MAC_CSC_LINK"
+            export CSC_KEY_PASSWORD="$MAC_CSC_KEY_PASSWORD"
+          fi
+          if [ -z "$WIN_CSC_LINK" ]; then
+            unset WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
+          fi
+
+          # Never let electron-builder publish: our publish target is a generic
+          # (read-only) feed served from R2/D1, which it can't upload to. We mirror
+          # installers to R2 and register them in D1 ourselves (publish-r2 job).
+          # `--publish never` still emits the latest*.yml files we parse for sha512.
+          # Use the dynamic config (electron-builder.js) so mac.binaries is
+          # populated with the embedded backend's Mach-O files for signing.
+          npx electron-builder ${{ matrix.eb_flags }} --config electron-builder.js --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          # One bundle per platform/arch so the publish job can collect them all.
+          name: lightagent-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.exe
+            desktop/release/*.yml
+            desktop/release/*.blockmap
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # Mirror the release installers to R2 (CDN-backed) and register them in D1 so
+  # lightagent.ai/download/{platform}/latest can resolve and count downloads.
+  # Runs only on tag pushes, and is a no-op (skips) until the Cloudflare secrets
+  # are configured, so it never blocks unsigned/dry builds.
+  publish-r2:
+    name: Publish to R2 + D1
+    # Require every platform in the build matrix to succeed before publishing,
+    # so a release on R2/D1 is always complete (all installers present) rather
+    # than partial. needs: build already gates on all matrix jobs succeeding.
+    needs: build
+    runs-on: ubuntu-latest
+    # Run on a tag push, or on a manual dispatch when publish_r2 is checked.
+    if: >-
+      (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_r2 == 'true')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard on Cloudflare secrets
+        id: guard
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CF_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN not set — skipping R2/D1 publish."
+          fi
+
+      - name: Derive version
+        if: steps.guard.outputs.enabled == 'true'
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download all build artifacts
+        if: steps.guard.outputs.enabled == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage installers
+        if: steps.guard.outputs.enabled == 'true'
+        id: stage
+        run: |
+          mkdir -p dist
+          # Flatten installers + their .blockmap (used by electron-updater for
+          # differential downloads) from every per-platform artifact dir. The
+          # .yml feed is generated dynamically by the /update Function from D1,
+          # so the yml files themselves don't need to go to R2.
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.blockmap' \) -exec cp {} dist/ \;
+          echo "Staged files:"; ls -la dist
+          # When the whole matrix failed there's nothing to publish; flag it so
+          # the R2/D1 steps skip instead of writing an empty/partial release.
+          if [ -n "$(ls -A dist 2>/dev/null)" ]; then
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No installers found in any artifact — skipping R2/D1 publish."
+          fi
+
+      - name: Upload installers to R2
+        if: steps.guard.outputs.enabled == 'true' && steps.stage.outputs.has_files == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VER: ${{ steps.ver.outputs.version }}
+        run: |
+          # Reuse the existing cow-skills bucket under a desktop/ prefix; this
+          # is served by the cdn.lightagent.ai custom domain.
+          for f in dist/*; do
+            base="$(basename "$f")"
+            key="desktop/v${VER}/${base}"
+            echo "==> Uploading $base -> r2://cow-skills/$key"
+            npx --yes wrangler@latest r2 object put "cow-skills/$key" \
+              --file "$f" --remote
+          done
+
+      - name: Register release rows in D1
+        if: steps.guard.outputs.enabled == 'true' && steps.stage.outputs.has_files == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VER: ${{ steps.ver.outputs.version }}
+        run: |
+          # Map each installer filename to a platform id. dmg arch is in the
+          # name (…-arm64.dmg / …-x64.dmg); .exe is the Windows installer.
+          sql_file="$(mktemp)"
+
+          # Pre-releases (e.g. 1.0.0-test / -beta / -rc.1 / -alpha / -dev) are
+          # recorded but NEVER marked latest, so /download/<p>/latest keeps
+          # serving the last stable build. They also must not clear an existing
+          # stable's latest flag. Only a final version (no pre-release suffix)
+          # becomes the new latest and clears the previous one per platform.
+          case "$VER" in
+            *-*) is_latest=0; echo "==> $VER is a pre-release; not marking latest." ;;
+            *)   is_latest=1; echo "==> $VER is a stable release; marking latest." ;;
+          esac
+
+          # The updater yml files (in the per-platform artifacts) carry the
+          # sha512 electron-updater validates against; read it from there so the
+          # /update feed serves the exact same hash. Build a name->sha512 map.
+          python3 - "$VER" <<'PY' > sha_map.txt
+          import os, re, sys, glob
+          # Parse electron-builder's latest*.yml file lists: pairs of
+          #   - url: <name>
+          #     sha512: <b64>
+          out = {}
+          for yml in glob.glob('artifacts/**/*.yml', recursive=True):
+              try:
+                  text = open(yml, encoding='utf-8').read()
+              except Exception:
+                  continue
+              cur = None
+              for line in text.splitlines():
+                  m = re.match(r'\s*-?\s*url:\s*(\S+)', line)
+                  if m:
+                      cur = m.group(1).strip()
+                      continue
+                  m = re.match(r'\s*sha512:\s*(\S+)', line)
+                  if m and cur:
+                      out[os.path.basename(cur)] = m.group(1).strip()
+                      cur = None
+          for name, sha in out.items():
+              print(f"{name}\t{sha}")
+          PY
+          echo "==> sha512 map:"; cat sha_map.txt || true
+
+          sha_for() { awk -F'\t' -v n="$1" '$1==n{print $2; exit}' sha_map.txt; }
+
+          for f in dist/*; do
+            base="$(basename "$f")"
+            size="$(stat -c%s "$f")"
+            case "$base" in
+              *arm64.dmg) platform="mac-arm64" ;;
+              *x64.dmg)   platform="mac-x64" ;;
+              *.exe)      platform="win" ;;
+              *) echo "Skipping unrecognized artifact: $base"; continue ;;
+            esac
+            key="v${VER}/${base}"
+            sha="$(sha_for "$base")"
+            # SQL-escape single quotes defensively (base64 has none, but be safe).
+            sha="${sha//\'/\'\'}"
+            # Stable only: clear the previous latest for THIS platform first, so
+            # a partial backfill never wipes other platforms' latest flag.
+            if [ "$is_latest" = "1" ]; then
+              echo "UPDATE releases SET is_latest = 0 WHERE platform = '${platform}';" >> "$sql_file"
+            fi
+            echo "INSERT OR REPLACE INTO releases (version, platform, filename, size, sha512, is_latest) VALUES ('${VER}', '${platform}', '${key}', ${size}, '${sha}', ${is_latest});" >> "$sql_file"
+          done
+          echo "==> D1 statements:"; cat "$sql_file"
+          npx --yes wrangler@latest d1 execute cow-desktop --remote --file "$sql_file"

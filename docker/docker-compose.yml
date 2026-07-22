@@ -1,0 +1,50 @@
+version: '2.0'
+services:
+  chatgpt-on-wechat:
+    image: zhayujie/chatgpt-on-wechat
+    container_name: chatgpt-on-wechat
+    security_opt:
+      - seccomp:unconfined
+    ports:
+      - "9899:9899"
+    environment:
+      LIGHTAGENT_LANG: 'auto'
+      CHANNEL_TYPE: 'weixin'
+      MODEL: 'deepseek-v4-flash'
+      DEEPSEEK_API_KEY: ''
+      DEEPSEEK_API_BASE: 'https://api.deepseek.com/v1'
+      MINIMAX_API_KEY: ''
+      ZHIPU_AI_API_KEY: ''
+      ARK_API_KEY: ''
+      MOONSHOT_API_KEY: ''
+      DASHSCOPE_API_KEY: ''
+      CLAUDE_API_KEY: ''
+      CLAUDE_API_BASE: 'https://api.anthropic.com/v1'
+      OPEN_AI_API_KEY: ''
+      OPEN_AI_API_BASE: 'https://api.openai.com/v1'
+      GEMINI_API_KEY: ''
+      GEMINI_API_BASE: 'https://generativelanguage.googleapis.com'
+      VOICE_TO_TEXT: 'openai'
+      TEXT_TO_VOICE: 'openai'
+      VOICE_REPLY_VOICE: 'False'
+      SPEECH_RECOGNITION: 'True'
+      GROUP_SPEECH_RECOGNITION: 'False'
+      USE_LINKAI: 'False'
+      LINKAI_API_KEY: ''
+      LINKAI_APP_CODE: ''
+      FEISHU_APP_ID: ''
+      FEISHU_APP_SECRET: ''
+      DINGTALK_CLIENT_ID: ''
+      DINGTALK_CLIENT_SECRET: ''
+      WECOM_BOT_ID: ''
+      WECOM_BOT_SECRET: ''
+      # To access the web console from the host, set this to '0.0.0.0' and set WEB_PASSWORD
+      WEB_HOST: '127.0.0.1'
+      WEB_PASSWORD: ''
+      AGENT: 'True'
+      AGENT_MAX_CONTEXT_TOKENS: 50000
+      AGENT_MAX_CONTEXT_TURNS: 20
+      AGENT_MAX_STEPS: 20
+      SELF_EVOLUTION_ENABLED: 'True'
+    volumes:
+      - ./lightagent:/home/agent/lightagent

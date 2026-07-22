@@ -1,0 +1,46 @@
+---
+title: チャネル一覧
+description: LightAgent が対応するチャネルと機能マトリクス
+---
+
+LightAgent は複数のチャットチャネルへの接続に対応しており、起動時に `channel_type` で切り替えます。Web コンソールはデフォルトで有効で、他の接続チャネルと並行して動作します。
+
+## 機能マトリクス
+
+下表は各チャネルが対応する受信メッセージタイプ、ボットの返信タイプ、グループチャット機能をまとめたものです。シーンに合わせて選択してください。
+
+| チャネル | テキスト | 画像 | ファイル | 音声 | グループチャット |
+| --- | :-: | :-: | :-: | :-: | :-: |
+| [Telegram](/ja/channels/telegram) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Slack](/ja/channels/slack) | ✅ | ✅ | ✅ | | ✅ |
+| [Discord](/ja/channels/discord) | ✅ | ✅ | ✅ | | ✅ |
+| [WeChat](/ja/channels/weixin) | ✅ | ✅ | ✅ | ✅ |  |
+| [Web コンソール](/ja/channels/web) | ✅ | ✅ | ✅ | ✅ | |
+| [Feishu](/ja/channels/feishu) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [DingTalk](/ja/channels/dingtalk) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [WeCom スマートボット](/ja/channels/wecom-bot) | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [QQ](/ja/channels/qq) | ✅ | ✅ | ✅ | | ✅ |
+| [WeCom アプリ](/ja/channels/wecom) | ✅ | ✅ | ✅ | ✅ | |
+| [WeChat 公式アカウント](/ja/channels/wechatmp) | ✅ | ✅ | | ✅ | |
+| [WeChat カスタマーサービス](/ja/channels/wechat-kf) | ✅ | ✅ | ✅ | ✅ | |
+
+- **画像 / ファイル / 音声**列は対応するメッセージタイプの送受信に対応していることを示します。詳細は各チャネルのドキュメントを参照してください
+- **グループチャット**列はグループメッセージを認識して応答できることを示します
+
+<Tip>
+  各チャネルの音声 / 画像機能は、対応するモデルプロバイダーの設定に依存します。詳細は [モデル一覧](/ja/models) を参照してください。
+</Tip>
+
+## チャネル一覧
+
+- [Web コンソール](/ja/channels/web) — 組み込みのブラウザ対話・管理パネル、デフォルトで有効
+- [WeChat](/ja/channels/weixin) — 個人 WeChat の QR コードログイン
+- [Feishu](/ja/channels/feishu) — Feishu 自作ボット
+- [DingTalk](/ja/channels/dingtalk) — DingTalk 自作ボット
+- [WeCom スマートボット](/ja/channels/wecom-bot) — WeCom スマートボット
+- [QQ](/ja/channels/qq) — QQ 公式ボットオープンプラットフォーム
+- [WeCom アプリ](/ja/channels/wecom) — WeCom 自作アプリ接続
+- [WeChat 公式アカウント](/ja/channels/wechatmp) — WeChat 公式アカウント（購読アカウント / サービスアカウント）
+- [Telegram](/ja/channels/telegram) — グローバル IM、5 分で接続、公開 IP 不要
+- [Slack](/ja/channels/slack) — チームコラボレーション IM、Socket Mode 接続、公開 IP 不要
+- [Discord](/ja/channels/discord) — コミュニティ IM、Gateway 接続、公開 IP 不要

@@ -1,0 +1,67 @@
+---
+title: v2.1.2
+description: CowAgent 2.1.2：Web 控制台多项管理能力升级、自主进化体验优化、模型新增支持、企业微信智能机器人回调模式、安全加固和体验优化
+---
+
+🌐 [English](https://docs.cowagent.ai/releases/v2.1.2) | [中文](https://docs.cowagent.ai/zh/releases/v2.1.2)
+
+## 💬 Web 控制台优化
+
+本次 Web 控制台围绕「可视化管理」做了多项增强，让更多配置无需改文件即可在界面完成：
+
+- **定时任务管理**：支持在控制台直接查看、编辑、启用/停用、删除任意定时任务，任务列表按启用状态与下次执行时间排序。Thanks @HnBigVolibear (#2892)
+- **知识库分类与文档管理**：知识库支持按分类组织，可在界面管理分类下的文档。Thanks @yangziyu-hhh (#2893)
+- **多自定义模型厂商**：支持配置多个 OpenAI 兼容供应商并一键切换当前生效项，且兼容已有配置。Thanks @kirs-hi (#2877)
+- **会话重命名**：支持手动重命名会话，便于区分多个并行任务 (#2897)
+- **Bash 流式输出**：长时间运行的 Bash 命令支持流式实时输出进度。Thanks @yangziyu-hhh (#2879)
+
+## 🧬 自主进化体验优化
+
+延续上个版本的自主进化能力，本次迭代进一步优化：
+
+- **触发阈值下调**：默认复盘触发阈值下调，更快触发复盘、沉淀经验
+- **避免并发冲突**：单轮任务耗时较长时不再误触发空闲复盘，避免与主对话相互干扰
+- **自进化摘要优化**：优化摘要生成提示词，精简篇幅、提升信息密度，并跟随对话语言输出
+
+相关文档：[自主进化](https://docs.cowagent.ai/zh/memory/self-evolution)
+
+## 🤖 模型新增
+
+- **kimi-k2.7-code**：新增并设为 Kimi 默认模型，同时提供 `kimi-k2.7-code-highspeed` 高速版
+- **glm-5.2**：新增并设为 GLM 默认模型
+
+相关文档：[模型概览](https://docs.cowagent.ai/zh/models)
+
+## 🏢 企业微信智能机器人回调模式
+
+企业微信智能机器人通道在原有长连接的基础上，新增 **HTTP 回调模式**，让无法保持长连接的部署环境也能稳定接入：
+
+- **模式切换**：通过 `wecom_bot_mode` 在 `websocket`（长连接）与 `webhook`（回调）之间切换
+- **加密传输**：回调模式完整支持 URL 验签、消息解密与被动回复加密
+- **稳定性优化**：修复回复中断、流式提前结束、临时图片文件泄漏等问题
+
+Thanks @6vision (#2896 #2869)
+
+相关文档：[企业微信智能机器人](https://docs.cowagent.ai/zh/channels/wecom-bot)
+
+## 🔒 安全加固
+
+- **视觉工具 SSRF 防护**：解析图片 URL 前校验目标地址，拦截指向内网、回环及云服务器元数据接口的请求。Thanks @kirs-hi (#2886)
+- **网页抓取 SSRF 防护**：`web_fetch` 抓取前校验目标地址，并逐跳校验重定向目标，防止通过跳转绕过校验。Thanks @christop (#2900)
+- **技能安装路径穿越防护**：安装技能时校验路径，防止恶意技能名通过路径穿越逃逸 `skills/` 目录、写入越权位置。Thanks @kirs-hi (#2886)
+
+## 🛠 体验优化与修复
+
+- **CLI 自重启**：新增 self-restart 命令，Agent 可自行重启进程
+- **Windows 兼容**：将 cow CLI 自动写入用户 PATH；修复 `python -c` 长命令超出 `cmd.exe` 长度限制的问题；安装时避免 greenlet 源码编译
+- **角色插件自定义**：角色插件支持通过 `roles/*.json` 下的独立提示词文件进行自定义。Thanks @sufan721 (#2891)
+- **稳定性修复**：修复 `/cancel` 时的 KeyError 与图片压缩死循环（Thanks @kirs-hi #2888）
+- **一键安装优化**：更新启动脚本与默认配置，修复 ASR/TTS 默认值、自主进化开关及安装过程卡顿等问题
+- **视觉工具稳定性**：提升视觉工具的超时时间与 max_tokens
+- **记忆蒸馏优化**：深度梦境蒸馏移除输出长度限制，避免大体量 `MEMORY.md` 被截断
+
+## 📦 升级方式
+
+源码部署可执行 `cow update` 一键升级，或手动拉取代码后重启。详见 [更新升级文档](https://docs.cowagent.ai/zh/guide/upgrade)。
+
+**发布日期**：2026.06.18 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.1.1...2.1.2)

@@ -1,0 +1,98 @@
+---
+title: image-generation - 画像生成
+description: テキストから画像生成 / 画像編集 / 複数画像融合に対応。複数プロバイダーの自動ルーティングとフォールバックをサポート
+---
+
+汎用の画像生成・編集スキルです。OpenAI、Gemini、Seedream（Volcengine Ark）、Qwen（DashScope）、MiniMax、LinkAI の 6 つのプロバイダーに対応しています。いずれか 1 社の Key を設定すれば利用でき、複数社を設定すると自動フォールバックが有効になります。
+
+## 対応モデル
+
+| プロバイダー | モデル / エイリアス | 特徴 |
+| --- | --- | --- |
+| OpenAI | `gpt-image-2`、`gpt-image-1` | 汎用テキスト→画像、高品質、`quality` で画質制御に対応 |
+| Gemini Nano Banana | `nano-banana-2`、`nano-banana-pro`、`nano-banana` | `gemini-3.1-flash`、`gemini-3-pro`、`gemini-2.5-flash` の画像バージョン |
+| Seedream（Volcengine Ark） | `seedream-5.0-lite`、`seedream-4.5` | ネイティブ 2K–4K、最大 14 枚の画像融合 |
+| Qwen（DashScope） | `qwen-image-2.0`、`qwen-image-2.0-pro` | 中国語のレイアウトや画像とテキストの融合に強い |
+| MiniMax | `image-01` | シンプルで高速 |
+| LinkAI | 任意のモデル | 統一ゲートウェイ、フォールバック用途 |
+
+## モデル選択
+
+デフォルトでは「自動ルーティング + 失敗時フォールバック」で動作します：
+
+1. `OpenAI → Gemini → Seedream → Qwen → MiniMax → LinkAI` の順に、設定済みのプロバイダーを最初に選択
+2. 401、モデル未開通、ネットワークエラーなどに遭遇した場合、自動的に次のプロバイダーへ切り替え
+3. ユーザーが対話内でモデルを指定した場合（例：「seedream で猫を描いて」）、該当プロバイダーが優先候補に繰り上がります
+
+特定のモデルに固定したい場合：
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "seedream-5.0-lite"
+    }
+  }
+}
+```
+
+## API Key の設定
+
+<Tip>
+  [Web コンソール](/ja/channels/web) の「モデル管理」ページから設定するのが推奨です。設定済みの対話モデル Key は画像生成スキルでも自動的に再利用されるため、重複した設定は不要です。設定ファイルを手動編集するか、対話中に `env_config` ツールで一時的に設定することもできます。
+</Tip>
+
+認証情報はメインモデルプロバイダーの Key を統一的に再利用します：
+
+| フィールド | 対応プロバイダー |
+| --- | --- |
+| `openai_api_key` | OpenAI |
+| `gemini_api_key` | Gemini |
+| `ark_api_key` | Volcengine Ark（Seedream） |
+| `dashscope_api_key` | Alibaba DashScope（Qwen） |
+| `minimax_api_key` | MiniMax |
+| `linkai_api_key` | LinkAI |
+
+
+## 有効化と無効化
+
+スキルは API Key に応じて自動的にステータスが調整されます：
+
+- **Key 設定済み**：Agent は画像生成リクエストを受けると直接呼び出します
+- **Key 未設定**：スキルはコンテキストに表示されますが（「設定が必要」とマーク）、Agent はユーザーに Key の設定を案内します
+
+手動で制御する場合：
+
+```text
+/skill disable image-generation    # 無効化
+/skill enable image-generation     # 再有効化
+```
+
+ターミナルでの等価コマンド：`lightagent skill disable image-generation` / `lightagent skill enable image-generation`。
+
+## パラメータ
+
+| パラメータ | 型 | 必須 | デフォルト | 説明 |
+| --- | --- | --- | --- | --- |
+| `prompt` | string | はい | — | 画像の説明 |
+| `image_url` | string / list | いいえ | null | 編集用の入力画像。ローカルパスまたは URL。リスト指定で複数画像融合 |
+| `quality` | string | いいえ | auto | `low` / `medium` / `high`、一部のプロバイダーのみ対応 |
+| `size` | string | いいえ | auto | `512` / `1K` / `2K` / `3K` / `4K`、またはピクセル値（例：`1024x1024`） |
+| `aspect_ratio` | string | いいえ | null | `1:1` / `3:2` / `2:3` / `16:9` / `9:16` / `21:9`。Gemini は `1:4` / `4:1` / `1:8` / `8:1` にも対応 |
+
+<Warning>
+  **品質が高いほど、解像度が大きいほど、時間とコストが高くなります。** 日常の対話ではデフォルト（`auto`）または `quality=low` + `size=1K` で十分で、約 20 秒で生成されます。ポスター制作や明示的に高解像度が必要な場合のみ `high` + `2K/4K` を使用してください。1〜5 分かかる場合があります。
+</Warning>
+
+## よくある使い方
+
+- **テキスト→画像**：説明文からイラスト、ポスター、アイコン、アバター、絵コンテなどを生成
+- **画像→画像**：既存の画像のスタイル変更、要素差し替え、装飾や文字の追加など
+- **複数画像融合**：複数の参考画像を 1 枚に合成（着せ替え、キャラクター集合写真など）
+
+<Note>
+- bash タイムアウトは 600 秒に設定することを推奨：単一プロバイダーの HTTP タイムアウトは 300 秒、スクリプトは複数社を順に試行する場合があります
+- 入力画像は自動的に 4 MB 以内・最長辺 4096 px 以内に圧縮されます
+- Gemini / Seedream / Qwen / MiniMax は `quality` パラメータに対応していません
+- Seedream のデフォルトは 2K。`seedream-5.0-lite` は 3K まで、`seedream-4.5` は 4K まで対応
+</Note>

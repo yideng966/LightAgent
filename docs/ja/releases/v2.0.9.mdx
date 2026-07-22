@@ -1,0 +1,65 @@
+---
+title: v2.0.9
+description: CowAgent 2.0.9 - モデル管理機能、MCP プロトコル対応、ブラウザログイン状態の永続化、新モデル追加とデプロイ・セキュリティ強化
+---
+
+## 🖥️ モデル管理機能の追加
+
+Web コンソールに「モデル」ページを新設。**モデルプロバイダー × モデル機能** の軸で管理し、対話、画像、音声、ベクトル、検索の各能力を一元的に設定可能になりました：
+
+- **プロバイダー単位の設定**：各プロバイダーの API Key / API Base はページ上部で一度だけ設定すれば、下部の各機能が自動で参照。再入力は不要
+- **画像モデル**：画像理解・画像生成それぞれで独立にプロバイダーとモデルを選択可能。未指定時はメインモデルに自動で追従
+- **音声モデル**：音声認識（ASR）と音声合成（TTS）を独立に設定可能。Qwen・Zhipu の ASR/TTS モデルを新たに追加
+- **ベクトルモデル**：埋め込み（Embedding）モデルを設定可能（記憶およびナレッジベース検索で利用）。OpenAI、Tongyi、Doubao、Zhipu などに対応。モデル切り替え後は `/memory rebuild-index` でインデックスをオンライン再構築してください
+- **検索機能**：ウェブ検索機能を強化、Bocha・Baidu・Zhipu など複数プロバイダーに対応。自動モードでは Agent が複数ソースの結果を統合してより深いリサーチを実行可能
+
+ドキュメント：[モデル概要](https://docs.cowagent.ai/ja/models)
+
+<img width="720" alt="20260522113305" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-models-config.png" />
+
+
+## 🧩 MCP プロトコル対応
+
+**MCP（Model Context Protocol）** プロトコルに対応。固定のツールセットから、開放的でプラグイン可能なツールエコシステムへと拡張され、MCP 互換のあらゆるサービスを Agent のツールとして直接接続できます。
+
+- ネイティブ JSON-RPC 実装、追加依存ゼロ。`stdio` と `sse` の両伝送方式に対応
+- Claude Desktop / Cursor などの主流形式の `mcpServers` 設定に互換、`~/cow/mcp.json` を優先的に読み込み
+
+ドキュメント：[MCP ツール](https://docs.cowagent.ai/ja/tools/mcp)。Thanks [@yangluxin613](https://github.com/yangluxin613) (#2801)
+
+## 🌐 ブラウザログイン状態の永続化
+
+ログインが必要なサイトや反クロウル機構のあるサイトに対して、ブラウザツールが一度のログイン状態を長期的に再利用できるようになりました。さらに自前の本物の Chrome に接続することで、フィンガープリント検出も回避可能です：
+
+- **永続化ユーザープロファイル（デフォルト）**：`~/.cow/browser_profile` をブラウザのユーザーディレクトリとしてデフォルト使用、一度ログインすれば次回以降は自動で復元
+- **CDP モード**：`tools.browser.cdp_endpoint` を設定することで実際の Chrome ブラウザを乗っ取り、完全なブラウザ権限を享受可能
+
+ドキュメント：[ブラウザツール](https://docs.cowagent.ai/ja/tools/browser)。Thanks [@leafmove](https://github.com/leafmove) (#2809)
+
+## 🤖 モデル追加と最適化
+
+- **モデル新規追加**：`gpt-5.5`、`gemini-3.5-flash`、`qwen3.7-max`、`ernie-5.1`
+- **モデル最適化**：DeepSeek V4 が `reasoning_effort` 思考深度パラメータをサポート。MiMo などの思考モデルが OpenAI 互換プロトコル経由で接続できない問題を修正
+
+## 🔒 デプロイとセキュリティ
+
+- **デフォルトでローカルアクセスのみ**：Web コンソールの `web_host` をデフォルトで `127.0.0.1` にバインド。サーバーデプロイ時は手動で `0.0.0.0` に変更しパスワードを設定してください。Thanks @August829、@yidaozhongqing、@YLChen-007、@icysun
+- **フロントエンド資源の完全ローカル化**：サードパーティ CSS / JS をすべてローカル配信化、オフライン / イントラネット環境でもコンソールが正常に動作。Thanks [@gitlayzer](https://github.com/gitlayzer) (#2816)
+
+## 🛠 体験改善と修正
+
+- **TTS のチャネル拡充**：Web 対話、個人 WeChat、飛書、DingTalk、WeCom スマートボットすべてが音声返信に対応。詳細は [チャネル概要](https://docs.cowagent.ai/ja/channels) を参照
+- **ログパネル強化**：ログレベルに応じたハイライト表示と、レベル別フィルタリングをサポート。Thanks [@yangluxin613](https://github.com/yangluxin613) (#2807)
+- **Web コンソールの自動起動**：プログラム起動後に Web コンソールが自動で開きます。Thanks [@yangluxin613](https://github.com/yangluxin613) (#2804)
+- **Ctrl+C のクリーン終了**：長い `KeyboardInterrupt` スタックトレースが表示されなくなりました。Thanks [@yangluxin613](https://github.com/yangluxin613) (#2806)
+- **フォルダアップロード**：Web 端でディレクトリアップロードに対応、Windows 向けのパス検証に適合。Thanks [@TryToMakeUsBetter](https://github.com/TryToMakeUsBetter) (#2814)
+- 特定条件下でスケジュールタスクが重複実行される問題を修正。Thanks [@CNXudiandian](https://github.com/CNXudiandian) (#2820)
+- タイムゾーン付きの単発スケジュールタスクが発火しない問題を修正。Thanks @AethericSpace
+- 実行失敗したツール呼び出しがページ更新後に表示されない問題を修正。Thanks [@a1094174619](https://github.com/a1094174619) (#2822)
+- WeCom ボットメッセージに不正な制御文字が含まれる場合に配信が失敗する問題を修正。Thanks [@Jacques-Zhao](https://github.com/Jacques-Zhao) (#2810)
+
+## 📦 アップグレード方法
+
+ソースコードデプロイは `cow update` でワンクリックアップグレード、または最新コードを手動で pull して再起動してください。詳細は [アップグレードガイド](https://docs.cowagent.ai/ja/guide/upgrade) を参照。
+
+**リリース日**：2026.05.22 | [Full Changelog](https://github.com/zhayujie/CowAgent/compare/2.0.8...2.0.9)

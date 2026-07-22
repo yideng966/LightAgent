@@ -1,0 +1,66 @@
+---
+title: Doubao
+description: Doubao（火山方舟）モデル設定（テキスト / 画像理解 / 画像生成 / ベクトル）
+---
+
+Doubao（火山方舟）はテキスト対話、画像理解、画像生成（Seedream）、ベクトル機能をサポートしており、1 つの `ark_api_key` ですべての機能を有効化できます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "model": "doubao-seed-2-1-pro-260628",
+  "ark_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `doubao-seed-2-1-pro-260628`、`doubao-seed-2-1-turbo-260628`、`doubao-seed-2-0-pro-260215`、`doubao-seed-2-0-code-preview-260215` などを指定可能 |
+| `ark_api_key` | [火山方舟コンソール](https://console.volcengine.com/ark/region:ark+cn-beijing/apikey) で作成 |
+| `ark_base_url` | 任意。デフォルトは `https://ark.cn-beijing.volces.com/api/v3` |
+
+## 画像理解
+
+`ark_api_key` を設定し、メインモデルが Doubao 系の場合、Agent の Vision ツールは現在のメインモデルを自動的に使用して画像を認識します。追加設定は不要です。
+
+Vision モデルを手動で指定したい場合は：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "doubao-seed-2-1-pro-260628"
+    }
+  }
+}
+```
+
+## 画像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "seedream-5.0-lite"
+    }
+  }
+}
+```
+
+選択可能なモデル：`seedream-5.0-lite`、`seedream-4.5`。
+
+## ベクトル
+
+```json
+{
+  "embedding_provider": "doubao",
+  "embedding_model": "doubao-embedding-vision-251215"
+}
+```
+
+デフォルトモデルは `doubao-embedding-vision-251215`（マルチモーダル embedding）です。設定ファイルで `embedding_dimensions` から 1024 または 2048 次元を指定できます。embedding を変更した後は `/memory rebuild-index` コマンドを実行してインデックスを再構築する必要があります。

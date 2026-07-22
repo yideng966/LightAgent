@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📖 Documentation
+    url: https://github.com/yideng966/LightAgent/tree/master/docs
+    about: Setup guides, configuration, and FAQ.

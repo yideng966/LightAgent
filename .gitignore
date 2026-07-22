@@ -1,0 +1,69 @@
+.DS_Store
+.idea
+.vscode
+.venv
+.vs
+__pycache__/
+venv*
+*.pyc
+python
+config.json
+QR.png
+nohup.out
+tmp
+plugins.json
+*.log
+logs/
+workspace
+config.yaml
+user_datas.pkl
+chatgpt_tool_hub/
+plugins/**/
+!plugins/bdunit
+!plugins/dungeon
+!plugins/finish
+!plugins/godcmd
+!plugins/tool
+!plugins/banwords
+!plugins/banwords/**/
+plugins/banwords/__pycache__
+plugins/banwords/lib/__pycache__
+!plugins/hello
+!plugins/role
+!plugins/keyword
+!plugins/linkai
+!plugins/lightagent_cli
+client_config.json
+ref/
+**/.dev.vars
+.cursor/
+local/
+node_modules/
+.worktrees/
+
+# Local generated/scratch files
+/.github/ISSUE_TEMPLATE/3.question.yml
+/.playwright-mcp/
+/images/
+/_tmp_*
+
+# lightagent cli
+dist/
+build/
+*.egg-info/
+.lightagent.pid
+
+# Desktop backend packaging: keep the source files (spec/requirements/script)
+# tracked even though the generic build/ rule above ignores them, but never
+# track the build outputs or local venv.
+!desktop/build/
+desktop/build/*
+!desktop/build/lightagent-backend.spec
+!desktop/build/requirements-desktop.txt
+!desktop/build/build-backend.sh
+!desktop/build/entitlements.mac.plist
+
+# Icon authoring scratch dir: intermediate assets used to produce the final
+# icons. Only the finished icons under desktop/resources/ should be committed.
+desktop/resources/.icon-work/
+/$null

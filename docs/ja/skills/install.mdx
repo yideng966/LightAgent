@@ -1,0 +1,53 @@
+---
+title: スキルのインストール
+description: 統一コマンドで多様なソースからスキルをインストール
+---
+
+LightAgent は統一された `install` コマンドで、**LightAgent スキル広場、GitHub、ClawHub** および任意の URL からスキルをインストールできます。チャットでは `/skill install`、ターミナルでは `lightagent skill install` を使用します。
+
+## スキル広場からインストール
+
+スキル広場を閲覧してインストール：
+
+```text
+/skill list --remote
+/skill install pptx
+```
+
+## GitHub からインストール
+
+リポジトリからの一括インストールとサブディレクトリ指定に対応：
+
+```text
+/skill install larksuite/cli
+/skill install https://github.com/larksuite/cli/tree/main/skills/lark-im
+```
+
+## ClawHub からインストール
+
+```text
+/skill install clawhub:baidu-search
+```
+
+## URL からインストール
+
+zip アーカイブと SKILL.md ファイルリンクに対応：
+
+```text
+/skill install https://cdn.link-ai.tech/skills/pptx.zip
+/skill install https://example.com/path/to/SKILL.md
+```
+
+## スキルの管理
+
+```text
+/skill list                  # インストール済みスキルを表示
+/skill info pptx             # スキルの詳細を表示
+/skill enable pptx           # スキルを有効化
+/skill disable pptx          # スキルを無効化
+/skill uninstall pptx        # スキルをアンインストール
+```
+
+<Tip>
+  上記のすべてのコマンドは、ターミナルでは `/skill` を `lightagent skill` に置き換えて使用できます。完全なコマンドドキュメントは[スキル管理コマンド](/ja/cli/skill)を参照してください。
+</Tip>

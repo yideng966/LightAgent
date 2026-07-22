@@ -1,0 +1,38 @@
+---
+title: Models Overview
+description: Model providers supported by LightAgent and their capability matrix
+---
+
+LightAgent supports a wide range of mainstream large language models. Model interfaces live under the project's `models/` directory. Beyond text chat, several providers also provide vision understanding, image generation, speech-to-text, text-to-speech, and embeddings — all of which can be invoked on demand in the Agent flow.
+
+## Capability Matrix
+
+A snapshot of each provider's capabilities. "Text" refers to the main chat model; the remaining columns show which Agent capabilities the provider can power.
+
+| Provider | Representative Models | Text | Vision | Image Gen | STT | TTS | Embedding |
+| --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| [DeepSeek](/models/deepseek) | deepseek-v4-flash / pro | ✅ | | | | | |
+| [MiniMax](/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
+| [Claude](/models/claude) | claude-sonnet-5 | ✅ | ✅ | | | | |
+| [Gemini](/models/gemini) | gemini-3.5-flash | ✅ | ✅ | ✅ | | | |
+| [OpenAI](/models/openai) | gpt-5.5, o-series | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [GLM](/models/glm) | glm-5.2, glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
+| [Qwen](/models/qwen) | qwen3.7-plus | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Doubao](/models/doubao) | doubao-seed-2.1 series | ✅ | ✅ | ✅ | | | ✅ |
+| [Kimi](/models/kimi) | kimi-k2.7-code | ✅ | ✅ | | | | |
+| [ERNIE](/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
+| [MiMo](/models/mimo) | mimo-v2.5-pro / v2.5 | ✅ | ✅ | | | ✅ | |
+| [LinkAI](/models/linkai) | 100+ models from multiple providers | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Custom](/models/custom) | Local models / third-party proxies | ✅ | | | | | |
+
+<Tip>
+  Every capability in the Web console (Vision / Image / STT / TTS / Embedding / Web Search) can be configured independently with its own provider and model — there is no forced binding between them.
+</Tip>
+
+## How to Configure
+
+**Option 1 (recommended):** Manage models and capabilities online via the [Web console](/channels/web), with no need to edit the configuration file:
+
+<img width="900" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-models-config.png" />
+
+**Option 2:** Edit `config.json` manually and fill in the model name and API key for the selected provider. Every model also supports OpenAI-compatible access — just set `bot_type` to `openai` and configure `open_ai_api_base` and `open_ai_api_key`.

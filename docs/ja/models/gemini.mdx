@@ -1,0 +1,59 @@
+---
+title: Gemini
+description: Google Gemini モデル設定（テキスト対話 + 画像理解 + 画像生成）
+---
+
+Google Gemini はテキスト対話、画像理解、画像生成（Nano Banana シリーズ）をサポートしており、1 つの `gemini_api_key` ですべての機能を有効化できます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "model": "gemini-3.5-flash",
+  "gemini_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | 推奨は `gemini-3.5-flash`。`gemini-3.1-pro-preview`、`gemini-3.1-flash-lite-preview`、`gemini-3-flash-preview`、`gemini-3-pro-preview` などもサポート。詳細は [公式ドキュメント](https://ai.google.dev/gemini-api/docs/models) を参照 |
+| `gemini_api_key` | [Google AI Studio](https://aistudio.google.com/app/apikey) で作成 |
+| `gemini_api_base` | 任意。デフォルトは `https://generativelanguage.googleapis.com`。サードパーティのプロキシに変更可能 |
+
+## 画像理解
+
+Gemini の全シリーズモデルはネイティブにビジョンをサポートしています。`gemini_api_key` を設定すると、Agent の Vision ツールは自動的にメインモデルを使用して画像を認識します。追加設定は不要です。
+
+Vision モデルを手動で指定したい場合：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "gemini-3.1-flash-lite-preview"
+    }
+  }
+}
+```
+
+## 画像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "gemini-3.1-flash-image-preview"
+    }
+  }
+}
+```
+
+| モデル ID | エイリアス |
+| --- | --- |
+| `gemini-3.1-flash-image-preview` | Nano Banana 2 |
+| `gemini-3-pro-image-preview` | Nano Banana Pro |
+| `gemini-2.5-flash-image` | Nano Banana |

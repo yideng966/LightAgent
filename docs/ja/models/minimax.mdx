@@ -1,0 +1,71 @@
+---
+title: MiniMax
+description: MiniMax モデル設定（テキスト / 画像理解 / 画像生成 / 音声合成）
+---
+
+MiniMax はテキスト対話、画像理解、画像生成、音声合成をサポートしており、1 つの `minimax_api_key` ですべての機能を有効化できます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "model": "MiniMax-M3",
+  "minimax_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `MiniMax-M3`、`MiniMax-M2.7`、`MiniMax-M2.7-highspeed` などを指定可能 |
+| `minimax_api_key` | [MiniMax コンソール](https://platform.minimaxi.com/user-center/basic-information/interface-key) で作成 |
+
+## 画像理解
+
+MiniMax の M2.x シリーズの chat モデル自体はビジョンに対応していないため、ビジョン呼び出しは `MiniMax-Text-01` に統一的にルーティングされます。`minimax_api_key` を設定すると、Agent の Vision ツールは自動的にこのモデルを使用するため、設定ファイルで明示的に指定する必要はありません。
+
+## 画像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "image-01"
+    }
+  }
+}
+```
+
+選択可能なモデル：`image-01`。
+
+## 音声合成
+
+```json
+{
+  "text_to_voice": "minimax",
+  "text_to_voice_model": "speech-2.8-hd",
+  "tts_voice_id": "female-shaonv"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `text_to_voice_model` | `speech-2.8-hd`（感情表現、自然な聴感）、`speech-2.8-turbo`（高速）、`speech-2.6-hd`、`speech-2.6-turbo` |
+| `tts_voice_id` | 音色 ID。中国語 / 広東語 / 英語 / 日本語 / 韓国語をサポートし、合計 70 種類以上 |
+
+よく使われる音色の例：
+
+| 音色 ID | 説明 |
+| --- | --- |
+| `female-shaonv` | 中国語 · 少女（女性） |
+| `female-yujie` | 中国語 · お姉さま（女性） |
+| `female-tianmei` | 中国語 · 甘い女性（女性） |
+| `male-qn-jingying` | 中国語 · エリート青年（男性） |
+| `male-qn-badao` | 中国語 · 強気な青年（男性） |
+| `Cantonese_GentleLady` | 広東語 · 優しい女声 |
+| `English_Graceful_Lady` | 英語 · Graceful Lady |
+
+完全な音色リスト（中国語 / 広東語 / 英語 / 日本語 / 韓国語の合計 70 種類以上）は [システム音色一覧](https://platform.minimaxi.com/docs/faq/system-voice-id) を参照してください。Web コンソールの「モデル管理 → 音声合成」のドロップダウンから視覚的に選択することもできます。

@@ -1,0 +1,62 @@
+---
+title: 自定义
+description: 自定义厂商配置，用于第三方 API 代理与本地模型
+---
+
+适用于通过 OpenAI 兼容协议接入的模型服务，例如：
+
+- **第三方 API 代理**：通过统一的 API 地址调用多种模型
+- **本地模型**：使用 Ollama、vLLM 等工具在本地部署的模型
+- **私有化部署**：企业内部部署的模型服务
+
+## Web 端配置
+
+推荐方式。在 Web 控制台「模型」页面点击「添加厂商」，选择「自定义」，填写名称、API Base 和 API Key 即可。支持添加多个自定义厂商，添加后在「主模型」中选择对应厂商和模型即可启用。
+
+<img width="900" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-custom-model-config.png" />
+
+本地部署工具的默认地址：
+
+| 工具 | 默认 API Base |
+| --- | --- |
+| [Ollama](https://ollama.com) | `http://localhost:11434/v1` |
+| [vLLM](https://docs.vllm.ai) | `http://localhost:8000/v1` |
+| [LocalAI](https://localai.io) | `http://localhost:8080/v1` |
+
+## 配置文件配置
+
+也可以直接编辑 `config.json`，在 `custom_providers` 列表中定义多个厂商，并将 `bot_type` 设置为 `"custom:<id>"` 来激活其中一个：
+
+```json
+{
+  "bot_type": "custom:3f2a9c1b",
+  "custom_providers": [
+    {
+      "id": "3f2a9c1b",
+      "name": "厂商A",
+      "api_key": "YOUR_API_KEY_A",
+      "api_base": "https://api.a.com/v1",
+      "model": "deepseek-v3"
+    },
+    {
+      "id": "a1b2c3d4",
+      "name": "厂商B",
+      "api_key": "YOUR_API_KEY_B",
+      "api_base": "https://api.b.com/v1",
+      "model": "qwen3-max"
+    }
+  ]
+}
+```
+
+| 参数 | 说明 |
+| --- | --- |
+| `custom_providers` | 自定义厂商列表，每项包含 `id`、`name`、`api_base`、`api_key`（可选）、`model`（可选） |
+| `bot_type` | 设置为 `"custom:<id>"` 激活对应厂商 |
+| `id` | 厂商唯一标识（8 位十六进制），在 Web 端添加时自动生成，手动配置时填写任意不重复的标识即可 |
+| `name` | 展示名称，可随意修改 |
+| `model` | 该厂商使用的模型，激活时生效 |
+
+<Note>
+  历史的单厂商配置（`bot_type` 为 `"custom"`，配合 `custom_api_key` / `custom_api_base`）仍然兼容，无需改动即可继续使用。
+</Note>

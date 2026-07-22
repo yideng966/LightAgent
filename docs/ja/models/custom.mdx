@@ -1,0 +1,62 @@
+---
+title: カスタム
+description: サードパーティ API プロキシやローカルモデル向けのカスタムプロバイダー設定
+---
+
+OpenAI 互換プロトコルで接続するモデルサービス向けの設定です。例えば：
+
+- **サードパーティ API プロキシ**：統一された API アドレスで複数のモデルを呼び出す
+- **ローカルモデル**：Ollama、vLLM などのツールでローカルにデプロイしたモデル
+- **プライベートデプロイ**：企業内部にデプロイされたモデルサービス
+
+## Web コンソールでの設定
+
+推奨方法です。Web コンソールの「モデル」ページで「プロバイダーを追加」をクリックし、「カスタム」を選択して、名称・API Base・API Key を入力します。複数のカスタムプロバイダーを追加でき、追加後は「メインモデル」でプロバイダーとモデルを選択すると有効になります。
+
+<img width="900" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-custom-model-config.png" />
+
+主なローカルデプロイツールのデフォルトアドレス：
+
+| ツール | デフォルト API Base |
+| --- | --- |
+| [Ollama](https://ollama.com) | `http://localhost:11434/v1` |
+| [vLLM](https://docs.vllm.ai) | `http://localhost:8000/v1` |
+| [LocalAI](https://localai.io) | `http://localhost:8080/v1` |
+
+## 設定ファイルでの設定
+
+`config.json` を直接編集することもできます。`custom_providers` リストに複数のプロバイダーを定義し、`bot_type` を `"custom:<id>"` に設定していずれかを有効化します：
+
+```json
+{
+  "bot_type": "custom:3f2a9c1b",
+  "custom_providers": [
+    {
+      "id": "3f2a9c1b",
+      "name": "プロバイダーA",
+      "api_key": "YOUR_API_KEY_A",
+      "api_base": "https://api.a.com/v1",
+      "model": "deepseek-v3"
+    },
+    {
+      "id": "a1b2c3d4",
+      "name": "プロバイダーB",
+      "api_key": "YOUR_API_KEY_B",
+      "api_base": "https://api.b.com/v1",
+      "model": "qwen3-max"
+    }
+  ]
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `custom_providers` | カスタムプロバイダーのリスト。各項目は `id`、`name`、`api_base`、`api_key`（任意）、`model`（任意）を含む |
+| `bot_type` | `"custom:<id>"` に設定して対応するプロバイダーを有効化 |
+| `id` | 一意の識別子（8 桁の 16 進数）。Web コンソールから追加すると自動生成され、手動設定の場合は重複しない任意の文字列でよい |
+| `name` | 表示名。自由に変更可能 |
+| `model` | このプロバイダーで使用するモデル。有効化時に適用される |
+
+<Note>
+  従来の単一プロバイダー設定（`bot_type` を `"custom"` にし、`custom_api_key` / `custom_api_base` を使用）は引き続き互換性があり、変更なしでそのまま利用できます。
+</Note>

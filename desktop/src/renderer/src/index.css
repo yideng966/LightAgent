@@ -1,0 +1,335 @@
+@import './highlight.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Design tokens — semantic CSS variables driving both themes.
+   Components reference these via Tailwind semantic classes
+   (bg-surface, text-primary, border-default, etc.), so theme
+   switching only swaps variable values, never component code.
+   ============================================================ */
+
+:root {
+  /* Brand accent (LightAgent green), used sparingly */
+  --accent: #4abe6e;
+  --accent-hover: #35a85b;
+  --accent-active: #228547;
+  --accent-soft: rgba(74, 190, 110, 0.12);
+  --accent-contrast: #ffffff;
+
+  /* Status colors */
+  --success: #4abe6e;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --danger-soft: rgba(239, 68, 68, 0.1);
+  --danger-border: rgba(239, 68, 68, 0.3);
+  --info: #3b82f6;
+
+  /* Light theme — layered neutral surfaces */
+  --bg-base: #fafafa;        /* app background */
+  --bg-surface: #ffffff;     /* panels, cards */
+  --bg-surface-2: #f4f4f5;   /* nested surfaces, hover fills */
+  --bg-elevated: #ffffff;    /* popovers, menus, modals */
+  --bg-inset: #f4f4f5;       /* inputs, code blocks */
+
+  --text-primary: #18181b;   /* headings, primary text (contrast > 4.5:1) */
+  --text-secondary: #52525b; /* body, labels */
+  --text-tertiary: #71717a;  /* hints, captions */
+  --text-disabled: #a1a1aa;
+
+  --border-default: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --border-subtle: #f0f0f1;
+
+  --overlay: rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06), 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
+
+  /* Chat-specific tokens (AI-Native UI) */
+  --ai-bubble-bg: transparent;
+  --message-gap: 16px;
+
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark theme — layered greys instead of harsh pure black */
+  --bg-base: #0e0e10;
+  --bg-surface: #161618;
+  --bg-surface-2: #1c1c1f;
+  --bg-elevated: #1f1f23;
+  --bg-inset: #161618;
+
+  --text-primary: #f4f4f5;     /* contrast > 7:1 on bg-base */
+  --text-secondary: #c4c4cc;
+  --text-tertiary: #8e8e96;
+  --text-disabled: #5a5a62;
+
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+
+  --accent-contrast: #0e0e10;
+
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+
+  color-scheme: dark;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Smooth theme transition (respect reduced motion) */
+body,
+body * {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* ============================================================
+   Scrollbar — thin, low-key, theme-aware
+   ============================================================ */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+  background-clip: padding-box;
+}
+
+/* Windows scrollbars are slightly wider/more visible */
+.platform-win ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+/* ============================================================
+   Titlebar drag regions (frameless window)
+   ============================================================ */
+
+.titlebar-drag {
+  -webkit-app-region: drag;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-blink {
+  animation: blink 1s step-end infinite;
+}
+
+/* AI typing indicator — 3-dot pulse */
+@keyframes typingPulse {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+.typing-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--text-tertiary);
+  animation: typingPulse 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.16s; }
+.typing-dot:nth-child(3) { animation-delay: 0.32s; }
+
+/* Smooth content reveal */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-reveal {
+  animation: fadeInUp 0.25s ease both;
+}
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface-2) 25%,
+    var(--border-subtle) 50%,
+    var(--bg-surface-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 6px;
+}
+
+/* ============================================================
+   Markdown content (assistant messages, memory/knowledge viewers)
+   ============================================================ */
+
+.msg-content > *:first-child { margin-top: 0; }
+.msg-content > *:last-child { margin-bottom: 0; }
+.msg-content p { margin: 0.5em 0; line-height: 1.7; }
+.msg-content ul, .msg-content ol { padding-left: 1.4em; margin: 0.5em 0; }
+.msg-content li { margin: 0.25em 0; }
+.msg-content h1, .msg-content h2, .msg-content h3, .msg-content h4 {
+  font-weight: 600;
+  margin: 0.8em 0 0.4em;
+  color: var(--text-primary);
+}
+.msg-content h1 { font-size: 1.4em; }
+.msg-content h2 { font-size: 1.25em; }
+.msg-content h3 { font-size: 1.1em; }
+
+.msg-content a { color: var(--accent); text-decoration: none; }
+.msg-content a:hover { text-decoration: underline; }
+
+.msg-content blockquote {
+  padding-left: 0.9em;
+  margin: 0.6em 0;
+  border-left: 3px solid var(--accent);
+  color: var(--text-secondary);
+}
+
+.msg-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.8em 0;
+  font-size: 0.9em;
+}
+.msg-content th, .msg-content td {
+  border: 1px solid var(--border-default);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+.msg-content th { background: var(--bg-surface-2); font-weight: 600; }
+
+.msg-content hr { border: none; border-top: 1px solid var(--border-default); margin: 1em 0; }
+
+/* Inline code */
+.msg-content :not(pre) > code {
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-subtle);
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 0.85em;
+}
+
+/* Fenced code blocks */
+.msg-content .code-block-wrapper {
+  margin: 0.7em 0;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  background: var(--bg-inset);
+}
+.msg-content .code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px 5px 12px;
+  background: var(--bg-surface-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.msg-content .code-block-lang {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.msg-content .code-copy-btn {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 5px;
+  transition: color 0.15s, background 0.15s;
+}
+.msg-content .code-copy-btn:hover { color: var(--text-secondary); background: var(--bg-inset); }
+.msg-content .code-copy-btn.copied { color: var(--accent); }
+.msg-content .code-block-wrapper pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  background: transparent;
+}
+.msg-content .code-block-wrapper pre code,
+.msg-content pre code.hljs {
+  font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  background: transparent;
+  padding: 0;
+}

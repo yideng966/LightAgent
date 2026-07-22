@@ -1,0 +1,112 @@
+---
+title: Tongyi Qianwen Qwen
+description: Tongyi Qianwen モデル設定（テキスト / 画像理解 / 画像生成 / 音声認識 / 音声合成 / ベクトル）
+---
+
+Tongyi Qianwen（DashScope / Bailian）は国内で最も広範な機能をカバーするベンダーの 1 つで、テキスト、画像理解、画像生成、音声認識、音声合成、ベクトルの各機能を 1 つの `dashscope_api_key` で有効化できます。
+
+<Tip>
+  Web コンソールの「モデル管理」ページから、以下のすべての機能をワンストップで設定でき、設定ファイルを手動で編集する必要はありません。
+</Tip>
+
+## テキスト対話
+
+```json
+{
+  "model": "qwen3.7-plus",
+  "dashscope_api_key": "YOUR_API_KEY"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `model` | `qwen3.7-plus`、`qwen3.7-max`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` などを指定可能 |
+| `dashscope_api_key` | [Bailian コンソール](https://bailian.console.aliyun.com/?tab=model#/api-key) で作成。詳細は [公式ドキュメント](https://bailian.console.aliyun.com/?tab=api#/api) を参照 |
+
+## 画像理解
+
+`dashscope_api_key` を設定すると、Agent の Vision ツールは自動的に Qwen のビジョンモデルを呼び出して画像を認識します。`qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` などのモデルはそのままマルチモーダルです。メインモデルがテキスト専用（`qwen-turbo` など）の場合は、自動的に `qwen-vl-max` にフォールバックします。
+
+Vision モデルを手動で指定したい場合：
+
+```json
+{
+  "tools": {
+    "vision": {
+      "model": "qwen3.7-plus"
+    }
+  }
+}
+```
+
+サポートするモデル：`qwen3.7-plus`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`。
+
+## 画像生成
+
+```json
+{
+  "skills": {
+    "image-generation": {
+      "model": "qwen-image-2.0"
+    }
+  }
+}
+```
+
+選択可能なモデル：`qwen-image-2.0`、`qwen-image-2.0-pro`。
+
+## 音声認識
+
+```json
+{
+  "voice_to_text": "dashscope",
+  "voice_to_text_model": "qwen3-asr-flash"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `voice_to_text` | `dashscope` に設定すると Tongyi Qianwen ASR が有効になります |
+| `voice_to_text_model` | 任意。デフォルトは `qwen3-asr-flash` |
+
+認証情報は `dashscope_api_key` を自動的に再利用します。1 ファイルあたり 10MB 未満、長さ 300 秒以内を推奨します。
+
+## 音声合成
+
+```json
+{
+  "text_to_voice": "dashscope",
+  "text_to_voice_model": "qwen3-tts-flash",
+  "tts_voice_id": "Cherry"
+}
+```
+
+| パラメータ | 説明 |
+| --- | --- |
+| `text_to_voice_model` | 任意。デフォルトは `qwen3-tts-flash`。普通話、方言、主要な外国語をカバー |
+| `tts_voice_id` | 音色 ID。下記のよく使われる一覧を参照 |
+
+よく使われる音色の例：
+
+| 音色 ID | 説明 |
+| --- | --- |
+| `Cherry` | 芊悦 · 明るい女声 |
+| `Serena` | 苏瑶 · 優しい女声 |
+| `Ethan` | 晨煦 · 明るい男声 |
+| `Chelsie` | 千雪 · 二次元少女 |
+| `Dylan` | 北京語 · 晓东 |
+| `Rocky` | 広東語 · 阿强 |
+| `Sunny` | 四川語 · 晴儿 |
+
+完全な音色（普通話 / 各地の方言 / バイリンガルなど）は、Web コンソールの「モデル管理 → 音声合成」のドロップダウンから視覚的に選択できます。
+
+## ベクトル
+
+```json
+{
+  "embedding_provider": "dashscope",
+  "embedding_model": "text-embedding-v4"
+}
+```
+
+デフォルトモデルは `text-embedding-v4` です。embedding を変更した後は `/memory rebuild-index` コマンドを実行してインデックスを再構築する必要があります。

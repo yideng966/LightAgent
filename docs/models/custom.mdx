@@ -1,0 +1,62 @@
+---
+title: Custom
+description: Custom provider configuration for third-party API proxies and local models
+---
+
+For model services accessed via the OpenAI-compatible protocol, such as:
+
+- **Third-party API proxies**: call multiple models through a unified API base
+- **Local models**: models deployed locally with tools like Ollama, vLLM
+- **Private deployments**: model services deployed inside an enterprise
+
+## Web Console
+
+Recommended. On the "Models" page of the Web console, click "Add Provider" and pick "Custom", then fill in the name, API Base and API Key. Multiple custom providers can be added; after adding one, select it together with a model in the "Main Model" card to enable it.
+
+<img width="900" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-custom-model-config.png" />
+
+Default endpoints of common local deployment tools:
+
+| Tool | Default API Base |
+| --- | --- |
+| [Ollama](https://ollama.com) | `http://localhost:11434/v1` |
+| [vLLM](https://docs.vllm.ai) | `http://localhost:8000/v1` |
+| [LocalAI](https://localai.io) | `http://localhost:8080/v1` |
+
+## Configuration File
+
+You can also edit `config.json` directly: define multiple providers in the `custom_providers` list and set `bot_type` to `"custom:<id>"` to activate one of them:
+
+```json
+{
+  "bot_type": "custom:3f2a9c1b",
+  "custom_providers": [
+    {
+      "id": "3f2a9c1b",
+      "name": "ProviderA",
+      "api_key": "YOUR_API_KEY_A",
+      "api_base": "https://api.a.com/v1",
+      "model": "deepseek-v3"
+    },
+    {
+      "id": "a1b2c3d4",
+      "name": "ProviderB",
+      "api_key": "YOUR_API_KEY_B",
+      "api_base": "https://api.b.com/v1",
+      "model": "qwen3-max"
+    }
+  ]
+}
+```
+
+| Parameter | Description |
+| --- | --- |
+| `custom_providers` | List of custom providers; each item has `id`, `name`, `api_base`, `api_key` (optional) and `model` (optional) |
+| `bot_type` | Set to `"custom:<id>"` to activate the corresponding provider |
+| `id` | Unique identifier (8-char hex); auto-generated when adding via the Web console, or any unique string when editing manually |
+| `name` | Display label, can be renamed freely |
+| `model` | Model used by this provider, takes effect when activated |
+
+<Note>
+  The legacy single-provider configuration (`bot_type` set to `"custom"` with `custom_api_key` / `custom_api_base`) remains fully compatible and keeps working without any changes.
+</Note>

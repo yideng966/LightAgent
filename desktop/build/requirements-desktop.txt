@@ -1,0 +1,52 @@
+# Desktop backend dependencies (slimmed down from the full requirements).
+#
+# Goal: keep the package light. The desktop client only needs the web channel
+# (which Electron talks to) plus the agent core; the remaining IM channels are
+# cheap (~27MB total) so we keep them, but Feishu's `lark-oapi` (~116MB) is
+# dropped — it is by far the heaviest dependency and not needed for a C-end
+# desktop app. Feishu is hidden in desktop mode (see LIGHTAGENT_DESKTOP in app.py).
+
+# ---- core ----
+numpy>=1.21
+aiohttp>=3.8.6,<3.10
+requests>=2.28.2
+chardet>=5.1.0
+Pillow
+python-dotenv>=1.0.0
+PyYAML>=6.0
+croniter>=2.0.0
+click>=8.0
+qrcode
+json-repair
+
+# ---- web framework (web channel) ----
+# web.py 0.62 fails to build on Python 3.13+ (cgi removed); use the GitHub fix.
+web.py; python_version < "3.13"
+web.py @ git+https://github.com/webpy/webpy.git ; python_version >= "3.13"
+legacy-cgi; python_version >= "3.13"
+
+# ---- AI model SDKs ----
+zai-sdk
+dashscope
+tenacity        # used by some dashscope submodules (retry logic)
+google-generativeai
+tiktoken>=0.3.2
+
+# ---- voice (TTS/ASR) — kept per product decision ----
+pydub>=0.25.1
+gTTS>=2.3.1
+
+# ---- document parsing (web_fetch / knowledge) ----
+pypdf
+python-docx
+openpyxl
+python-pptx
+
+# ---- IM channels (kept; lightweight). Feishu/lark-oapi intentionally excluded. ----
+wechatpy
+pycryptodome
+dingtalk_stream
+websocket-client>=1.4.0
+python-telegram-bot
+slack_bolt
+discord.py

@@ -1,0 +1,54 @@
+---
+title: ワンクリックインストール
+description: スクリプトによるLightAgentのワンクリックインストールと管理
+---
+
+本プロジェクトでは、ワンクリックでのインストール、設定、起動、管理を行うスクリプトを提供しています。素早くセットアップするには、スクリプトによるデプロイを推奨します。
+
+Linux、macOS、Windowsに対応しています。Python 3.7〜3.13が必要です（3.9を推奨）。
+
+## インストールコマンド
+
+<Tabs>
+  <Tab title="Linux / macOS">
+    ```bash
+    bash <(curl -fsSL https://raw.githubusercontent.com/yideng966/LightAgent/master/run.sh)
+    ```
+  </Tab>
+  <Tab title="Windows (PowerShell)">
+    ```powershell
+    irm https://raw.githubusercontent.com/yideng966/LightAgent/master/scripts/run.ps1 | iex
+    ```
+  </Tab>
+</Tabs>
+
+スクリプトは以下の手順を自動的に実行します：
+
+1. Python環境の確認（Python 3.7以上が必要）
+2. 必要なツールのインストール（git、curlなど）
+3. プロジェクトを `~/LightAgent` にクローン
+4. Pythonの依存パッケージと LightAgent CLI をインストール
+5. AIモデルとチャネルの対話式設定
+6. サービスの起動
+
+デフォルトでは、インストール後に Web コンソールが起動します。`http://localhost:9899` にアクセスしてチャットを開始できます。
+
+## 管理コマンド
+
+インストール後、`lightagent` コマンドでサービスを管理できます：
+
+| コマンド | 説明 |
+| --- | --- |
+| `lightagent start` | サービスを起動 |
+| `lightagent stop` | サービスを停止 |
+| `lightagent restart` | サービスを再起動 |
+| `lightagent status` | 実行状態を確認 |
+| `lightagent logs` | リアルタイムログを表示 |
+| `lightagent update` | コードを更新して再起動 |
+| `lightagent install-browser` | ブラウザツールの依存をインストール |
+
+詳細は[コマンドドキュメント](/ja/cli/index)を参照してください。
+
+<Note>
+  `lightagent` コマンドが利用できない場合は、`./run.sh <コマンド>`（Linux/macOS）または `.\scripts\run.ps1 <コマンド>`（Windows）で代替できます。機能は同等です。
+</Note>

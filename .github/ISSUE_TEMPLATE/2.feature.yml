@@ -1,0 +1,33 @@
+name: Feature request 🚀
+description: Suggest a new idea or improvement.
+title: "[Feature] "
+labels: ['status: needs check']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        > 💡 English is recommended so global developers can help. 推荐使用英文提交，谢谢 ❤️
+  - type: checkboxes
+    attributes:
+      label: Self check
+      options:
+        - label: I searched [existing issues](https://github.com/yideng966/LightAgent/issues) (incl. closed) — no duplicate.
+          required: true
+  - type: textarea
+    attributes:
+      label: What's the problem?
+      description: "The pain point or what's not working for you right now."
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What would you like?
+      description: "How you'd expect it to work. Examples, sketches, or links welcome."
+    validations:
+      required: false
+  - type: checkboxes
+    attributes:
+      label: Contribution
+      options:
+        - label: I'd be interested in helping implement this.
+          required: false

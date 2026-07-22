@@ -1,0 +1,45 @@
+---
+title: モデル概要
+description: LightAgent がサポートするモデルベンダーと機能マトリクス
+---
+
+LightAgent は国内外の主要ベンダーの大規模言語モデルをサポートしており、モデル接続の実装はプロジェクトの `models/` ディレクトリにあります。テキスト対話に加えて、一部のベンダーは画像理解、画像生成、音声認識、音声合成、ベクトルなどの機能も提供しており、Agent フローの中で必要に応じて呼び出すことができます。
+
+<Note>
+  Agent モードでは、効果とコストのバランスを考慮して以下のモデルの利用を推奨します：deepseek-v4-flash、MiniMax-M3、claude-sonnet-5、gemini-3.5-flash、glm-5.2、qwen3.7-plus、kimi-k2.7-code、ernie-5.1。
+
+  同時に [LinkAI](https://link-ai.tech) プラットフォームの API もサポートしており、1 つの Key で複数ベンダーを柔軟に切り替えられ、ナレッジベース、ワークフロー、プラグインなどの機能も付属しています。
+</Note>
+
+
+## モデル機能の全体像
+
+各ベンダーが提供する機能の一覧です。「テキスト」はメインの対話モデルを指し、その他の列はそのベンダーが対応する Agent 機能を担えるかを示します。
+
+| ベンダー | 代表モデル | テキスト | 画像理解 | 画像生成 | 音声認識 | 音声合成 | ベクトル |
+| --- | --- | :-: | :-: | :-: | :-: | :-: | :-: |
+| [DeepSeek](/models/deepseek) | deepseek-v4-flash / pro | ✅ | | | | | |
+| [MiniMax](/models/minimax) | MiniMax-M3 | ✅ | ✅ | ✅ | | ✅ | |
+| [Claude](/models/claude) | claude-sonnet-5 | ✅ | ✅ | | | | |
+| [Gemini](/models/gemini) | gemini-3.5-flash | ✅ | ✅ | ✅ | | | |
+| [OpenAI](/models/openai) | gpt-5.5、o シリーズ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Zhipu GLM](/models/glm) | glm-5.2、glm-5v-turbo | ✅ | ✅ | | ✅ | | ✅ |
+| [Tongyi Qianwen](/models/qwen) | qwen3.7-plus | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [Doubao](/models/doubao) | doubao-seed-2.1 シリーズ | ✅ | ✅ | ✅ | | | ✅ |
+| [Kimi](/models/kimi) | kimi-k2.7-code | ✅ | ✅ | | | | |
+| [Baidu Qianfan](/models/qianfan) | ernie-5.1 | ✅ | ✅ | | | | |
+| [LinkAI](/models/linkai) | 複数ベンダー 100+ モデルを統一接続 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| [カスタム](/models/custom) | ローカルモデル / サードパーティプロキシ | ✅ | | | | | |
+
+<Tip>
+  Web コンソール上では各機能（ビジョン / 画像 / 音声認識 / 音声合成 / ベクトル / Web 検索）ごとに独立してベンダーとモデルを設定でき、互いに強制的に紐付けされません。
+</Tip>
+
+
+## 設定方法
+
+**方法 1（推奨）:** [Web コンソール](/channels/web) からオンラインでモデルや各機能を管理でき、設定ファイルを手動で編集する必要はありません：
+
+<img width="900" src="https://cdn.link-ai.tech/doc/20260521212527.png" />
+
+**方法 2:** `config.json` を手動で編集し、選択したモデルに応じてモデル名と API Key を設定します。各モデルは OpenAI 互換方式での接続もサポートしており、`bot_type` を `openai` に設定し、`open_ai_api_base` と `open_ai_api_key` を設定すれば利用できます。

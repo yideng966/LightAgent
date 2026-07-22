@@ -1,0 +1,65 @@
+---
+title: スキルハブ
+description: AI Agent スキルの閲覧、検索、インストール
+---
+
+[LightAgent Skill Hub](https://skills.cowagent.ai/) は、公式推奨・コミュニティ貢献・サードパーティ（GitHub、ClawHub など）のスキルを集約した、オープンソースの AI Agent スキルマーケットプレイスです。
+
+ソースコード: [github.com/zhayujie/lightagent-skill-hub](https://github.com/zhayujie/cow-skill-hub)
+
+<img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="800" />
+
+## 機能
+
+- **スキル閲覧** — カテゴリ（公式推奨 / コミュニティ / サードパーティ）とタグでフィルタ
+- **スキル検索** — 名前または説明で検索
+- **詳細表示** — スキルマニフェスト、ファイル内容、インストールコマンド、必要な環境変数を確認
+- **ワンクリックインストール** — インストールコマンドをコピーして LightAgent で実行
+
+## スキルのインストール
+
+チャット内またはターミナルでインストールコマンドを実行:
+
+<CodeGroup>
+```text チャット
+/skill install <name>
+```
+
+```bash ターミナル
+lightagent skill install <name>
+```
+</CodeGroup>
+
+チャットからスキルハブを直接閲覧することもできます:
+
+```text
+/skill list --remote
+/skill search <キーワード>
+```
+
+リスト表示されている厳選スキル以外にも、**GitHub、ClawHub、LinkAI、任意の URL** からサードパーティスキルを CLI 経由でインストールできます。詳しくは [スキルのインストール](/ja/skills/install) を参照してください。
+
+## スキルの貢献
+
+ご自身のスキルを投稿するには:
+
+1. [Skill Hub/submit](https://skills.cowagent.ai/submit) にアクセス
+2. GitHub または Google でログイン
+3. `SKILL.md` を含むフォルダまたは zip ファイルをアップロード
+4. スキル名・表示名・説明は自動検出されます。必要に応じて編集してください
+5. 提出後、セキュリティ・品質チェックを経て公開されます
+
+<img src="https://cdn.link-ai.tech/doc/20260401111904.png" width="800" />
+
+スキルのファイル構成:
+
+```
+your-skill/
+├── SKILL.md        # 必須、ルートに配置
+├── scripts/        # 任意、実行スクリプト
+└── resources/      # 任意、その他リソース
+```
+
+<Tip>
+  スキルは `SKILL.md` マニフェストを中心に構築されます。スキル詳細ページから `SKILL.md` をダウンロードし、カスタム指示に対応した任意の Agent（OpenClaw、Cursor、Claude Code など）でも利用できます。
+</Tip>
