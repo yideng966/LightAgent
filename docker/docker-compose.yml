@@ -1,8 +1,8 @@
 version: '2.0'
 services:
-  chatgpt-on-wechat:
-    image: zhayujie/chatgpt-on-wechat
-    container_name: chatgpt-on-wechat
+  lightagent:
+    image: yideng966/lightagent
+    container_name: lightagent
     security_opt:
       - seccomp:unconfined
     ports:

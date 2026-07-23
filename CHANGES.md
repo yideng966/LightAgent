@@ -7,17 +7,20 @@
 - 将 AMD64 与 ARM64 Docker 工作流的宽泛 `create` 事件替换为显式 `push.tags: ['v*']`，保留 `master` 分支触发，并增加 `workflow_dispatch` 手动重试入口。
 - 将仓库运行条件更新为 `yideng966/LightAgent`，Docker Hub 与 GHCR 镜像统一为 `yideng966/lightagent`，移除 `zhayujie/chatgpt-on-wechat` 等旧发布目标。
 - 将 GHCR 清理目标 `package-name` 更新为 `lightagent`；AMD64 继续发布 Docker Hub 与 GHCR，ARM64 继续使用 `-arm64` 标签后缀发布到 GHCR。
+- 将 `docker/docker-compose.yml` 的服务名与容器名统一为 `lightagent`，默认镜像地址更新为 `yideng966/lightagent`，避免部署时继续使用旧项目标识。
 
 关键文件：
 
 - `.github/workflows/deploy-image.yml`
 - `.github/workflows/deploy-image-arm.yml`
+- `docker/docker-compose.yml`
 - `plans/20260723_GitHub标签自动发布.md`
 
 验证记录：
 
 - PyYAML 解析与触发器断言通过：两个工作流均包含 `master`、`v*` 和 `workflow_dispatch`，且不再包含 `create`。
 - Docker 工作流旧仓库、旧镜像和旧 package-name 残留扫描通过。
+- `docker compose config --services` 与 `--images` 校验通过，分别输出 `lightagent` 和 `yideng966/lightagent`；Compose 关键字段断言与旧标识扫描通过。
 - `git diff --check`：通过。
 
 ### GitHub 提交通知到指定微信群
