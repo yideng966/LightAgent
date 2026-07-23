@@ -1,9 +1,11 @@
 import sys
 import types
 import unittest
+from datetime import datetime, timedelta
 from unittest.mock import patch
 
 from agent.tools.scheduler.scheduler_tool import SchedulerTool
+from agent.tools.scheduler.scheduler_service import SchedulerService
 from bridge.context import Context, ContextType
 from agent.tools.scheduler import integration
 from bridge.reply import Reply, ReplyType
@@ -55,13 +57,26 @@ class FakeTaskStore:
     def __init__(self):
         self.added = []
         self.updates = []
+        self.deleted = []
+        self.tasks = {}
 
     def add_task(self, task):
         self.added.append(task)
+        self.tasks[task["id"]] = task
         return True
+
+    def get_task(self, task_id):
+        return self.tasks.get(task_id)
 
     def update_task(self, task_id, updates):
         self.updates.append((task_id, updates))
+        if task_id in self.tasks:
+            self.tasks[task_id].update(updates)
+        return True
+
+    def delete_task(self, task_id):
+        self.deleted.append(task_id)
+        self.tasks.pop(task_id, None)
         return True
 
 
@@ -201,6 +216,126 @@ class SchedulerWechatGroupDeliveryTest(unittest.TestCase):
         self.assertEqual("task-waiting", task_id)
         self.assertEqual("waiting_identity_binding", updates["delivery_status"])
         self.assertEqual("waiting_identity_binding", updates["action"]["delivery_status"])
+
+    def test_enqueue_github_message_uses_stable_receiver_and_is_idempotent(self):
+        store = FakeTaskStore()
+        integration._task_store = store
+        identity_service = FakeIdentityService(runtime_room_id="room@@current")
+        running_channel = RunningWechatGroupChannel(identity_service=identity_service)
+        fake_app = types.SimpleNamespace(
+            _channel_mgr=FakeChannelManager(running_channel)
+        )
+
+        with patch.dict(sys.modules, {"app": fake_app}):
+            first = integration.enqueue_wechat_group_message(
+                task_id="github-task",
+                name="GitHub notification",
+                content="commit notification",
+                stable_receiver="wgr_room",
+                max_lateness_seconds=72 * 3600,
+                metadata={
+                    "source": "github_webhook",
+                    "external_delivery_id": "delivery-1",
+                    "repository": "owner/repository",
+                    "ref": "refs/heads/main",
+                },
+            )
+            second = integration.enqueue_wechat_group_message(
+                task_id="github-task",
+                name="GitHub notification",
+                content="commit notification",
+                stable_receiver="wgr_room",
+            )
+
+        self.assertEqual("enqueued", first)
+        self.assertEqual("existing", second)
+        self.assertEqual(1, len(store.added))
+        task = store.added[0]
+        action = task["action"]
+        self.assertEqual(72 * 3600, task["max_lateness_seconds"])
+        self.assertEqual("wgr_room", action["stable_receiver"])
+        self.assertEqual("room@@current", action["runtime_receiver"])
+        self.assertTrue(action["suppress_mention"])
+        self.assertTrue(action["no_need_at"])
+        self.assertEqual("github_webhook", action["source"])
+        self.assertEqual("delivery-1", action["external_delivery_id"])
+
+    def test_github_message_marks_delivery_and_suppresses_mention(self):
+        store = FakeTaskStore()
+        integration._task_store = store
+        identity_service = FakeIdentityService(runtime_room_id="room@@current")
+        running_channel = RunningWechatGroupChannel(identity_service=identity_service)
+        fake_app = types.SimpleNamespace(
+            _channel_mgr=FakeChannelManager(running_channel)
+        )
+
+        with patch.dict(sys.modules, {"app": fake_app}):
+            integration.enqueue_wechat_group_message(
+                task_id="github-send",
+                name="GitHub notification",
+                content="commit notification",
+                stable_receiver="wgr_room",
+                metadata={
+                    "source": "github_webhook",
+                    "external_delivery_id": "delivery-send",
+                },
+            )
+            task = store.get_task("github-send")
+            with patch(
+                "channel.web.github_commit_webhook.mark_github_delivery_delivered",
+                return_value=True,
+            ) as mark_delivered:
+                ok = integration._execute_send_message(task, FakeAgentBridge())
+
+        self.assertTrue(ok)
+        mark_delivered.assert_called_once_with("delivery-send")
+        reply, context = running_channel.sent[0]
+        self.assertEqual("commit notification", reply.content)
+        self.assertTrue(context["suppress_mention"])
+        self.assertTrue(context["no_need_at"])
+        self.assertEqual("wgr_room", context["wechat_group_stable_room_id"])
+
+    def test_scheduler_honors_task_specific_lateness_window(self):
+        store = FakeTaskStore()
+        service = SchedulerService(store, lambda task: True)
+        now = datetime(2026, 7, 23, 12, 0, 0)
+        task = {
+            "id": "github-late",
+            "enabled": True,
+            "next_run_at": (now - timedelta(minutes=20)).isoformat(),
+            "max_lateness_seconds": 3600,
+            "schedule": {
+                "type": "once",
+                "run_at": (now - timedelta(minutes=20)).isoformat(),
+            },
+        }
+        store.tasks[task["id"]] = task
+
+        self.assertTrue(service._is_task_due(task, now))
+        self.assertEqual([], store.deleted)
+
+        legacy_task = dict(task)
+        legacy_task["id"] = "legacy-late"
+        legacy_task.pop("max_lateness_seconds")
+        store.tasks[legacy_task["id"]] = legacy_task
+        self.assertFalse(service._is_task_due(legacy_task, now))
+        self.assertEqual(["legacy-late"], store.deleted)
+
+    def test_wechat_group_readiness_requires_logged_in_status(self):
+        class StatusChannel:
+            STATUS_LOGGED_IN = "logged_in"
+            STATUS_CONNECTED = "connected"
+
+            def __init__(self, status):
+                self.status = status
+
+            def get_login_status(self):
+                return self.status
+
+        with patch.object(integration, "_get_running_channel", return_value=StatusChannel("qr_ready")):
+            self.assertFalse(integration._is_channel_ready("wechat_group", ""))
+        with patch.object(integration, "_get_running_channel", return_value=StatusChannel("connected")):
+            self.assertTrue(integration._is_channel_ready("wechat_group", ""))
 
 
 if __name__ == "__main__":

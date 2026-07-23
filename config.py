@@ -79,6 +79,16 @@ available_setting = {
     "wechat_group_names": [],
     "wechat_group_room_ids": [],
     "wechat_group_stable_room_ids": [],
+    # GitHub push webhook notifications delivered through the WeChat group channel.
+    # LIGHTAGENT_GITHUB_WEBHOOK_SECRET overrides the local secret when present.
+    "github_commit_notify_enabled": False,
+    "github_commit_notify_repository": "",
+    "github_commit_notify_branches": ["main"],
+    "github_commit_notify_stable_room_id": "",
+    "github_commit_notify_max_commits": 8,
+    "github_commit_notify_retry_hours": 72,
+    "github_commit_notify_delivery_retention_days": 30,
+    "github_commit_notify_webhook_secret": "",
     "wechat_group_ambient_names": [],
     "wechat_group_admin_sender_ids": [],
     "wechat_group_admin_members": [],

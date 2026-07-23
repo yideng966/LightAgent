@@ -300,6 +300,35 @@ const I18N = {
         groups_alias_sync_cooldown_minutes_hint: '群昵称缺失时，当前群最多多久补同步一次成员信息。',
         groups_basic_proxy: '代理地址',
         groups_basic_proxy_hint: '供需要代理的能力复用，例如 http://127.0.0.1:7890；留空则直连。',
+        groups_github_notify_title: 'GitHub 提交通知',
+        groups_github_notify_desc: '接收指定仓库的 push Webhook，并将 commit 聚合发送到一个已选择的微信群。',
+        groups_github_notify_enabled: '启用提交通知',
+        groups_github_notify_enabled_hint: '仅处理验签通过且命中仓库、分支和目标群的 push 事件。',
+        groups_github_repository: '仓库全名',
+        groups_github_repository_hint: '填写 owner/repository，例如 yideng966/LightAgent。',
+        groups_github_branches: '通知分支',
+        groups_github_branches_hint: '使用逗号或换行分隔；留空表示允许所有分支。',
+        groups_github_target_room: '目标群',
+        groups_github_target_room_hint: '只显示已在“群与管理员”中选择的稳定群。',
+        groups_github_target_room_placeholder: '选择接收通知的群',
+        groups_github_target_room_empty: '请先在“群与管理员”中选择目标群',
+        groups_github_target_room_saved: '已保存',
+        groups_github_max_commits: '单条最大 commit 数',
+        groups_github_max_commits_hint: '一次 push 最多展开 1-20 条 commit。',
+        groups_github_retry_hours: '最长重试时间（小时）',
+        groups_github_retry_hours_hint: '群离线或身份未恢复时持续重试，范围 1-720 小时。',
+        groups_github_retention_days: '去重保留天数',
+        groups_github_retention_days_hint: '相同 GitHub delivery 的去重记录保留 1-365 天。',
+        groups_github_webhook_url: 'Webhook 地址',
+        groups_github_webhook_url_hint: '在 GitHub Webhook 的 Payload URL 中填写此 HTTPS 地址。',
+        groups_github_secret: 'Webhook Secret',
+        groups_github_secret_hint: '输入后保存；已配置时留空不会覆盖原 Secret。',
+        groups_github_secret_placeholder: '输入与 GitHub 一致的高强度 Secret',
+        groups_github_secret_from_environment: '由 LIGHTAGENT_GITHUB_WEBHOOK_SECRET 环境变量接管。',
+        groups_github_secret_from_config: '已在本地配置中保存，真实值不会回显。',
+        groups_github_secret_not_configured: '尚未配置 Secret，启用前必须填写。',
+        groups_github_secret_show: '显示 Secret',
+        groups_github_secret_hide: '隐藏 Secret',
         groups_rooms_title: '群与管理员',
         groups_rooms_desc: '选择机器人允许响应的微信群，并为每个群配置可触发持久化/写入类能力的管理员。',
         groups_rooms_select_label: '目标群',
@@ -1117,6 +1146,35 @@ const I18N = {
         groups_alias_sync_cooldown_minutes_hint: 'When a room alias is missing, limit how often member info is resynced per group.',
         groups_basic_proxy: 'Proxy URL',
         groups_basic_proxy_hint: 'Shared by features that opt into proxying, e.g. http://127.0.0.1:7890. Leave empty for direct access.',
+        groups_github_notify_title: 'GitHub commit notifications',
+        groups_github_notify_desc: 'Receive push webhooks from one repository and send aggregated commits to a selected WeChat group.',
+        groups_github_notify_enabled: 'Enable commit notifications',
+        groups_github_notify_enabled_hint: 'Only signed push events matching the repository, branch, and target group are processed.',
+        groups_github_repository: 'Repository full name',
+        groups_github_repository_hint: 'Use owner/repository, for example yideng966/LightAgent.',
+        groups_github_branches: 'Notification branches',
+        groups_github_branches_hint: 'Separate branches with commas or new lines. Leave empty to allow all branches.',
+        groups_github_target_room: 'Target group',
+        groups_github_target_room_hint: 'Only stable groups selected under Groups & admins are available.',
+        groups_github_target_room_placeholder: 'Select a notification group',
+        groups_github_target_room_empty: 'Select a target under Groups & admins first',
+        groups_github_target_room_saved: 'saved',
+        groups_github_max_commits: 'Maximum commits per message',
+        groups_github_max_commits_hint: 'Expand between 1 and 20 commits from each push.',
+        groups_github_retry_hours: 'Maximum retry time (hours)',
+        groups_github_retry_hours_hint: 'Retry while the group is offline or identity is unresolved, from 1 to 720 hours.',
+        groups_github_retention_days: 'Deduplication retention (days)',
+        groups_github_retention_days_hint: 'Retain each GitHub delivery record for 1 to 365 days.',
+        groups_github_webhook_url: 'Webhook URL',
+        groups_github_webhook_url_hint: 'Use this HTTPS address as the GitHub webhook Payload URL.',
+        groups_github_secret: 'Webhook secret',
+        groups_github_secret_hint: 'Enter a new value to save it. Leaving it blank keeps the configured secret.',
+        groups_github_secret_placeholder: 'Enter the same strong secret used by GitHub',
+        groups_github_secret_from_environment: 'Managed by the LIGHTAGENT_GITHUB_WEBHOOK_SECRET environment variable.',
+        groups_github_secret_from_config: 'Saved in local configuration. The actual value is never returned.',
+        groups_github_secret_not_configured: 'No secret is configured. Enter one before enabling notifications.',
+        groups_github_secret_show: 'Show secret',
+        groups_github_secret_hide: 'Hide secret',
         groups_rooms_title: 'Groups & admins',
         groups_rooms_desc: 'Choose WeChat groups the bot may answer in and configure admins for persistent/write actions.',
         groups_rooms_select_label: 'Target groups',
@@ -8273,7 +8331,160 @@ function buildGroupsBasicPanel(extra) {
             ${buildGroupsNumberField('groups-alias-sync-cooldown-minutes', 'groups_alias_sync_cooldown_minutes', 'groups_alias_sync_cooldown_minutes_hint', aliasSyncCooldownMinutes)}
             ${buildGroupsTextField('groups-basic-proxy', 'groups_basic_proxy', 'groups_basic_proxy_hint', proxy, 'http://127.0.0.1:7890')}
         </div>
+        ${buildGroupsGithubCommitNotifyPanel(extra)}
     </div>`;
+}
+
+function buildGroupsGithubCommitNotifyPanel(extra) {
+    const saved = extra.github_commit_notify || {};
+    const branches = Array.isArray(saved.branches) ? saved.branches.join(', ') : '';
+    const selectedTarget = String(saved.stable_room_id || '').trim();
+    const targetRoomOptions = buildGroupsGithubTargetRoomOptions(extra, selectedTarget);
+    const environmentManaged = saved.secret_source === 'environment';
+    const secretStatusKey = environmentManaged
+        ? 'groups_github_secret_from_environment'
+        : saved.secret_configured ? 'groups_github_secret_from_config' : 'groups_github_secret_not_configured';
+    const secretPlaceholder = saved.secret_configured
+        ? String(saved.secret_masked || '********')
+        : t('groups_github_secret_placeholder');
+    const webhookPath = String(saved.webhook_path || '/api/github/webhook');
+    let webhookUrl = webhookPath;
+    try {
+        webhookUrl = new URL(webhookPath, window.location.origin).toString();
+    } catch (_) {
+        webhookUrl = webhookPath;
+    }
+    return `<section class="mt-8 pt-6 border-t border-slate-200 dark:border-white/10" aria-labelledby="groups-github-notify-title">
+        <div class="flex items-start gap-3 mb-5">
+            <span class="w-9 h-9 rounded-lg bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 flex items-center justify-center flex-shrink-0" aria-hidden="true">
+                <i class="fab fa-github text-base"></i>
+            </span>
+            <div class="min-w-0">
+                <h4 id="groups-github-notify-title" class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_github_notify_title')}</h4>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_notify_desc')}</p>
+            </div>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            ${buildGroupsHumanizationToggle('groups-github-notify-enabled', 'groups_github_notify_enabled', 'groups_github_notify_enabled_hint', saved.enabled === true)}
+            ${buildGroupsTextField('groups-github-repository', 'groups_github_repository', 'groups_github_repository_hint', saved.repository || '', 'owner/repository')}
+            ${buildGroupsTextField('groups-github-branches', 'groups_github_branches', 'groups_github_branches_hint', branches, 'main, develop')}
+            <label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
+                <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_target_room')}</span>
+                <span id="groups-github-target-room-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_target_room_hint')}</span>
+                <select id="groups-github-target-room" aria-describedby="groups-github-target-room-hint" ${targetRoomOptions.disabled ? 'disabled' : ''}
+                    class="mt-3 w-full min-h-10 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    ${targetRoomOptions.html}
+                </select>
+            </label>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
+            ${buildGroupsNumberField('groups-github-max-commits', 'groups_github_max_commits', 'groups_github_max_commits_hint', saved.max_commits ?? 8, 1, 20)}
+            ${buildGroupsNumberField('groups-github-retry-hours', 'groups_github_retry_hours', 'groups_github_retry_hours_hint', saved.retry_hours ?? 72, 1, 720)}
+            ${buildGroupsNumberField('groups-github-retention-days', 'groups_github_retention_days', 'groups_github_retention_days_hint', saved.delivery_retention_days ?? 30, 1, 365)}
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
+            <label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
+                <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_webhook_url')}</span>
+                <span id="groups-github-webhook-url-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_webhook_url_hint')}</span>
+                <input id="groups-github-webhook-url" type="url" readonly aria-readonly="true" aria-describedby="groups-github-webhook-url-hint"
+                    value="${escapeHtml(webhookUrl)}" class="mt-3 w-full min-h-10 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-white/5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 break-all">
+            </label>
+            <label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
+                <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_secret')}</span>
+                <span id="groups-github-secret-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_secret_hint')}</span>
+                <span class="relative mt-3 block">
+                    <input id="groups-github-webhook-secret" type="password" value="" placeholder="${escapeHtml(secretPlaceholder)}"
+                        autocomplete="new-password" spellcheck="false" aria-describedby="groups-github-secret-hint groups-github-secret-status" ${environmentManaged ? 'disabled' : ''}
+                        class="w-full min-h-10 pl-3 pr-12 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <button id="groups-github-secret-toggle" type="button" onclick="toggleGroupsGithubSecretVisibility()" ${environmentManaged ? 'disabled' : ''}
+                        class="absolute inset-y-0 right-0 w-11 inline-flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 rounded-r-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="${escapeHtml(t('groups_github_secret_show'))}" aria-label="${escapeHtml(t('groups_github_secret_show'))}">
+                        <i class="fas fa-eye" aria-hidden="true"></i>
+                    </button>
+                </span>
+                <span id="groups-github-secret-status" class="block text-xs ${saved.secret_configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'} mt-2">${t(secretStatusKey)}</span>
+            </label>
+        </div>
+    </section>`;
+}
+
+function buildGroupsGithubTargetRoomOptions(extra, selectedTarget) {
+    const stableSelectedIds = Array.isArray(extra.stable_selected_room_ids)
+        ? extra.stable_selected_room_ids.map(value => String(value || '').trim()).filter(value => value.startsWith('wgr_'))
+        : [];
+    const fallbackSelectedIds = Array.isArray(extra.selected_room_ids)
+        ? extra.selected_room_ids.map(value => String(value || '').trim()).filter(value => value.startsWith('wgr_'))
+        : [];
+    const selectedIds = stableSelectedIds.length ? stableSelectedIds : fallbackSelectedIds;
+    const roomNameById = new Map();
+    (extra.rooms || []).forEach(room => {
+        const name = String(room.name || room.topic || '').trim();
+        [room.stable_room_id, room.id].forEach(value => {
+            const roomId = String(value || '').trim();
+            if (roomId.startsWith('wgr_') && name) roomNameById.set(roomId, name);
+        });
+    });
+    selectedIds.forEach((roomId, index) => {
+        const savedName = String(extra.selected_room_names?.[index] || '').trim();
+        if (savedName && !roomNameById.has(roomId)) roomNameById.set(roomId, savedName);
+    });
+    const uniqueIds = [...new Set(selectedIds)];
+    const savedTargetMissing = selectedTarget.startsWith('wgr_') && !uniqueIds.includes(selectedTarget);
+    if (savedTargetMissing) uniqueIds.push(selectedTarget);
+    if (!uniqueIds.length) {
+        return {
+            disabled: true,
+            html: `<option value="" selected>${t('groups_github_target_room_empty')}</option>`,
+        };
+    }
+    const placeholder = `<option value="" ${selectedTarget ? '' : 'selected'}>${t('groups_github_target_room_placeholder')}</option>`;
+    const options = uniqueIds.map(roomId => {
+        const suffix = savedTargetMissing && roomId === selectedTarget ? ` (${t('groups_github_target_room_saved')})` : '';
+        const label = `${roomNameById.get(roomId) || roomId}${suffix}`;
+        return `<option value="${escapeHtml(roomId)}" ${roomId === selectedTarget ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+    }).join('');
+    return { disabled: false, html: placeholder + options };
+}
+
+function toggleGroupsGithubSecretVisibility() {
+    const input = document.getElementById('groups-github-webhook-secret');
+    const button = document.getElementById('groups-github-secret-toggle');
+    if (!input || !button || input.disabled) return;
+    const showSecret = input.type === 'password';
+    input.type = showSecret ? 'text' : 'password';
+    const label = t(showSecret ? 'groups_github_secret_hide' : 'groups_github_secret_show');
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    const icon = button.querySelector('i');
+    if (icon) icon.className = `fas ${showSecret ? 'fa-eye-slash' : 'fa-eye'}`;
+    input.focus();
+}
+
+function readGroupsGithubCommitNotifySettings(saved = {}) {
+    const branchesInput = document.getElementById('groups-github-branches');
+    const branches = branchesInput
+        ? [...new Set(String(branchesInput.value || '').split(/[\r\n,]+/).map(value => value.trim()).filter(Boolean))]
+        : (Array.isArray(saved.branches) ? saved.branches : []);
+    const settings = {
+        enabled: document.getElementById('groups-github-notify-enabled')
+            ? !!document.getElementById('groups-github-notify-enabled').checked
+            : saved.enabled === true,
+        repository: document.getElementById('groups-github-repository')
+            ? String(document.getElementById('groups-github-repository').value || '').trim()
+            : String(saved.repository || '').trim(),
+        branches,
+        stable_room_id: document.getElementById('groups-github-target-room')
+            ? String(document.getElementById('groups-github-target-room').value || '').trim()
+            : String(saved.stable_room_id || '').trim(),
+        max_commits: clampNumber(document.getElementById('groups-github-max-commits')?.value, 1, 20, saved.max_commits ?? 8),
+        retry_hours: clampNumber(document.getElementById('groups-github-retry-hours')?.value, 1, 720, saved.retry_hours ?? 72),
+        delivery_retention_days: clampNumber(document.getElementById('groups-github-retention-days')?.value, 1, 365, saved.delivery_retention_days ?? 30),
+    };
+    const secretInput = document.getElementById('groups-github-webhook-secret');
+    if (secretInput && !secretInput.disabled && secretInput.value) {
+        settings.webhook_secret = secretInput.value;
+    }
+    return settings;
 }
 
 function buildGroupsVoiceInteractionPanel(extra) {
@@ -8393,20 +8604,23 @@ function buildGroupsHumanizationToggle(id, labelKey, hintKey, enabled) {
                 <h4 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(labelKey)}</h4>
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t(hintKey)}</p>
             </div>
-            <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
-                <input id="${id}" type="checkbox" class="sr-only peer" ${enabled ? 'checked' : ''}>
-                <div class="w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+            <label class="relative inline-flex items-center justify-center w-11 h-11 cursor-pointer flex-shrink-0">
+                <input id="${id}" type="checkbox" class="sr-only peer" aria-label="${escapeHtml(t(labelKey))}" ${enabled ? 'checked' : ''}>
+                <div class="w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-[#111111] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
             </label>
         </div>
     </div>`;
 }
 
-function buildGroupsNumberField(id, labelKey, hintKey, value) {
-    return `<label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
+function buildGroupsNumberField(id, labelKey, hintKey, value, min = 1, max = null) {
+    const maxAttribute = max == null ? '' : `max="${Number(max)}"`;
+    return `<label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 flex flex-col">
         <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(labelKey)}</span>
         <span class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t(hintKey)}</span>
-        <input id="${id}" type="number" min="1" value="${Number(value || 1)}"
-            class="mt-3 w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors">
+        <span class="mt-auto pt-3">
+            <input id="${id}" type="number" min="${Number(min)}" ${maxAttribute} value="${Number(value ?? min)}"
+                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors">
+        </span>
     </label>`;
 }
 
@@ -12272,6 +12486,19 @@ function saveWechatGroupSettings() {
     const basicProxy = document.getElementById('groups-basic-proxy')
         ? String(document.getElementById('groups-basic-proxy').value || '').trim()
         : String(basic.proxy || '').trim();
+    const githubCommitNotify = readGroupsGithubCommitNotifySettings(extra.github_commit_notify || {});
+    const githubCommitNotifyConfig = {
+        github_commit_notify_enabled: githubCommitNotify.enabled,
+        github_commit_notify_repository: githubCommitNotify.repository,
+        github_commit_notify_branches: githubCommitNotify.branches,
+        github_commit_notify_stable_room_id: githubCommitNotify.stable_room_id,
+        github_commit_notify_max_commits: githubCommitNotify.max_commits,
+        github_commit_notify_retry_hours: githubCommitNotify.retry_hours,
+        github_commit_notify_delivery_retention_days: githubCommitNotify.delivery_retention_days,
+    };
+    if (Object.prototype.hasOwnProperty.call(githubCommitNotify, 'webhook_secret')) {
+        githubCommitNotifyConfig.github_commit_notify_webhook_secret = githubCommitNotify.webhook_secret;
+    }
     const humanization = readWechatGroupHumanizationSettings(extra.humanization || {}, extra.recent_context || {});
     const freeReply = readWechatGroupFreeReplySettings(extra.free_reply || {});
     const voiceInteractionMode = readWechatGroupVoiceInteractionMode(extra.voice_interaction || {});
@@ -12298,6 +12525,7 @@ function saveWechatGroupSettings() {
                 wechat_group_persona_preset_id: 'custom',
                 wechat_group_alias_sync_cooldown_minutes: aliasSyncCooldownMinutes,
                 tools_web_fetch_proxy: basicProxy,
+                ...githubCommitNotifyConfig,
                 wechat_group_humanized_context_enabled: humanization.enabled,
                 wechat_group_context_persist_raw_user_only: humanization.persist_raw_user_only,
                 wechat_group_reply_policy_enabled: humanization.reply_policy_enabled,

@@ -52,6 +52,7 @@ from voice.factory import SUPPORTED_ASR_PROVIDERS, SUPPORTED_TTS_PROVIDERS
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".avi", ".mov", ".mkv"}
+GITHUB_WEBHOOK_SECRET_ENV = "LIGHTAGENT_GITHUB_WEBHOOK_SECRET"
 
 def _get_web_password() -> str:
     # Coerce to str so non-string values in config.json (e.g. numeric password) won't break comparisons
@@ -1274,6 +1275,7 @@ class WebChannel(ChatChannel):
             '/config', 'ConfigHandler',
             '/api/models', 'ModelsHandler',
             '/api/channels', 'ChannelsHandler',
+            '/api/github/webhook', 'GitHubWebhookHandler',
             '/api/weixin/qrlogin', 'WeixinQrHandler',
             '/api/wechat_group/qrlogin', 'WechatGroupQrHandler',
             '/api/wechat-group/identity/(.*)', 'WechatGroupIdentityHandler',
@@ -1393,6 +1395,77 @@ class AuthLogoutHandler:
         web.header('Content-Type', 'application/json; charset=utf-8')
         web.setcookie("lightagent_auth_token", "", expires=-1, path="/")
         return json.dumps({"status": "success"})
+
+
+class GitHubWebhookHandler:
+    _STATUS_TEXT = {
+        202: "Accepted",
+        400: "Bad Request",
+        403: "Forbidden",
+        404: "Not Found",
+        413: "Payload Too Large",
+        415: "Unsupported Media Type",
+        500: "Internal Server Error",
+        503: "Service Unavailable",
+    }
+
+    def POST(self):
+        from channel.web.github_commit_webhook import (
+            GitHubWebhookRequestError,
+            MAX_GITHUB_WEBHOOK_PAYLOAD_BYTES,
+            get_github_commit_webhook_service,
+        )
+
+        env = getattr(web.ctx, "env", {}) or {}
+        try:
+            content_length = int(env.get("CONTENT_LENGTH") or 0)
+        except (TypeError, ValueError):
+            return self._json_response(400, {
+                "status": "error",
+                "code": "invalid_content_length",
+                "message": "Content-Length is invalid",
+            })
+        if content_length > MAX_GITHUB_WEBHOOK_PAYLOAD_BYTES:
+            return self._json_response(413, {
+                "status": "error",
+                "code": "payload_too_large",
+                "message": "Webhook payload is too large",
+            })
+
+        headers = {
+            "x-hub-signature-256": env.get("HTTP_X_HUB_SIGNATURE_256", ""),
+            "x-github-event": env.get("HTTP_X_GITHUB_EVENT", ""),
+            "x-github-delivery": env.get("HTTP_X_GITHUB_DELIVERY", ""),
+        }
+        try:
+            result = get_github_commit_webhook_service().handle(
+                web.data(),
+                headers,
+                content_type=str(env.get("CONTENT_TYPE") or ""),
+            )
+            return self._json_response(202, result)
+        except GitHubWebhookRequestError as e:
+            return self._json_response(e.status_code, {
+                "status": "error",
+                "code": e.code,
+                "message": e.message,
+            })
+        except Exception as e:
+            logger.error("[GitHubWebhook] Request handling failed: %s", e, exc_info=True)
+            return self._json_response(500, {
+                "status": "error",
+                "code": "internal_error",
+                "message": "GitHub webhook processing failed",
+            })
+
+    @classmethod
+    def _json_response(cls, status_code: int, payload: dict):
+        reason = cls._STATUS_TEXT.get(int(status_code), "")
+        web.ctx.status = "{} {}".format(int(status_code), reason).strip()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        web.header('Cache-Control', 'no-store')
+        web.header('X-Content-Type-Options', 'nosniff')
+        return json.dumps(payload, ensure_ascii=False)
 
 
 class MessageHandler:
@@ -4194,6 +4267,13 @@ class ChannelsHandler:
             image_generation_cfg = {}
         stable_room_ids = conf().get("wechat_group_stable_room_ids", []) or []
         runtime_room_ids = conf().get("wechat_group_room_ids", []) or []
+        environment_secret_configured = bool(os.environ.get(GITHUB_WEBHOOK_SECRET_ENV))
+        local_secret_configured = bool(conf().get("github_commit_notify_webhook_secret"))
+        secret_source = (
+            "environment"
+            if environment_secret_configured
+            else "config" if local_secret_configured else ""
+        )
         return {
             "rooms": normalized_rooms,
             "identity_recovery": cls._wechat_group_identity_recovery(normalized_rooms),
@@ -4234,6 +4314,21 @@ class ChannelsHandler:
             "basic": {
                 "alias_sync_cooldown_minutes": conf().get("wechat_group_alias_sync_cooldown_minutes", 1),
                 "proxy": web_fetch_cfg.get("proxy") or "",
+            },
+            "github_commit_notify": {
+                "enabled": conf().get("github_commit_notify_enabled", False),
+                "repository": conf().get("github_commit_notify_repository", "") or "",
+                "branches": conf().get("github_commit_notify_branches", ["main"]) or [],
+                "stable_room_id": conf().get("github_commit_notify_stable_room_id", "") or "",
+                "max_commits": conf().get("github_commit_notify_max_commits", 8),
+                "retry_hours": conf().get("github_commit_notify_retry_hours", 72),
+                "delivery_retention_days": conf().get(
+                    "github_commit_notify_delivery_retention_days", 30
+                ),
+                "webhook_path": "/api/github/webhook",
+                "secret_configured": bool(secret_source),
+                "secret_source": secret_source,
+                "secret_masked": "********" if secret_source else "",
             },
             "admin": {
                 "members": get_wechat_group_admin_members(),
@@ -4508,6 +4603,14 @@ class ChannelsHandler:
             "wechat_group_free_reply_profiles",
             "wechat_group_free_reply_rule_scores",
             "wechat_group_free_reply_rule_enabled",
+            "github_commit_notify_enabled",
+            "github_commit_notify_repository",
+            "github_commit_notify_branches",
+            "github_commit_notify_stable_room_id",
+            "github_commit_notify_max_commits",
+            "github_commit_notify_retry_hours",
+            "github_commit_notify_delivery_retention_days",
+            "github_commit_notify_webhook_secret",
         }
         local_config = conf()
         applied = {}
@@ -4526,6 +4629,7 @@ class ChannelsHandler:
                 "wechat_group_free_reply_names",
                 "wechat_group_free_reply_force_keywords",
                 "wechat_group_sticker_online_allowed_domains",
+                "github_commit_notify_branches",
             ):
                 if key in (
                     "wechat_group_stable_room_ids",
@@ -4536,6 +4640,13 @@ class ChannelsHandler:
                     value = cls._normalize_domain_list(value)
                 else:
                     value = cls._normalize_string_list(value)
+            elif key == "github_commit_notify_stable_room_id":
+                normalized_rooms = cls._normalize_wechat_group_stable_room_ids([value])
+                value = normalized_rooms[0] if normalized_rooms else ""
+            elif key == "github_commit_notify_repository":
+                value = str(value or "").strip()[:255]
+            elif key == "github_commit_notify_webhook_secret":
+                value = str(value or "")
             elif key == "wechat_group_admin_members":
                 value = normalize_wechat_group_admin_members(value)
             elif key == "wechat_group_blacklist_members":
@@ -4627,8 +4738,15 @@ class ChannelsHandler:
                 "wechat_group_free_reply_enabled",
                 "wechat_group_free_reply_mute_mentions_enabled",
                 "wechat_group_free_reply_llm_judge_enabled",
+                "github_commit_notify_enabled",
             ):
                 value = cls._normalize_bool(value)
+            elif key == "github_commit_notify_max_commits":
+                value = cls._clamp_int(value, 1, 20, 8)
+            elif key == "github_commit_notify_retry_hours":
+                value = cls._clamp_int(value, 1, 720, 72)
+            elif key == "github_commit_notify_delivery_retention_days":
+                value = cls._clamp_int(value, 1, 365, 30)
             elif key == "wechat_group_image_understanding_prompt":
                 value = "\n".join(
                     line.strip()

@@ -308,6 +308,7 @@
                 "pages": [
                   "zh/guide/quick-start",
                   "zh/guide/manual-install",
+                  "zh/guide/github-commit-wechat",
                   "zh/guide/upgrade"
                 ]
               }

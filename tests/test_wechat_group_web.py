@@ -38,6 +38,14 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_room_ids": conf().get("wechat_group_room_ids"),
             "wechat_group_stable_room_ids": conf().get("wechat_group_stable_room_ids"),
             "wechat_group_names": conf().get("wechat_group_names"),
+            "github_commit_notify_enabled": conf().get("github_commit_notify_enabled"),
+            "github_commit_notify_repository": conf().get("github_commit_notify_repository"),
+            "github_commit_notify_branches": conf().get("github_commit_notify_branches"),
+            "github_commit_notify_stable_room_id": conf().get("github_commit_notify_stable_room_id"),
+            "github_commit_notify_max_commits": conf().get("github_commit_notify_max_commits"),
+            "github_commit_notify_retry_hours": conf().get("github_commit_notify_retry_hours"),
+            "github_commit_notify_delivery_retention_days": conf().get("github_commit_notify_delivery_retention_days"),
+            "github_commit_notify_webhook_secret": conf().get("github_commit_notify_webhook_secret"),
             "wechat_group_admin_members": conf().get("wechat_group_admin_members"),
             "wechat_group_admin_required_permissions": conf().get("wechat_group_admin_required_permissions"),
             "wechat_group_blacklist_members": conf().get("wechat_group_blacklist_members"),
@@ -949,6 +957,94 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual("success", result["status"])
         self.assertEqual(["wgr_room"], conf()["wechat_group_stable_room_ids"])
         self.assertEqual(["room@@new"], conf()["wechat_group_room_ids"])
+
+    def test_wechat_group_extra_masks_github_webhook_secret(self):
+        from channel.web.web_channel import ChannelsHandler, GITHUB_WEBHOOK_SECRET_ENV
+        from config import conf
+
+        conf()["github_commit_notify_enabled"] = True
+        conf()["github_commit_notify_repository"] = "owner/repository"
+        conf()["github_commit_notify_branches"] = ["main", "develop"]
+        conf()["github_commit_notify_stable_room_id"] = "wgr_room"
+        conf()["github_commit_notify_webhook_secret"] = "local-secret-value"
+        with patch.dict(os.environ, {GITHUB_WEBHOOK_SECRET_ENV: ""}):
+            extra = ChannelsHandler._wechat_group_extra()
+
+        github = extra["github_commit_notify"]
+        self.assertTrue(github["enabled"])
+        self.assertEqual("owner/repository", github["repository"])
+        self.assertEqual(["main", "develop"], github["branches"])
+        self.assertEqual("wgr_room", github["stable_room_id"])
+        self.assertTrue(github["secret_configured"])
+        self.assertEqual("config", github["secret_source"])
+        self.assertEqual("********", github["secret_masked"])
+        self.assertNotIn("local-secret-value", json.dumps(extra, ensure_ascii=False))
+
+    def test_wechat_group_extra_reports_environment_secret_priority(self):
+        from channel.web.web_channel import ChannelsHandler, GITHUB_WEBHOOK_SECRET_ENV
+        from config import conf
+
+        conf()["github_commit_notify_webhook_secret"] = "local-secret-value"
+        with patch.dict(os.environ, {GITHUB_WEBHOOK_SECRET_ENV: "environment-secret-value"}):
+            github = ChannelsHandler._wechat_group_extra()["github_commit_notify"]
+
+        self.assertTrue(github["secret_configured"])
+        self.assertEqual("environment", github["secret_source"])
+        self.assertNotIn("environment-secret-value", json.dumps(github, ensure_ascii=False))
+        self.assertNotIn("local-secret-value", json.dumps(github, ensure_ascii=False))
+
+    def test_channels_save_github_commit_notification_config(self):
+        from channel.web.web_channel import ChannelsHandler, GITHUB_WEBHOOK_SECRET_ENV
+        from config import conf
+
+        handler = ChannelsHandler()
+        body = {
+            "action": "save",
+            "channel": "wechat_group",
+            "config": {
+                "github_commit_notify_enabled": True,
+                "github_commit_notify_repository": "  owner/repository  ",
+                "github_commit_notify_branches": ["main", "develop", "main"],
+                "github_commit_notify_stable_room_id": "wgr_room",
+                "github_commit_notify_max_commits": 99,
+                "github_commit_notify_retry_hours": 999,
+                "github_commit_notify_delivery_retention_days": 0,
+                "github_commit_notify_webhook_secret": "new-local-secret",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                patch.dict(os.environ, {GITHUB_WEBHOOK_SECRET_ENV: ""}), \
+                patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")), \
+                patch("channel.web.web_channel.get_data_root", return_value=tmpdir):
+            raw_result = handler.POST()
+            result = json.loads(raw_result)
+
+        self.assertEqual("success", result["status"])
+        self.assertTrue(conf()["github_commit_notify_enabled"])
+        self.assertEqual("owner/repository", conf()["github_commit_notify_repository"])
+        self.assertEqual(["main", "develop"], conf()["github_commit_notify_branches"])
+        self.assertEqual("wgr_room", conf()["github_commit_notify_stable_room_id"])
+        self.assertEqual(20, conf()["github_commit_notify_max_commits"])
+        self.assertEqual(720, conf()["github_commit_notify_retry_hours"])
+        self.assertEqual(1, conf()["github_commit_notify_delivery_retention_days"])
+        self.assertEqual("new-local-secret", conf()["github_commit_notify_webhook_secret"])
+        self.assertNotIn("new-local-secret", raw_result)
+        self.assertEqual("********", result["extra"]["github_commit_notify"]["secret_masked"])
+
+    def test_console_places_github_notification_in_basic_settings(self):
+        console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
+        basic_start = console_js.index("function buildGroupsBasicPanel(extra)")
+        basic_end = console_js.index("function buildGroupsVoiceInteractionPanel", basic_start)
+        basic_block = console_js[basic_start:basic_end]
+
+        self.assertIn("buildGroupsGithubCommitNotifyPanel(extra)", basic_block)
+        self.assertIn('id="groups-github-target-room"', basic_block)
+        self.assertIn("extra.stable_selected_room_ids", basic_block)
+        self.assertIn('type="password" value=""', basic_block)
+        self.assertIn("saved.secret_source === 'environment'", basic_block)
+        self.assertIn("github_commit_notify_webhook_secret", console_js)
+        self.assertIn("...githubCommitNotifyConfig", console_js)
 
     def test_channels_save_invalid_voice_interaction_mode_falls_back_to_force_reply(self):
         from channel.web.web_channel import ChannelsHandler

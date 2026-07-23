@@ -4,7 +4,7 @@ Integration module for scheduler with AgentBridge
 
 import os
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 from config import conf
 from common.log import logger
@@ -17,6 +17,23 @@ _scheduler_service = None
 _task_store = None
 # Module-level lock to guard idempotent initialization across threads
 _init_lock = threading.Lock()
+_task_store_lock = threading.Lock()
+_enqueue_lock = threading.Lock()
+
+
+def _get_or_create_task_store():
+    global _task_store
+    if _task_store is not None:
+        return _task_store
+    with _task_store_lock:
+        if _task_store is None:
+            from agent.tools.scheduler.task_store import TaskStore
+
+            workspace_root = expand_path(conf().get("agent_workspace", "~/lightagent"))
+            store_path = os.path.join(workspace_root, "scheduler", "tasks.json")
+            _task_store = TaskStore(store_path)
+            logger.debug(f"[Scheduler] Task store initialized: {store_path}")
+    return _task_store
 
 
 def init_scheduler(agent_bridge) -> bool:
@@ -46,17 +63,9 @@ def init_scheduler(agent_bridge) -> bool:
             return True
 
         try:
-            from agent.tools.scheduler.task_store import TaskStore
             from agent.tools.scheduler.scheduler_service import SchedulerService
 
-            # Get workspace from config
-            workspace_root = expand_path(conf().get("agent_workspace", "~/lightagent"))
-            store_path = os.path.join(workspace_root, "scheduler", "tasks.json")
-
-            # Create task store (reuse if already created)
-            if _task_store is None:
-                _task_store = TaskStore(store_path)
-                logger.debug(f"[Scheduler] Task store initialized: {store_path}")
+            _task_store = _get_or_create_task_store()
 
             # Create execute callback. Returns True on success, False to ask
             # the scheduler to retry on the next tick (e.g. channel not yet
@@ -115,7 +124,18 @@ def _is_channel_ready(channel_type: str, receiver: str) -> bool:
         return True
     try:
         if channel_type == "wechat_group":
-            return _get_running_channel(channel_type) is not None
+            channel = _get_running_channel(channel_type)
+            if channel is None:
+                return False
+            get_login_status = getattr(channel, "get_login_status", None)
+            if callable(get_login_status):
+                status = str(get_login_status() or "")
+                ready_statuses = {
+                    str(getattr(channel, "STATUS_LOGGED_IN", "logged_in")),
+                    str(getattr(channel, "STATUS_CONNECTED", "connected")),
+                }
+                return status in ready_statuses
+            return True
 
         from channel.channel_factory import create_channel
         channel = create_channel(channel_type)
@@ -239,6 +259,10 @@ def _apply_wechat_group_delivery_context(context: Context, action: dict) -> None
     if runtime_receiver:
         context["wechat_group_runtime_room_id"] = runtime_receiver
         context["wechat_group_room_id"] = runtime_receiver
+    if action.get("suppress_mention"):
+        context["suppress_mention"] = True
+    if action.get("no_need_at"):
+        context["no_need_at"] = True
 
 
 def _wechat_group_delivery_session_id(action: dict, fallback: str = "") -> str:
@@ -265,6 +289,84 @@ def get_task_store():
 def get_scheduler_service():
     """Get the global scheduler service instance"""
     return _scheduler_service
+
+
+def enqueue_wechat_group_message(
+    task_id: str,
+    name: str,
+    content: str,
+    stable_receiver: str,
+    max_lateness_seconds: int = 72 * 3600,
+    metadata: Optional[dict] = None,
+) -> str:
+    """Persist a deterministic one-time message for the running WeChat group channel."""
+    task_id = str(task_id or "").strip()
+    stable_receiver = str(stable_receiver or "").strip()
+    content = str(content or "").strip()
+    if not task_id:
+        raise ValueError("task_id is required")
+    if not stable_receiver:
+        raise ValueError("stable_receiver is required")
+    if not content:
+        raise ValueError("content is required")
+
+    metadata = dict(metadata or {})
+    runtime_receiver = ""
+    channel = _get_running_channel("wechat_group")
+    identity_service = getattr(channel, "identity_service", None) if channel else None
+    if identity_service and hasattr(identity_service, "get_active_runtime_room_id"):
+        try:
+            runtime_receiver = str(
+                identity_service.get_active_runtime_room_id(stable_receiver) or ""
+            ).strip()
+        except Exception as e:
+            logger.warning(
+                f"[Scheduler] Failed to snapshot WeChat group runtime receiver "
+                f"for {stable_receiver}: {e}"
+            )
+
+    run_at = datetime.now() + timedelta(seconds=1)
+    action = {
+        "type": "send_message",
+        "content": content,
+        "receiver": runtime_receiver,
+        "runtime_receiver": runtime_receiver,
+        "stable_receiver": stable_receiver,
+        "receiver_kind": "wechat_group",
+        "receiver_name": stable_receiver,
+        "is_group": True,
+        "channel_type": "wechat_group",
+        "notify_session_id": f"wechat_group:{stable_receiver}",
+        "suppress_mention": True,
+        "no_need_at": True,
+    }
+    for key in ("source", "external_delivery_id", "repository", "ref"):
+        if metadata.get(key):
+            action[key] = str(metadata[key])
+
+    task = {
+        "id": task_id,
+        "name": str(name or "External notification"),
+        "enabled": True,
+        "created_at": datetime.now().isoformat(),
+        "updated_at": datetime.now().isoformat(),
+        "next_run_at": run_at.isoformat(),
+        "max_lateness_seconds": max(int(max_lateness_seconds or 0), 600),
+        "schedule": {"type": "once", "run_at": run_at.isoformat()},
+        "action": action,
+        "metadata": metadata,
+    }
+
+    store = _get_or_create_task_store()
+    with _enqueue_lock:
+        if store.get_task(task_id) is not None:
+            return "existing"
+        store.add_task(task)
+    logger.info(
+        f"[Scheduler] Queued external message task {task_id} "
+        f"for stable WeChat group {stable_receiver}"
+    )
+    return "enqueued"
 
 
 def _remember_delivered_output(
@@ -482,6 +584,16 @@ def _execute_send_message(task: dict, agent_bridge) -> bool:
         except Exception as e:
             logger.error(f"[Scheduler] Failed to send message: {e}")
             return False
+
+        if action.get("source") == "github_webhook" and action.get("external_delivery_id"):
+            try:
+                from channel.web.github_commit_webhook import mark_github_delivery_delivered
+
+                mark_github_delivery_delivered(action.get("external_delivery_id"))
+            except Exception as e:
+                logger.warning(
+                    f"[Scheduler] Failed to mark GitHub delivery as delivered: {e}"
+                )
 
         _remember_delivered_output(agent_bridge, task, channel_type, content)
         logger.info(f"[Scheduler] Task {task['id']} executed: sent message to {receiver}")

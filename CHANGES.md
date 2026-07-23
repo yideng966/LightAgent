@@ -2,6 +2,33 @@
 
 ## 2026-07-23
 
+### GitHub 提交通知到指定微信群
+
+- 新增 `/api/github/webhook`：按 GitHub `X-Hub-Signature-256` 对原始请求体执行 HMAC-SHA256 恒定时间验签，只处理 `ping` 与目标仓库/分支的 `push`，并限制 25 MB 请求体。
+- 新增 GitHub delivery SQLite 去重记录；在配置的保留期内，相同 `X-GitHub-Delivery` 在任务排队中或已投递后不会重复创建群消息，数据库仅保存 delivery ID、任务 ID、仓库、分支和状态，不保存 Secret 或原始 payload。
+- 复用 scheduler 固定消息投递链路创建确定性一次性任务，使用 `stable_room_id` 在发送前解析当前 runtime room；通知默认不 mention 群成员，群未登录或身份未恢复时按任务级有效期重试，原有 scheduler 仍保持 10 分钟默认延迟窗口。
+- 在 Web 控制台「群聊 -> 基础设置」新增 GitHub 提交通知配置区，支持启用开关、仓库、分支、目标群单选下拉、commit 展开数、重试时长、去重保留期、只读 Webhook 地址和 Secret 输入；目标群只取已选择的稳定群，离线的已保存目标不会被页面清空。
+- Webhook Secret 支持保存到本地配置，`LIGHTAGENT_GITHUB_WEBHOOK_SECRET` 仍具有最高优先级；配置 API 只返回是否已配置、来源和固定掩码，不返回真实 Secret，页面未填写新值时不会覆盖已有 Secret。
+- 新增中文部署文档，说明 Web 控制台配置、公网 HTTPS 精确路径反向代理、GitHub Webhook 设置、安全边界和错误排查。
+
+关键文件：
+
+- `channel/web/github_commit_webhook.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `agent/tools/scheduler/integration.py`
+- `agent/tools/scheduler/scheduler_service.py`
+- `tests/test_github_commit_webhook.py`
+- `tests/test_scheduler_wechat_group_delivery.py`
+- `docs/zh/guide/github-commit-wechat.mdx`
+
+验证记录：
+
+- GitHub/scheduler 与个人微信群联合回归：通过，243 项 OK。
+- `python -m unittest discover -s tests`：通过，854 项 OK。
+- Python 编译、`node --check channel/web/static/js/console.js`、`config-template.json` / `docs/docs.json` JSON 语法、临时 Secret 扫描与 `git diff --check`：通过。
+- Playwright 隔离验收通过：1440px 暗色与 375px 亮色无横向溢出或文本重叠，目标群下拉可切换，Secret 不回显，环境变量接管时输入框禁用；隔离实例只启用 Web 通道，测试配置、日志和截图均已清理。
+
 ### 微信群成员黑名单
 
 - 新增结构化配置 `wechat_group_blacklist_members`，字段结构复用群管理员成员记录，按当前群 `stable_room_id + stable_member_id` 精确生效；旧 `wechat_group_blocked_stable_member_ids` 与 `wechat_group_blocked_sender_ids` 继续作为兼容 fallback。

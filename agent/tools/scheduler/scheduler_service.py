@@ -137,10 +137,16 @@ class SchedulerService:
                 schedule = task.get("schedule", {})
                 schedule_type = schedule.get("type")
 
-                # Catch-up window: fire if we're within 10 minutes of the
-                # scheduled tick. Beyond that we'd rather skip than push a
-                # stale daily report to the user.
-                if time_diff <= 600:
+                # Keep the existing 10-minute default, while allowing durable
+                # external notifications to declare a longer retry window.
+                try:
+                    max_lateness_seconds = max(
+                        int(task.get("max_lateness_seconds", 600) or 0),
+                        0,
+                    )
+                except (TypeError, ValueError):
+                    max_lateness_seconds = 600
+                if time_diff <= max_lateness_seconds:
                     return True
 
                 logger.warning(

@@ -1,0 +1,135 @@
+---
+title: GitHub 提交通知到微信群
+description: 通过 GitHub push Webhook 将 commit 聚合通知发送到指定个人微信群
+---
+
+LightAgent 可以接收指定 GitHub 仓库的 `push` Webhook，并把一次 push 中的 commit 聚合为一条固定文本消息发送到指定个人微信群。通知链路不调用 LLM，也不会把 GitHub payload 写入 Agent 会话。
+
+## 前置条件
+
+- LightAgent 已启用 `web` 和 `wechat_group` 通道。
+- 已在「通道管理 -> 接入通道 -> 个人微信群」扫码登录。
+- 已在「群聊 -> 群与管理员」选择允许接收通知的目标群。
+- 目标群已经获得 `wechat_group_stable_room_ids` 中的稳定群 ID。
+- 已有能够反向代理到 LightAgent Web 服务的公网 HTTPS 地址。
+
+## 在 Web 控制台配置
+
+打开「群聊 -> 基础设置」，在「GitHub 提交通知」区域完成配置：
+
+1. 开启「启用提交通知」。
+2. 填写仓库全名，例如 `owner/repository`。
+3. 填写需要通知的分支，多个分支使用逗号或换行分隔；留空表示允许所有分支。
+4. 从「目标群」下拉框选择一个接收通知的群。下拉框只列出已在「群与管理员」中选择的稳定群。
+5. 按需调整单条最大 commit 数、最长重试时间和去重保留天数。
+6. 填写 Webhook Secret 并保存。页面不会回显真实 Secret，再次打开时留空保存不会覆盖原值。
+
+页面会显示当前 Webhook 地址，通常为：
+
+```text
+https://你的域名/api/github/webhook
+```
+
+如果进程环境中设置了 `LIGHTAGENT_GITHUB_WEBHOOK_SECRET`，该环境变量优先于 Web 控制台保存的 Secret，页面输入框会被禁用并显示「由环境变量接管」。
+
+## 手动配置
+
+也可以直接在数据目录的 `config.json` 中加入以下配置。`github_commit_notify_stable_room_id` 必须同时存在于 `wechat_group_stable_room_ids` 中：
+
+```json
+{
+  "channel_type": ["wechat_group", "web"],
+  "wechat_group_stable_room_ids": ["wgr_xxx"],
+  "github_commit_notify_enabled": true,
+  "github_commit_notify_repository": "owner/repository",
+  "github_commit_notify_branches": ["main"],
+  "github_commit_notify_stable_room_id": "wgr_xxx",
+  "github_commit_notify_max_commits": 8,
+  "github_commit_notify_retry_hours": 72,
+  "github_commit_notify_delivery_retention_days": 30,
+  "github_commit_notify_webhook_secret": ""
+}
+```
+
+| 配置 | 说明 | 默认值 |
+| --- | --- | --- |
+| `github_commit_notify_enabled` | 是否启用 GitHub 提交通知 | `false` |
+| `github_commit_notify_repository` | 允许通知的仓库全名，格式为 `owner/repository` | `""` |
+| `github_commit_notify_branches` | 允许通知的分支；空数组表示允许所有分支 | `["main"]` |
+| `github_commit_notify_stable_room_id` | 接收通知的稳定微信群 ID | `""` |
+| `github_commit_notify_max_commits` | 单条消息最多展开的 commit 数，范围 1-20 | `8` |
+| `github_commit_notify_retry_hours` | 群未登录或身份未恢复时的最长重试时间，范围 1-720 小时 | `72` |
+| `github_commit_notify_delivery_retention_days` | GitHub delivery 去重记录保留天数，范围 1-365 天 | `30` |
+| `github_commit_notify_webhook_secret` | 本地 Webhook Secret；环境变量存在时不生效 | `""` |
+
+Webhook Secret 不应写入仓库或 URL。生产环境推荐使用环境变量配置，并在设置后重启 LightAgent：
+
+```powershell
+$env:LIGHTAGENT_GITHUB_WEBHOOK_SECRET="使用高强度随机字符串"
+python app.py
+```
+
+如果通过 Windows 服务、容器或进程管理器运行，需要在对应服务环境中持久化该环境变量。通过 Web 控制台保存 Secret 时，Secret 会写入数据目录的本地 `config.json`；应限制该文件的访问权限，并确保它不被提交到 Git。
+
+## 公网反向代理
+
+Webhook 地址为：
+
+```text
+https://你的域名/api/github/webhook
+```
+
+建议公网只开放这个精确路径，LightAgent 继续监听本机地址。Nginx 示例：
+
+```nginx
+location = /api/github/webhook {
+    proxy_pass http://127.0.0.1:9899;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto https;
+    client_max_body_size 25m;
+}
+```
+
+不要把 Secret 放在查询参数中，也不要为了 Webhook 直接暴露整个 Web 控制台。HTTPS 证书校验应保持开启。
+
+## GitHub 仓库设置
+
+进入目标仓库的 `Settings -> Webhooks -> Add webhook`：
+
+1. `Payload URL` 填写公网 Webhook 地址。
+2. `Content type` 选择 `application/json`。
+3. `Secret` 填写与 `LIGHTAGENT_GITHUB_WEBHOOK_SECRET` 相同的值。
+4. 事件选择 `Just the push event`。
+5. 保持 `Active` 开启并保存。
+
+GitHub 的首次 `ping` 请求应得到 `202 Accepted`。后续目标分支 push 会创建持久化 scheduler 任务，并发送类似消息：
+
+```text
+[GitHub 提交] owner/repository
+分支：main
+推送者：alice
+提交：2 个
+
+1234567 修复登录超时
+abcdef1 补充回归测试
+
+查看变更：https://github.com/owner/repository/compare/...
+```
+
+## 安全与重试
+
+- 服务端使用原始请求体和 `X-Hub-Signature-256` 做 HMAC-SHA256 恒定时间比较。
+- `X-GitHub-Delivery` 用于持久化去重；在配置的去重保留期内，GitHub 手动重投递不会重复发群消息。
+- 只接受配置中的仓库、分支和已选择稳定群；标签 push、删除分支和其他事件会被忽略。
+- Webhook 验签和入队完成后立即返回 `202`，微信群发送由 scheduler 异步完成。
+- 群未登录、sidecar 未就绪或 stable/runtime 身份暂未恢复时，任务会在配置有效期内继续重试。
+
+GitHub 官方参考：[验证 Webhook 投递](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[Webhook 最佳实践](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)。
+
+## 排障
+
+- `404 webhook_disabled`：确认 `github_commit_notify_enabled` 已开启并重启进程。
+- `403 invalid_signature`：确认 GitHub Webhook Secret 与 Web 控制台或进程环境变量完全一致；环境变量存在时以环境变量为准。
+- `503 notification_config_incomplete`：补齐仓库全名和目标稳定群 ID。
+- `503 target_room_not_selected`：将目标稳定群 ID 同时加入 `wechat_group_stable_room_ids`。
+- GitHub 显示 `202` 但群内暂未收到：检查个人微信群登录状态、scheduler 任务列表和 LightAgent 日志。
