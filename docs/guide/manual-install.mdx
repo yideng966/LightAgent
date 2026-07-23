@@ -30,6 +30,14 @@ Optional dependencies (recommended):
 pip3 install -r requirements-optional.txt
 ```
 
+To connect a personal WeChat group from a source deployment, install Node.js and the sidecar dependencies:
+
+```bash
+cd channel/wechat_group/sidecar
+npm install
+cd ../../..
+```
+
 ### 3. Install LightAgent CLI
 
 Install the command-line tool for managing services and skills:
@@ -86,19 +94,21 @@ nohup python3 app.py & tail -f nohup.out
 
 ## Docker Deployment
 
-Docker deployment does not require cloning source code or installing dependencies. For Agent mode, source deployment is recommended for broader system access.
+Docker deployment does not require cloning source code or installing Python, Node.js, or npm dependencies. The image includes `/usr/local/bin/node`, the personal WeChat group Wechaty sidecar, and its locked production dependencies. Use a source deployment only when Agent mode needs broader access to the host system.
 
 <Note>
   Requires [Docker](https://docs.docker.com/engine/install/) and docker-compose.
 </Note>
 
-**1. Download config**
+**1. Download Compose and the environment template**
 
 ```bash
 curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/.env.example
+cp .env.example .env
 ```
 
-Edit `docker-compose.yml` with your configuration.
+Edit `.env` and replace the example with a strong random password. `WEB_PASSWORD` is required; never commit the real value to Git.
 
 **2. Start container**
 
@@ -106,15 +116,21 @@ Edit `docker-compose.yml` with your configuration.
 sudo docker compose up -d
 ```
 
+Open `http://localhost:9899`, configure a model in the Web console, then go to **Channel Management -> Add Channel -> Personal WeChat Group** to scan the QR code. Docker users do not run the sidecar `npm install` on the host.
+
 **3. View logs**
 
 ```bash
-sudo docker logs -f chatgpt-on-wechat
+sudo docker logs -f lightagent
 ```
 
-<Tip>
-  **Running in Docker?** Set `WEB_HOST` to `0.0.0.0` in `docker-compose.yml` so the console is reachable from outside the container, and set `WEB_PASSWORD` to protect it. Make sure port `9899` is mapped to the host and open in your firewall or security group.
-</Tip>
+Compose uses two persistent directories relative to `docker-compose.yml`:
+
+- `./config` mounts at `/home/agent/.lightagent`. It stores `config.json`, secrets, logs, plugin configuration and user-installed plugins, WeChat login state, media, and group databases. Despite its name, it is not only a configuration-file directory; back it up as a whole.
+- `./data` mounts at `/home/agent/lightagent`. It stores the Agent workspace, memories, knowledge base, skills, MCP configuration, and scheduler data.
+- `/app` belongs to the image and contains application code, Playwright, and sidecar `node_modules`. Do not mount a volume over it.
+
+Compose already binds the Web service to `0.0.0.0` and requires password authentication. Restrict inbound port `9899` in your firewall or security group when exposing it publicly. Restarting or recreating the container does not overwrite `./config` or `./data`.
 
 ## Core Configuration
 
@@ -144,5 +160,5 @@ sudo docker logs -f chatgpt-on-wechat
 | `lightagent_lang` | Language for the UI, command text and system prompts; `auto` to detect, or set `zh` / `en` | `auto` |
 
 <Tip>
-  Full configuration options are in the project [`config.py`](https://github.com/yideng966/LightAgent/blob/master/config.py).
+  Full configuration options are in the project [`config.py`](https://github.com/yideng966/LightAgent/blob/master/config.py). For Docker, configure models and channels in the Web console; changes are persisted in `./config/config.json`. Do not inject empty API-key or model environment variables in Compose, because they override saved values.
 </Tip>

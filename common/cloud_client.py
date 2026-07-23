@@ -21,7 +21,7 @@ from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from linkai import LinkAIClient, PushMsg
-from config import conf, pconf, plugin_config, available_setting, write_plugin_config, get_root, get_weixin_credentials_path
+from config import conf, pconf, plugin_config, available_setting, write_plugin_config, get_data_root, get_weixin_credentials_path
 from plugins import PluginManager
 import threading
 import time
@@ -695,13 +695,11 @@ class CloudClient(LinkAIClient):
         Save configuration to config.json file.
         """
         try:
-            config_path = os.path.join(get_root(), "config.json")
-            if not os.path.exists(config_path):
-                logger.warning(f"[CloudClient] config.json not found at {config_path}, skip saving")
-                return
-
-            with open(config_path, "r", encoding="utf-8") as f:
-                file_config = json.load(f)
+            config_path = os.path.join(get_data_root(), "config.json")
+            file_config = {}
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    file_config = json.load(f)
 
             file_config.update(dict(local_config))
 

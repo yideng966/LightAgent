@@ -30,6 +30,14 @@ pip3 install -r requirements.txt
 pip3 install -r requirements-optional.txt
 ```
 
+如需接入个人微信群，源码部署还需要 Node.js，并在 sidecar 目录安装 npm 依赖：
+
+```bash
+cd channel/wechat_group/sidecar
+npm install
+cd ../../..
+```
+
 > 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
 
 ### 3. 安装 LightAgent CLI
@@ -102,19 +110,21 @@ nohup python3 app.py & tail -f nohup.out
 
 ## Docker 部署
 
-使用 Docker 部署无需下载源码和安装依赖。Agent模式下更推荐使用源码部署以获得更多系统访问能力。
+使用 Docker 部署无需下载源码和安装 Python、Node.js 或 npm 依赖。镜像已包含 `/usr/local/bin/node`、个人微信群 Wechaty sidecar 和锁定后的生产依赖。Agent 模式下如需直接访问更多宿主机能力，仍可选择源码部署。
 
 <Note>
   需要安装 [Docker](https://docs.docker.com/engine/install/) 和 docker-compose。
 </Note>
 
-**1. 下载配置文件**
+**1. 下载 Compose 与环境变量模板**
 
 ```bash
 curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/.env.example
+cp .env.example .env
 ```
 
-打开 `docker-compose.yml` 填写所需配置。
+编辑 `.env`，把示例值替换为强随机密码。`WEB_PASSWORD` 为必填项，不能把真实密码提交到 Git。
 
 **2. 启动容器**
 
@@ -122,15 +132,21 @@ curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/doc
 sudo docker compose up -d
 ```
 
+首次启动后访问 `http://localhost:9899`，在 Web 控制台配置模型，然后进入“通道管理 -> 接入通道 -> 个人微信群”扫码。Docker 用户无需在宿主机执行 sidecar 的 `npm install`。
+
 **3. 查看日志**
 
 ```bash
-sudo docker logs -f chatgpt-on-wechat
+sudo docker logs -f lightagent
 ```
 
-<Tip>
-  **Docker 公网访问 Web 控制台**：在 `docker-compose.yml` 中将 `WEB_HOST` 设为 `0.0.0.0`（容器内默认绑定 `127.0.0.1` 无法从宿主机外访问），同时强烈建议设置 `WEB_PASSWORD` 启用鉴权。此外需确保 `9899` 端口正确映射到宿主机，并在防火墙/安全组放行该端口。
-</Tip>
+Compose 使用两个相对于 `docker-compose.yml` 的持久化目录：
+
+- `./config` 挂载到 `/home/agent/.lightagent`，保存 `config.json`、密钥、日志、插件配置与用户安装插件、微信登录态、媒体和群数据库；它不只是单一配置文件目录，必须整体备份。
+- `./data` 挂载到 `/home/agent/lightagent`，保存 Agent workspace、记忆、知识库、技能、MCP 和 scheduler。
+- `/app` 是随镜像升级的应用目录，包含项目代码、Playwright 和 sidecar `node_modules`，不要给它添加 volume。
+
+Compose 已让 Web 服务监听 `0.0.0.0` 并强制启用密码。若需要公网访问，还应在防火墙或安全组中限制 `9899` 的来源 IP。重启或重建容器不会覆盖 `./config` 和 `./data`。
 
 ## 核心配置项
 
@@ -153,15 +169,12 @@ sudo docker logs -f chatgpt-on-wechat
   <Tab title="Docker 部署（docker-compose.yml）">
     ```yaml
     environment:
-      CHANNEL_TYPE: 'web'
-      MODEL: 'deepseek-v4-flash'
-      DEEPSEEK_API_KEY: 'your-api-key'
-      DEEPSEEK_API_BASE: 'https://api.deepseek.com/v1'
-      AGENT: 'True'
-      AGENT_MAX_CONTEXT_TOKENS: 40000
-      AGENT_MAX_CONTEXT_TURNS: 30
-      AGENT_MAX_STEPS: 15
-      LIGHTAGENT_LANG: 'auto'
+      LIGHTAGENT_DATA_DIR: /home/agent/.lightagent
+      WEB_HOST: "0.0.0.0"
+      WEB_PASSWORD: "${WEB_PASSWORD:?Set WEB_PASSWORD in docker/.env before starting LightAgent}"
+    volumes:
+      - ./config:/home/agent/.lightagent
+      - ./data:/home/agent/lightagent
     ```
   </Tab>
 </Tabs>
@@ -178,5 +191,5 @@ sudo docker logs -f chatgpt-on-wechat
 | `lightagent_lang` | `LIGHTAGENT_LANG` | 界面、命令文案、系统提示词等的语言，`auto` 自动检测，可设为 `zh` / `en` | `auto` |
 
 <Tip>
-  全部配置项可在项目 [`config.py`](https://github.com/yideng966/LightAgent/blob/master/config.py) 文件中查看。Docker 部署时，配置项名称需转为大写环境变量格式。
+  全部配置项可在项目 [`config.py`](https://github.com/yideng966/LightAgent/blob/master/config.py) 文件中查看。Docker 部署建议通过 Web 控制台管理模型和通道，保存结果位于 `./config/config.json`；不要在 Compose 中注入空 API Key 或模型环境变量，否则会覆盖已保存配置。
 </Tip>

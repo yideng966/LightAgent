@@ -48,8 +48,13 @@ Docker:
 
 ```bash
 curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/.env.example
+cp .env.example .env
+# 编辑 .env，将 WEB_PASSWORD 替换为强随机密码
 docker compose up -d
 ```
+
+镜像已内置 Node.js、Wechaty sidecar 和锁定后的 npm 依赖，Docker 宿主机无需安装 Node.js 或运行 `npm install`。Compose 会在当前目录创建 `./config` 与 `./data`：前者保存配置、密钥、日志、插件配置与用户插件、微信登录态、媒体和群数据库，后者保存 Agent workspace、记忆、知识库、技能、MCP 和 scheduler。不要挂载 `/app`，应用代码与 sidecar 依赖应随镜像升级。
 
 启动后访问：
 
@@ -69,7 +74,7 @@ python -m pip install -r requirements-optional.txt
 python -m pip install -e .
 ```
 
-个人微信群 sidecar 依赖（仅在需要接入 `wechat_group` 渠道时执行）：
+个人微信群 sidecar 依赖（仅源码部署且需要接入 `wechat_group` 渠道时执行）：
 
 ```powershell
 Set-Location -LiteralPath .\channel\wechat_group\sidecar
@@ -77,7 +82,7 @@ npm install
 Set-Location -LiteralPath ..\..\..
 ```
 
-这一步会安装 `channel/wechat_group/sidecar/package.json` 中声明的 Wechaty 相关依赖，包括 `wechaty`、`wechaty-puppet-wechat4u`、`file-box` 等。Python 通道启动时会在该目录运行 `node wechaty-sidecar.mjs`；如果 `node` 不在 `PATH` 中，可在 `config.json` 中把 `wechat_group_sidecar_node` 配置为 Node.js 可执行文件路径。
+这一步会安装 `channel/wechat_group/sidecar/package.json` 中声明的 Wechaty 相关依赖，包括 `wechaty`、`wechaty-puppet-wechat4u`、`file-box` 等。Python 通道启动时会在该目录运行 `node wechaty-sidecar.mjs`；如果 `node` 不在 `PATH` 中，可在 `config.json` 中把 `wechat_group_sidecar_node` 配置为 Node.js 可执行文件路径。Docker 镜像已经内置 `/usr/local/bin/node` 和 sidecar 依赖，不执行此步骤。
 
 启动后端：
 
@@ -469,7 +474,7 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
 ### 接入流程
 
 1. 在 `config.json` 中启用或选择 `wechat_group` 渠道。
-2. 按“个人微信群 sidecar 依赖”步骤安装 Wechaty sidecar 的 npm 依赖。
+2. 源码部署时按“个人微信群 sidecar 依赖”步骤安装 npm 依赖；Docker 镜像已内置，无需安装。
 3. 启动 LightAgent。
 4. 打开 Web 控制台。
 5. 进入“通道管理 -> 接入通道 -> 个人微信群”。

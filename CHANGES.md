@@ -2,6 +2,41 @@
 
 ## 2026-07-23
 
+### Docker 镜像开箱即用与双目录持久化
+
+- 将发布镜像改为 Node.js 22 + Python 3.10 多阶段构建：构建期执行 sidecar `npm ci --omit=dev` 与 49 项 Node 测试，最终镜像固定提供 `/usr/local/bin/node`、`/app/channel/wechat_group/sidecar/node_modules`，并验证 Wechaty 核心模块可导入。
+- 新增 `.dockerignore`，排除 Git/worktree、本地配置、密钥、依赖、缓存、日志、workspace 与 Docker 运行目录，避免宿主机私有数据进入镜像。
+- entrypoint 改为在 `LIGHTAGENT_DATA_DIR` 中幂等初始化 `config.json`，仅在文件缺失时复制模板；Compose 使用 `./config:/home/agent/.lightagent` 与 `./data:/home/agent/lightagent`，不挂载 `/app`，并通过 `.env` 强制提供 `WEB_PASSWORD` 后监听 `0.0.0.0`。
+- Compose 不再注入空 API Key、模型或固定 `CHANNEL_TYPE`，避免覆盖 Web 控制台保存的持久化配置；`config-template.json` 继续保留安全的 `web_host: ""` 自动策略。
+- 插件只读资源目录与可写数据目录分离：插件配置、`plugins.json` 和用户安装插件进入 `LIGHTAGENT_DATA_DIR/plugins`，同名用户插件不能遮蔽内置插件；CloudClient 配置写回统一改为数据根目录。
+- 合并 GitHub Actions 镜像发布链，单一工作流通过 Buildx 同时发布 `linux/amd64` 与 `linux/arm64`，移除独立 `*-arm64` 工作流。
+- 更新 README 与中英日安装、升级文档，说明 Docker 已内置 Node/sidecar 依赖、双目录职责、`/app` 升级边界、Web 密码、扫码入口与备份迁移要求。
+
+关键文件：
+
+- `.dockerignore`
+- `docker/Dockerfile.latest`
+- `docker/entrypoint.sh`
+- `docker/docker-compose.yml`
+- `docker/.env.example`
+- `.github/workflows/deploy-image.yml`
+- `plugins/plugin_manager.py`
+- `plugins/plugin.py`
+- `common/cloud_client.py`
+- `tests/test_docker_deployment.py`
+- `tests/test_persistent_data_paths.py`
+- `README.md`
+- `docs/*/guide/manual-install.mdx`
+- `docs/*/guide/upgrade.mdx`
+
+验证记录：
+
+- `python -m unittest discover -s tests`：通过，864 项 OK。
+- `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`：通过，219 项 OK。
+- `npm test`（`channel/wechat_group/sidecar`）：通过，49 项 OK。
+- Docker/持久化合同测试：10 项通过；Compose 展开、GitHub Actions YAML 解析、Python 编译、Git Bash `bash -n docker/entrypoint.sh` 与 `git diff --check` 均通过。
+- 本机 Docker Desktop Linux 引擎未运行，当前会话尝试启动时被 Windows 拒绝访问，因此本机镜像构建、容器幂等 smoke、镜像内 Node 实际版本/路径验证未执行；统一多架构 Actions、远端 manifest 与真实微信群扫码/登录态恢复需在推送后或人工环境继续验收，未记录为通过。
+
 ### GitHub 标签自动发布 LightAgent 镜像
 
 - 将 AMD64 与 ARM64 Docker 工作流的宽泛 `create` 事件替换为显式 `push.tags: ['v*']`，保留 `master` 分支触发，并增加 `workflow_dispatch` 手动重试入口。

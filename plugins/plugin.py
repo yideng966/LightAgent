@@ -1,6 +1,6 @@
 import os
 import json
-from config import pconf, plugin_config, conf, write_plugin_config
+from config import pconf, plugin_config, conf, write_plugin_config, get_data_root
 from common.log import logger
 
 
@@ -30,15 +30,11 @@ class Plugin:
         try:
             write_plugin_config({self.name: config})
             # 写入全局配置
-            global_config_path = "./plugins/config.json"
-            if os.path.exists(global_config_path):
-                with open(global_config_path, "w", encoding='utf-8') as f:
-                    json.dump(plugin_config, f, indent=4, ensure_ascii=False)
-            # 写入插件配置
-            plugin_config_path = os.path.join(self.path, "config.json")
-            if os.path.exists(plugin_config_path):
-                with open(plugin_config_path, "w", encoding='utf-8') as f:
-                    json.dump(config, f, indent=4, ensure_ascii=False)
+            plugin_data_dir = os.path.join(get_data_root(), "plugins")
+            os.makedirs(plugin_data_dir, exist_ok=True)
+            global_config_path = os.path.join(plugin_data_dir, "config.json")
+            with open(global_config_path, "w", encoding='utf-8') as f:
+                json.dump(plugin_config, f, indent=4, ensure_ascii=False)
 
         except Exception as e:
             logger.warn("save plugin config failed: {}".format(e))

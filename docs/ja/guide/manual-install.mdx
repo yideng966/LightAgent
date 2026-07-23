@@ -30,6 +30,14 @@ pip3 install -r requirements.txt
 pip3 install -r requirements-optional.txt
 ```
 
+ソースコードによるデプロイで個人 WeChat グループに接続する場合は、Node.js と sidecar の依存パッケージもインストールします：
+
+```bash
+cd channel/wechat_group/sidecar
+npm install
+cd ../../..
+```
+
 ### 3. LightAgent CLI をインストール
 
 サービスとスキルを管理するためのコマンドラインツールをインストールします：
@@ -86,19 +94,21 @@ nohup python3 app.py & tail -f nohup.out
 
 ## Docker によるデプロイ
 
-Docker デプロイでは、ソースコードのクローンや依存パッケージのインストールは不要です。Agent モードを使用する場合は、より広範なシステムアクセスが可能なソースコードによるデプロイを推奨します。
+Docker デプロイでは、ソースコードのクローンや Python、Node.js、npm 依存パッケージのインストールは不要です。イメージには `/usr/local/bin/node`、個人 WeChat グループ用 Wechaty sidecar、およびロック済みの本番依存パッケージが含まれています。Agent モードからホストへより広範にアクセスする必要がある場合のみ、ソースコードによるデプロイを選択してください。
 
 <Note>
   [Docker](https://docs.docker.com/engine/install/) と docker-compose が必要です。
 </Note>
 
-**1. 設定ファイルをダウンロード**
+**1. Compose と環境変数テンプレートをダウンロード**
 
 ```bash
 curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/docker-compose.yml
+curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/.env.example
+cp .env.example .env
 ```
 
-`docker-compose.yml` を編集して設定を行います。
+`.env` を編集し、サンプル値を強力なランダムパスワードに置き換えます。`WEB_PASSWORD` は必須です。実際のパスワードを Git にコミットしないでください。
 
 **2. コンテナを起動**
 
@@ -106,15 +116,21 @@ curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/doc
 sudo docker compose up -d
 ```
 
+初回起動後に `http://localhost:9899` を開き、Web コンソールでモデルを設定します。その後「チャネル管理 -> チャネルを追加 -> 個人 WeChat グループ」から QR コードをスキャンします。Docker ホストで sidecar の `npm install` を実行する必要はありません。
+
 **3. ログを確認**
 
 ```bash
-sudo docker logs -f chatgpt-on-wechat
+sudo docker logs -f lightagent
 ```
 
-<Tip>
-  サーバーにデプロイする場合は、ファイアウォールまたはセキュリティグループでポート `9899` を開放して Web コンソールにアクセスできるようにしてください。セキュリティのため、特定の IP のみにアクセスを制限することを推奨します。
-</Tip>
+Compose は `docker-compose.yml` からの相対パスで、次の 2 つの永続化ディレクトリを使用します：
+
+- `./config` は `/home/agent/.lightagent` にマウントされ、`config.json`、シークレット、ログ、プラグイン設定とユーザーがインストールしたプラグイン、WeChat ログイン状態、メディア、グループデータベースを保存します。名前にかかわらず設定ファイルだけのディレクトリではないため、ディレクトリ全体をバックアップしてください。
+- `./data` は `/home/agent/lightagent` にマウントされ、Agent workspace、メモリ、ナレッジベース、スキル、MCP 設定、scheduler データを保存します。
+- `/app` はイメージに属し、アプリケーションコード、Playwright、sidecar の `node_modules` を含みます。ここに volume をマウントしないでください。
+
+Compose は Web サービスを `0.0.0.0` にバインドし、パスワード認証を必須にしています。公開する場合は、ファイアウォールまたはセキュリティグループでポート `9899` の接続元を制限してください。コンテナを再起動または再作成しても `./config` と `./data` は上書きされません。
 
 ## 主要な設定項目
 
@@ -144,5 +160,5 @@ sudo docker logs -f chatgpt-on-wechat
 | `lightagent_lang` | UI・コマンド文言・システムプロンプトなどの言語。`auto` で自動検出、`zh` / `en` も指定可 | `auto` |
 
 <Tip>
-  すべての設定オプションはプロジェクトの [`config.py`](https://github.com/yideng966/LightAgent/blob/master/config.py) に記載されています。
+  すべての設定オプションはプロジェクトの [`config.py`](https://github.com/yideng966/LightAgent/blob/master/config.py) に記載されています。Docker では Web コンソールからモデルとチャネルを設定し、変更内容は `./config/config.json` に永続化されます。保存済みの値を上書きするため、空の API キーやモデル環境変数を Compose に追加しないでください。
 </Tip>

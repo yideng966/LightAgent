@@ -7,6 +7,9 @@ CHATGPT_ON_WECHAT_PREFIX=${CHATGPT_ON_WECHAT_PREFIX:-""}
 CHATGPT_ON_WECHAT_CONFIG_PATH=${CHATGPT_ON_WECHAT_CONFIG_PATH:-""}
 # execution command line
 CHATGPT_ON_WECHAT_EXEC=${CHATGPT_ON_WECHAT_EXEC:-""}
+# writable config and private runtime data
+LIGHTAGENT_DATA_DIR=${LIGHTAGENT_DATA_DIR:-"/home/agent/.lightagent"}
+export LIGHTAGENT_DATA_DIR
 
 # use environment variables to pass parameters
 # if you have not defined environment variables, set them below
@@ -43,15 +46,28 @@ fi
 # fi
 
 
-# fix ownership of mounted volumes then drop to non-root user
+prepare_runtime_dirs() {
+    mkdir -p "$LIGHTAGENT_DATA_DIR" /home/agent/lightagent
+    if [ ! -f "$LIGHTAGENT_DATA_DIR/config.json" ]; then
+        cp "$CHATGPT_ON_WECHAT_PREFIX/config-template.json" \
+           "$LIGHTAGENT_DATA_DIR/config.json"
+    fi
+}
+
+# Initialize mounted volumes, then drop to the non-root user.
 if [ "$(id -u)" = "0" ]; then
-    mkdir -p /home/agent/lightagent
-    chown agent:agent /home/agent/lightagent
-    exec su agent -s /bin/bash -c "cd $CHATGPT_ON_WECHAT_PREFIX && $CHATGPT_ON_WECHAT_EXEC"
+    prepare_runtime_dirs
+    chown agent:agent \
+        "$LIGHTAGENT_DATA_DIR" \
+        "$LIGHTAGENT_DATA_DIR/config.json" \
+        /home/agent/lightagent
+    exec su agent -s /bin/bash -c \
+        "cd $CHATGPT_ON_WECHAT_PREFIX && exec $CHATGPT_ON_WECHAT_EXEC"
 fi
 
-# fallback: already running as agent
-cd $CHATGPT_ON_WECHAT_PREFIX
-$CHATGPT_ON_WECHAT_EXEC
+# Fallback for images started directly as the agent user.
+prepare_runtime_dirs
+cd "$CHATGPT_ON_WECHAT_PREFIX"
+exec $CHATGPT_ON_WECHAT_EXEC
 
 

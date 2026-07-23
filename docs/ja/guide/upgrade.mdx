@@ -49,13 +49,18 @@ nohup python3 app.py & tail -f nohup.out
 
 ## Docker アップグレード
 
-`docker-compose.yml` があるディレクトリで以下を実行します：
+現在の 2 ディレクトリ構成では、コンテナを停止し、`./config` と `./data` の両方をバックアップしてからイメージを取得して再作成します：
 
 ```bash
+sudo docker compose stop
+cp -a config config.backup
+cp -a data data.backup
 sudo docker compose pull
 sudo docker compose up -d
 ```
 
 <Tip>
-  アップグレード前に `config.json` 設定ファイルのバックアップを推奨します。Docker 環境でデータを保持する場合は、volume マウントでワークスペースディレクトリを永続化できます。
+  `docker compose pull` と `docker compose up -d` は、この 2 つの bind mount を上書きしません。`./config` には設定、シークレット、ログ、プラグイン設定とユーザープラグイン、WeChat ログイン状態、メディア、グループデータベースが含まれ、`./data` には Agent workspace、メモリ、ナレッジベース、スキル、MCP 設定、scheduler データが含まれます。必ず両方をバックアップしてください。`/app` はイメージと一緒に更新されるため、バックアップやマウントの対象にしないでください。
 </Tip>
+
+旧バージョンの単一 `./lightagent` マウントから移行する場合は、移行が完了するまで旧コンテナを残してください。旧 `./lightagent` の内容を新しい `./data` に、コンテナの `/app/config.json` を `./config/config.json` に、ユーザーがインストールしたと確認できるプラグインディレクトリを `./config/plugins` にコピーし、`/home/agent/.lightagent` 配下のプライベート実行データを `./config` に移行してから Compose を置き換えます。新しいイメージの同名内蔵プラグインを上書きしないでください。実際の個人 WeChat グループのログイン状態は、`./config` に移行した場合にのみコンテナ再作成後も保持されます。

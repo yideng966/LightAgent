@@ -49,13 +49,18 @@ nohup python3 app.py & tail -f nohup.out
 
 ## Docker upgrade
 
-Run the following in the directory containing `docker-compose.yml`:
+With the current two-directory Compose layout, stop the container and back up both `./config` and `./data` before pulling and recreating it:
 
 ```bash
+sudo docker compose stop
+cp -a config config.backup
+cp -a data data.backup
 sudo docker compose pull
 sudo docker compose up -d
 ```
 
 <Tip>
-  Back up `config.json` before upgrading. For Docker deployments, mount the workspace directory as a volume to persist data across upgrades.
+  `docker compose pull` and `docker compose up -d` do not overwrite these bind mounts. `./config` contains configuration, secrets, logs, plugin configuration and user plugins, WeChat login state, media, and group databases; `./data` contains the Agent workspace, memories, knowledge base, skills, MCP configuration, and scheduler data. Back up both. Do not back up or mount `/app`; it must be upgraded with the image.
 </Tip>
+
+When migrating from the legacy single `./lightagent` mount, keep the old container until migration is complete. Copy the old `./lightagent` contents into the new `./data`, copy container `/app/config.json` to `./config/config.json`, copy recognized user-installed plugin directories into `./config/plugins`, and migrate private runtime data under `/home/agent/.lightagent` into `./config` before replacing Compose. Do not copy a user plugin over a same-named built-in plugin from the new image. A real personal WeChat group login survives container recreation only after its state has been moved into `./config`.

@@ -23,14 +23,17 @@ def _plugins_resource_dir():
 
 
 def _plugins_data_dir():
-    """Writable dir for plugin runtime config (plugins.json). In a frozen
-    bundle the resource dir is read-only, so redirect writes to the data root
-    (~/.lightagent); from source it stays the CWD-relative ./plugins."""
-    if getattr(sys, "frozen", False):
+    """Return the writable directory for plugin config and user plugins."""
+    if os.environ.get("LIGHTAGENT_DATA_DIR") or getattr(sys, "frozen", False):
         d = os.path.join(get_data_root(), "plugins")
         os.makedirs(d, exist_ok=True)
         return d
-    return "./plugins"
+    return _plugins_resource_dir()
+
+
+def _plugins_install_dir():
+    """Return the writable installation directory for user plugins."""
+    return _plugins_data_dir()
 
 
 @singleton
@@ -98,7 +101,13 @@ class PluginManager:
         从 plugins/config.json 中加载所有插件的配置并写入 config.py 的全局配置中，供插件中使用
         插件实例中通过 config.pconf(plugin_name) 即可获取该插件的配置
         """
-        all_config_path = os.path.join(_plugins_resource_dir(), "config.json")
+        data_config_path = os.path.join(_plugins_data_dir(), "config.json")
+        resource_config_path = os.path.join(_plugins_resource_dir(), "config.json")
+        all_config_path = (
+            data_config_path
+            if os.path.exists(data_config_path)
+            else resource_config_path
+        )
         try:
             if os.path.exists(all_config_path):
                 # read from all plugins config
@@ -113,32 +122,60 @@ class PluginManager:
 
     def scan_plugins(self):
         logger.debug("Scanning plugins ...")
-        plugins_dir = _plugins_resource_dir()
+        resource_dir = _plugins_resource_dir()
+        install_dir = _plugins_install_dir()
+        plugin_dirs = [resource_dir]
+        if os.path.normcase(os.path.abspath(install_dir)) != os.path.normcase(
+            os.path.abspath(resource_dir)
+        ):
+            package = sys.modules.get(__package__)
+            package_paths = getattr(package, "__path__", None)
+            if package_paths is not None and install_dir not in package_paths:
+                package_paths.append(install_dir)
+            plugin_dirs.append(install_dir)
+
+        resource_plugin_names = {
+            name.casefold()
+            for name in os.listdir(resource_dir)
+            if os.path.isfile(os.path.join(resource_dir, name, "__init__.py"))
+        }
         raws = [self.plugins[name] for name in self.plugins]
-        for plugin_name in os.listdir(plugins_dir):
-            plugin_path = os.path.join(plugins_dir, plugin_name)
-            if os.path.isdir(plugin_path):
-                # 判断插件是否包含同名__init__.py文件
-                main_module_path = os.path.join(plugin_path, "__init__.py")
-                if os.path.isfile(main_module_path):
-                    # 导入插件
-                    import_path = "plugins.{}".format(plugin_name)
-                    try:
-                        self.current_plugin_path = plugin_path
-                        if plugin_path in self.loaded:
-                            if plugin_name.upper() != 'GODCMD':
-                                logger.info("reload module %s" % plugin_name)
-                                self.loaded[plugin_path] = importlib.reload(sys.modules[import_path])
-                                dependent_module_names = [name for name in sys.modules.keys() if name.startswith(import_path + ".")]
-                                for name in dependent_module_names:
-                                    logger.info("reload module %s" % name)
-                                    importlib.reload(sys.modules[name])
-                        else:
-                            self.loaded[plugin_path] = importlib.import_module(import_path)
-                        self.current_plugin_path = None
-                    except Exception as e:
-                        logger.warn("Failed to import plugin %s: %s" % (plugin_name, e))
-                        continue
+        importlib.invalidate_caches()
+        for plugins_dir in plugin_dirs:
+            is_user_dir = os.path.normcase(os.path.abspath(plugins_dir)) != os.path.normcase(
+                os.path.abspath(resource_dir)
+            )
+            for plugin_name in os.listdir(plugins_dir):
+                if is_user_dir and plugin_name.casefold() in resource_plugin_names:
+                    logger.warning(
+                        "Skip user plugin %s because a built-in plugin has the same name",
+                        plugin_name,
+                    )
+                    continue
+                plugin_path = os.path.join(plugins_dir, plugin_name)
+                if os.path.isdir(plugin_path):
+                    # 判断插件是否包含同名__init__.py文件
+                    main_module_path = os.path.join(plugin_path, "__init__.py")
+                    if os.path.isfile(main_module_path):
+                        # 导入插件
+                        import_path = "plugins.{}".format(plugin_name)
+                        try:
+                            self.current_plugin_path = plugin_path
+                            if plugin_path in self.loaded:
+                                if plugin_name.upper() != 'GODCMD':
+                                    logger.info("reload module %s" % plugin_name)
+                                    self.loaded[plugin_path] = importlib.reload(sys.modules[import_path])
+                                    dependent_module_names = [name for name in sys.modules.keys() if name.startswith(import_path + ".")]
+                                    for name in dependent_module_names:
+                                        logger.info("reload module %s" % name)
+                                        importlib.reload(sys.modules[name])
+                            else:
+                                self.loaded[plugin_path] = importlib.import_module(import_path)
+                        except Exception as e:
+                            logger.warn("Failed to import plugin %s: %s" % (plugin_name, e))
+                            continue
+                        finally:
+                            self.current_plugin_path = None
         pconf = self.pconf
         news = [self.plugins[name] for name in self.plugins]
         new_plugins = list(set(news) - set(raws))
@@ -289,7 +326,8 @@ class PluginManager:
 
         if not match:
             try:
-                with open("./plugins/source.json", "r", encoding="utf-8") as f:
+                source_path = os.path.join(_plugins_resource_dir(), "source.json")
+                with open(source_path, "r", encoding="utf-8") as f:
                     source = json.load(f)
                 if repo in source["repo"]:
                     repo = source["repo"][repo]["url"]
@@ -301,7 +339,11 @@ class PluginManager:
             except Exception as e:
                 logger.error("Failed to install plugin, {}".format(e))
                 return False, "安装插件失败，请检查仓库地址是否正确"
-        dirname = os.path.join("./plugins", match.group(4))
+        plugin_name = match.group(4)
+        builtin_names = {name.casefold() for name in os.listdir(_plugins_resource_dir())}
+        if plugin_name.casefold() in builtin_names:
+            return False, "安装插件失败，不能覆盖同名预置插件"
+        dirname = os.path.join(_plugins_install_dir(), plugin_name)
         try:
             repo = porcelain.clone(repo, dirname, checkout=True)
             if os.path.exists(os.path.join(dirname, "requirements.txt")):
