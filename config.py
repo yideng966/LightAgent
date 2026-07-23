@@ -94,6 +94,7 @@ available_setting = {
         "scheduler_write": True,
         "sticker_manage": True,
     },
+    "wechat_group_blacklist_members": [],
     "wechat_group_blocked_stable_member_ids": [],
     "wechat_group_blocked_sender_ids": [],
     "wechat_group_record_messages": True,

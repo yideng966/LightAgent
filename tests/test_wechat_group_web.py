@@ -40,6 +40,7 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_names": conf().get("wechat_group_names"),
             "wechat_group_admin_members": conf().get("wechat_group_admin_members"),
             "wechat_group_admin_required_permissions": conf().get("wechat_group_admin_required_permissions"),
+            "wechat_group_blacklist_members": conf().get("wechat_group_blacklist_members"),
             "wechat_group_alias_sync_cooldown_minutes": conf().get("wechat_group_alias_sync_cooldown_minutes"),
             "wechat_group_persona_prompt": conf().get("wechat_group_persona_prompt"),
             "wechat_group_persona_preset_id": conf().get("wechat_group_persona_preset_id"),
@@ -537,6 +538,9 @@ class WechatGroupWebTest(unittest.TestCase):
         conf()["wechat_group_admin_members"] = [
             {"room_id": "room@@abc", "room_name": "测试群", "sender_id": "wxid_admin"}
         ]
+        conf()["wechat_group_blacklist_members"] = [
+            {"room_id": "room@@abc", "room_name": "Test Room", "sender_id": "wxid_blocked"}
+        ]
         conf()["wechat_group_admin_required_permissions"] = {"knowledge_write": True, "workspace_write": False}
 
         handler = ChannelsHandler()
@@ -545,6 +549,7 @@ class WechatGroupWebTest(unittest.TestCase):
 
         item = next(channel for channel in result["channels"] if channel["name"] == "wechat_group")
         self.assertEqual("wxid_admin", item["extra"]["admin"]["members"][0]["sender_id"])
+        self.assertEqual("wxid_blocked", item["extra"]["admin"]["blacklist_members"][0]["sender_id"])
         self.assertTrue(item["extra"]["admin"]["required_permissions"]["knowledge_write"])
         self.assertFalse(item["extra"]["admin"]["required_permissions"]["workspace_write"])
         definitions = item["extra"]["admin"]["permission_definitions"]
@@ -575,6 +580,15 @@ class WechatGroupWebTest(unittest.TestCase):
                         "wechat_id": "alice_wechat",
                     }
                 ],
+                "wechat_group_blacklist_members": [
+                    {
+                        "room_id": "room@@abc",
+                        "room_name": "Test Room",
+                        "sender_id": "wxid_blocked",
+                        "sender_nickname": "Bob",
+                        "wechat_id": "bob_wechat",
+                    }
+                ],
                 "wechat_group_admin_required_permissions": {
                     "knowledge_write": True,
                     "workspace_write": False,
@@ -591,6 +605,8 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual("success", result["status"])
         self.assertEqual("room@@abc", conf()["wechat_group_admin_members"][0]["room_id"])
         self.assertEqual("wxid_admin", conf()["wechat_group_admin_members"][0]["sender_id"])
+        self.assertEqual("room@@abc", conf()["wechat_group_blacklist_members"][0]["room_id"])
+        self.assertEqual("wxid_blocked", conf()["wechat_group_blacklist_members"][0]["sender_id"])
         self.assertTrue(conf()["wechat_group_admin_required_permissions"]["knowledge_write"])
         self.assertFalse(conf()["wechat_group_admin_required_permissions"]["workspace_write"])
 
@@ -1460,6 +1476,11 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("groups_nav_rooms: '群与管理员'", console_js)
         self.assertIn("groups_admin_member_search_placeholder", console_js)
         self.assertIn("wechat_group_admin_members", console_js)
+        self.assertIn("groups_blacklist_title", console_js)
+        self.assertIn("groups_blacklist_member_search_placeholder", console_js)
+        self.assertIn("wechat_group_blacklist_members", console_js)
+        self.assertIn("blacklist_members", console_js)
+        self.assertIn("buildGroupsBlacklistPanel", console_js)
         self.assertIn("wechat_group_admin_required_permissions", console_js)
         self.assertIn("permission_definitions", console_js)
         self.assertIn("groups_admin_permission_enabled", console_js)

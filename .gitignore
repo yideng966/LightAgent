@@ -67,3 +67,4 @@ desktop/build/*
 # icons. Only the finished icons under desktop/resources/ should be committed.
 desktop/resources/.icon-work/
 /$null
+plans

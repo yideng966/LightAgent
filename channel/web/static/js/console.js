@@ -332,6 +332,19 @@ const I18N = {
         groups_admin_permission_examples: '示例话术',
         groups_admin_permission_guard_layers: '门禁层级',
         groups_admin_permission_affected_objects: '影响对象',
+        groups_blacklist_title: '群黑名单',
+        groups_blacklist_desc: '黑名单按群生效。命中成员主动 @ bot、引用 bot 或进入自由回复判定时，机器人会静默跳过。',
+        groups_blacklist_room_label: '选择群',
+        groups_blacklist_member_label: '搜索成员',
+        groups_blacklist_member_search_placeholder: '按昵称、微信号或 sender ID 搜索',
+        groups_blacklist_member_search: '搜索成员',
+        groups_blacklist_add_selected: '保存黑名单',
+        groups_blacklist_selected_title: '已配置黑名单',
+        groups_blacklist_no_room: '请先选择一个目标群',
+        groups_blacklist_no_members: '没有匹配成员。请确认微信已登录，并先刷新群列表。',
+        groups_blacklist_no_selected: '尚未选择成员',
+        groups_blacklist_no_items: '尚未配置黑名单',
+        groups_blacklist_remove: '删除黑名单',
         groups_rooms_fallback_hint: '群名兜底只在群 ID 不可用时使用，每行一个群名。',
         groups_room_unnamed: '未命名群',
         groups_room_saved: '已保存群 {n}',
@@ -1136,6 +1149,19 @@ const I18N = {
         groups_admin_permission_examples: 'Example phrases',
         groups_admin_permission_guard_layers: 'Guard layers',
         groups_admin_permission_affected_objects: 'Affected objects',
+        groups_blacklist_title: 'Group blacklist',
+        groups_blacklist_desc: 'The blacklist is scoped by group. Matching members are silently skipped for @bot, quote replies, and free-reply decisions.',
+        groups_blacklist_room_label: 'Group',
+        groups_blacklist_member_label: 'Search member',
+        groups_blacklist_member_search_placeholder: 'Search by nickname, WeChat ID, or sender ID',
+        groups_blacklist_member_search: 'Search members',
+        groups_blacklist_add_selected: 'Save blacklist',
+        groups_blacklist_selected_title: 'Configured blacklist',
+        groups_blacklist_no_room: 'Select a target group first',
+        groups_blacklist_no_members: 'No matching members. Make sure WeChat is logged in and refresh groups first.',
+        groups_blacklist_no_selected: 'No member selected',
+        groups_blacklist_no_items: 'No blacklist members configured',
+        groups_blacklist_remove: 'Remove blacklist member',
         groups_rooms_fallback_hint: 'Fallback names are used only when room IDs are unavailable. One group name per line.',
         groups_room_unnamed: 'Unnamed group',
         groups_room_saved: 'Saved group {n}',
@@ -7998,6 +8024,14 @@ let groupsAdminState = {
     loading: false,
     requestId: 0,
 };
+let groupsBlacklistState = {
+    roomId: '',
+    query: '',
+    members: [],
+    selectedSenderIds: new Set(),
+    loading: false,
+    requestId: 0,
+};
 let wechatGroupRoomsAutoRefreshTriggered = false;
 
 function loadGroupsView() {
@@ -9875,10 +9909,13 @@ function buildGroupsRoomsPanel(extra) {
     const selectedNames = Array.isArray(extra.selected_room_names) ? extra.selected_room_names : [];
     const admin = extra.admin || {};
     const adminMembers = Array.isArray(admin.members) ? admin.members : [];
+    const blacklistMembers = Array.isArray(admin.blacklist_members) ? admin.blacklist_members : [];
     const requiredPermissions = admin.required_permissions || {};
     const permissionDefinitions = Array.isArray(admin.permission_definitions) ? admin.permission_definitions : [];
     const currentRoomId = groupsAdminState.roomId || selectedIds[0] || '';
     groupsAdminState.roomId = currentRoomId;
+    const currentBlacklistRoomId = groupsBlacklistState.roomId || selectedIds[0] || '';
+    groupsBlacklistState.roomId = currentBlacklistRoomId;
     return `<div class="h-full w-full flex flex-col min-h-0">
         <div class="flex items-start justify-between gap-4 mb-5 flex-shrink-0">
             ${buildGroupsPanelTitle('fa-user-shield', 'groups_rooms_title', 'groups_rooms_desc')}
@@ -9896,6 +9933,7 @@ function buildGroupsRoomsPanel(extra) {
                 </div>
             </section>
             ${buildGroupsAdminPanel(rooms, selectedIds, adminMembers)}
+            ${buildGroupsBlacklistPanel(rooms, selectedIds, blacklistMembers)}
             ${buildGroupsAdminPermissionsPanel(requiredPermissions, permissionDefinitions)}
         </div>
     </div>`;
@@ -10204,6 +10242,209 @@ function removeGroupsAdminMember(roomId, senderId) {
     extra.admin.members = (extra.admin.members || []).filter(item => (
         String(item.room_id || '') !== String(roomId || '')
         || String(item.sender_id || '') !== String(senderId || '')
+    ));
+    renderGroupsView();
+}
+
+function buildGroupsBlacklistPanel(rooms, selectedIds, blacklistMembers) {
+    const selectedSet = new Set((selectedIds || []).map(String).filter(Boolean));
+    const selectableRooms = rooms.filter(room => isWechatGroupRoomSelected(room, selectedSet));
+    const roomOptions = selectableRooms.map(room => {
+        const id = getWechatGroupRoomOptionId(room);
+        const name = String(room.name || id);
+        return `<option value="${escapeHtml(id)}" ${groupsBlacklistState.roomId === id ? 'selected' : ''}>${escapeHtml(name)}</option>`;
+    }).join('');
+    return `<section class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+        <div class="mb-3">
+            <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_blacklist_title')}</h4>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_blacklist_desc')}</p>
+        </div>
+        <div class="grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)] gap-3">
+            <label class="block">
+                <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('groups_blacklist_room_label')}</span>
+                <select id="groups-blacklist-room" onchange="changeGroupsBlacklistRoom(this.value)"
+                    class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500">
+                    ${roomOptions || `<option value="">${t('groups_blacklist_no_room')}</option>`}
+                </select>
+            </label>
+            <div class="min-w-0">
+                <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('groups_blacklist_member_label')}</span>
+                <div class="flex flex-col md:flex-row gap-2">
+                    <input id="groups-blacklist-member-query" value="${escapeHtml(groupsBlacklistState.query || '')}"
+                        onkeydown="if (event.key === 'Enter') searchGroupsBlacklistMembers()"
+                        placeholder="${escapeHtml(t('groups_blacklist_member_search_placeholder'))}"
+                        class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500">
+                    <button type="button" onclick="searchGroupsBlacklistMembers()"
+                        class="px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/5 cursor-pointer transition-colors">
+                        ${groupsBlacklistState.loading ? '<i class="fas fa-spinner fa-spin"></i>' : t('groups_blacklist_member_search')}
+                    </button>
+                    <button type="button" onclick="addGroupsSelectedBlacklistMembers()"
+                        class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 dark:bg-slate-600 dark:hover:bg-slate-500 text-white text-xs font-medium cursor-pointer transition-colors">
+                        ${t('groups_blacklist_add_selected')}
+                    </button>
+                </div>
+                <div id="groups-blacklist-member-results" class="mt-3 max-h-56 overflow-y-auto space-y-1">
+                    ${renderGroupsBlacklistMemberResults()}
+                </div>
+            </div>
+        </div>
+        <div class="mt-4">
+            <h5 class="text-xs font-semibold text-slate-600 dark:text-slate-300 mb-2">${t('groups_blacklist_selected_title')}</h5>
+            <div id="groups-blacklist-selected-list" class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] p-2 min-h-[80px]">
+                ${renderGroupsBlacklistSelectedList(blacklistMembers, rooms)}
+            </div>
+        </div>
+    </section>`;
+}
+
+function renderGroupsBlacklistMemberResults() {
+    const members = Array.isArray(groupsBlacklistState.members) ? groupsBlacklistState.members : [];
+    if (!groupsBlacklistState.roomId) {
+        return `<p class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] px-3 py-2 text-xs text-slate-500 dark:text-slate-400">${t('groups_blacklist_no_room')}</p>`;
+    }
+    if (!members.length) {
+        return `<p class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] px-3 py-2 text-xs text-slate-500 dark:text-slate-400">${t('groups_blacklist_no_members')}</p>`;
+    }
+    const selected = groupsBlacklistState.selectedSenderIds || new Set();
+    return members.map(member => {
+        const senderId = String(member.sender_id || '');
+        const stableMemberId = String(member.stable_member_id || '');
+        const confirmed = !!stableMemberId && member.identity_status === 'confirmed';
+        const nickname = String(member.sender_nickname || senderId);
+        const wechatId = String(member.wechat_id || '');
+        return `<label class="flex items-start gap-2 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] px-3 py-2 text-sm text-slate-700 dark:text-slate-200 ${confirmed ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}">
+            <input type="checkbox" class="mt-1 accent-primary-500" onchange="toggleGroupsBlacklistCandidate('${escapeHtml(senderId)}', this.checked)" ${selected.has(senderId) ? 'checked' : ''} ${confirmed ? '' : 'disabled'}>
+            <span class="min-w-0 flex-1">
+                <span class="block font-medium break-words">${escapeHtml(nickname)}</span>
+                <span class="block text-xs text-slate-400 dark:text-slate-500 font-mono break-all">${escapeHtml(wechatId || senderId)}</span>
+                ${confirmed ? '' : `<span class="block text-[11px] text-amber-500 mt-1">${t('groups_identity_member_pending')}</span>`}
+            </span>
+        </label>`;
+    }).join('');
+}
+
+function renderGroupsBlacklistSelectedList(blacklistMembers, rooms) {
+    const members = Array.isArray(blacklistMembers) ? blacklistMembers : [];
+    if (!members.length) {
+        return `<p class="text-xs text-slate-500 dark:text-slate-400">${t('groups_blacklist_no_items')}</p>`;
+    }
+    const roomNameById = new Map();
+    (rooms || []).forEach(room => {
+        const name = String(room.name || '');
+        [room.id, room.stable_room_id, room.runtime_room_id].forEach(key => {
+            const id = String(key || '').trim();
+            if (id && name) roomNameById.set(id, name);
+        });
+    });
+    return `<div class="flex flex-wrap gap-1.5">${members.map(member => {
+        const roomId = String(member.room_id || member.stable_room_id || '');
+        const senderId = String(member.sender_id || member.stable_member_id || '');
+        const roomName = String(member.room_name || roomNameById.get(roomId) || roomId);
+        const nickname = String(member.sender_nickname || member.wechat_id || senderId);
+        return `<span class="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-white/10 px-2 py-1 text-xs text-slate-600 dark:text-slate-300 max-w-full">
+            <span class="truncate">${escapeHtml(roomName)} / ${escapeHtml(nickname)}</span>
+            <button type="button" onclick="removeGroupsBlacklistMember('${escapeHtml(roomId)}', '${escapeHtml(senderId)}')" class="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer" title="${escapeHtml(t('groups_blacklist_remove'))}">
+                <i class="fas fa-xmark text-[10px]"></i>
+            </button>
+        </span>`;
+    }).join('')}</div>`;
+}
+
+function changeGroupsBlacklistRoom(roomId) {
+    groupsBlacklistState.roomId = roomId || '';
+    groupsBlacklistState.members = [];
+    groupsBlacklistState.selectedSenderIds = new Set();
+    searchGroupsBlacklistMembers();
+}
+
+function searchGroupsBlacklistMembers() {
+    const roomId = document.getElementById('groups-blacklist-room')?.value || '';
+    const query = document.getElementById('groups-blacklist-member-query')?.value || '';
+    const requestedRoomId = roomId;
+    const requestedRequestId = (groupsBlacklistState.requestId || 0) + 1;
+    groupsBlacklistState.roomId = roomId;
+    groupsBlacklistState.query = query;
+    groupsBlacklistState.requestId = requestedRequestId;
+    if (!roomId) {
+        groupsBlacklistState.members = [];
+        renderGroupsView();
+        return;
+    }
+    groupsBlacklistState.loading = true;
+    renderGroupsView();
+    fetch(`/api/wechat-group/members?stable_room_id=${encodeURIComponent(roomId)}&q=${encodeURIComponent(query)}&limit=500`)
+        .then(r => r.json())
+        .then(data => {
+            if (groupsBlacklistState.roomId !== requestedRoomId) return;
+            if (groupsBlacklistState.requestId !== requestedRequestId) return;
+            groupsBlacklistState.members = data.status === 'success' ? (data.members || []) : [];
+        })
+        .catch(() => {
+            if (groupsBlacklistState.roomId !== requestedRoomId) return;
+            if (groupsBlacklistState.requestId !== requestedRequestId) return;
+            groupsBlacklistState.members = [];
+        })
+        .finally(() => {
+            if (groupsBlacklistState.roomId !== requestedRoomId) return;
+            if (groupsBlacklistState.requestId !== requestedRequestId) return;
+            groupsBlacklistState.loading = false;
+            renderGroupsView();
+        });
+}
+
+function toggleGroupsBlacklistCandidate(senderId, checked) {
+    const next = new Set(groupsBlacklistState.selectedSenderIds || []);
+    if (checked) next.add(senderId);
+    else next.delete(senderId);
+    groupsBlacklistState.selectedSenderIds = next;
+}
+
+function addGroupsSelectedBlacklistMembers() {
+    const ch = getWechatGroupChannel();
+    if (!ch) return;
+    const extra = ch.extra || {};
+    const roomId = groupsBlacklistState.roomId || document.getElementById('groups-blacklist-room')?.value || '';
+    const selected = groupsBlacklistState.selectedSenderIds || new Set();
+    const rooms = Array.isArray(extra.rooms) ? extra.rooms : [];
+    const room = rooms.find(item => (
+        String(item.id || '') === roomId
+        || String(item.stable_room_id || '') === roomId
+        || String(item.runtime_room_id || '') === roomId
+    )) || {};
+    const current = Array.isArray(extra.admin?.blacklist_members) ? extra.admin.blacklist_members : [];
+    const byKey = new Map(current.map(item => [`${item.room_id}::${item.sender_id}`, item]));
+    (groupsBlacklistState.members || []).forEach(member => {
+        const senderId = String(member.sender_id || '');
+        const stableMemberId = String(member.stable_member_id || '');
+        const runtimeSenderId = String(member.runtime_sender_id || member.sender_id || '');
+        if (!selected.has(senderId) || !stableMemberId || member.identity_status !== 'confirmed') return;
+        byKey.set(`${roomId}::${stableMemberId}`, {
+            stable_room_id: roomId,
+            stable_member_id: stableMemberId,
+            room_id: roomId,
+            room_name: String(room.name || ''),
+            sender_id: stableMemberId,
+            legacy_room_id: String(room.runtime_room_id || ''),
+            legacy_sender_id: runtimeSenderId,
+            identity_status: 'confirmed',
+            sender_nickname: String(member.sender_nickname || senderId),
+            wechat_id: String(member.wechat_id || ''),
+        });
+    });
+    extra.admin = extra.admin || {};
+    extra.admin.blacklist_members = Array.from(byKey.values());
+    groupsBlacklistState.selectedSenderIds = new Set();
+    renderGroupsView();
+}
+
+function removeGroupsBlacklistMember(roomId, senderId) {
+    const ch = getWechatGroupChannel();
+    if (!ch) return;
+    const extra = ch.extra || {};
+    extra.admin = extra.admin || {};
+    extra.admin.blacklist_members = (extra.admin.blacklist_members || []).filter(item => (
+        String(item.room_id || item.stable_room_id || '') !== String(roomId || '')
+        || String(item.sender_id || item.stable_member_id || '') !== String(senderId || '')
     ));
     renderGroupsView();
 }
@@ -12051,6 +12292,7 @@ function saveWechatGroupSettings() {
                 wechat_group_room_ids: selectedRuntimeRoomIds,
                 wechat_group_names: selectedNames,
                 wechat_group_admin_members: (admin.members || []),
+                wechat_group_blacklist_members: (admin.blacklist_members || []),
                 wechat_group_admin_required_permissions: readGroupsAdminRequiredPermissions(admin.required_permissions || {}),
                 wechat_group_persona_prompt: prompt,
                 wechat_group_persona_preset_id: 'custom',

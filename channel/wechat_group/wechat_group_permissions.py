@@ -189,6 +189,90 @@ def get_wechat_group_admin_members(config: Optional[Dict[str, Any]] = None) -> L
     return normalize_wechat_group_admin_members(_cfg(config).get("wechat_group_admin_members", []))
 
 
+def normalize_wechat_group_blacklist_members(value: Any) -> List[Dict[str, str]]:
+    return normalize_wechat_group_admin_members(value)
+
+
+def get_wechat_group_blacklist_members(config: Optional[Dict[str, Any]] = None) -> List[Dict[str, str]]:
+    return normalize_wechat_group_blacklist_members(_cfg(config).get("wechat_group_blacklist_members", []))
+
+
+def is_wechat_group_blacklisted(
+    room_id: Any,
+    sender_id: Any,
+    config: Optional[Dict[str, Any]] = None,
+    runtime_sender_id: Any = "",
+) -> bool:
+    room_text = _clean_text(room_id)
+    sender_text = _clean_text(sender_id)
+    runtime_sender_text = _clean_text(runtime_sender_id)
+    if not sender_text and runtime_sender_text:
+        sender_text = runtime_sender_text
+    if not room_text or not sender_text:
+        return False
+    cfg = _cfg(config)
+    members = get_wechat_group_blacklist_members(cfg)
+    for item in members:
+        identity_status = item.get("identity_status", "")
+        if identity_status and identity_status != "confirmed":
+            continue
+        stable_match = (
+            item.get("stable_room_id") == room_text
+            and item.get("stable_member_id") == sender_text
+        )
+        current_runtime_match = (
+            item.get("room_id") == room_text
+            and item.get("sender_id") == sender_text
+        )
+        legacy_match = (
+            item.get("legacy_room_id") == room_text
+            and item.get("legacy_sender_id") in {sender_text, runtime_sender_text}
+        )
+        if stable_match or current_runtime_match or legacy_match:
+            return True
+    blocked_stable_ids = {
+        _clean_text(item)
+        for item in (cfg.get("wechat_group_blocked_stable_member_ids", []) or [])
+        if _clean_text(item)
+    }
+    if sender_text in blocked_stable_ids:
+        return True
+    blocked_runtime_ids = {
+        _clean_text(item)
+        for item in (cfg.get("wechat_group_blocked_sender_ids", []) or [])
+        if _clean_text(item)
+    }
+    return bool(
+        (sender_text and sender_text in blocked_runtime_ids)
+        or (runtime_sender_text and runtime_sender_text in blocked_runtime_ids)
+    )
+
+
+def build_wechat_group_blocked_sender_ids(
+    room_id: Any,
+    sender_id: Any,
+    runtime_sender_id: Any = "",
+    config: Optional[Dict[str, Any]] = None,
+) -> List[str]:
+    cfg = _cfg(config)
+    blocked = []
+    for value in list(cfg.get("wechat_group_blocked_stable_member_ids", []) or []):
+        text = _clean_text(value)
+        if text and text not in blocked:
+            blocked.append(text)
+    for value in list(cfg.get("wechat_group_blocked_sender_ids", []) or []):
+        text = _clean_text(value)
+        if text and text not in blocked:
+            blocked.append(text)
+    sender_text = _clean_text(sender_id)
+    runtime_sender_text = _clean_text(runtime_sender_id)
+    if is_wechat_group_blacklisted(room_id, sender_text, config=cfg, runtime_sender_id=runtime_sender_text):
+        for value in (sender_text, runtime_sender_text):
+            if value and value not in blocked:
+                blocked.append(value)
+    return blocked
+
+
 def get_wechat_group_admin_required_permissions(
     config: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, bool]:

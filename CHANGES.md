@@ -1,5 +1,19 @@
 # CHANGES
 
+## 2026-07-23
+
+### 微信群成员黑名单
+
+- 新增结构化配置 `wechat_group_blacklist_members`，字段结构复用群管理员成员记录，按当前群 `stable_room_id + stable_member_id` 精确生效；旧 `wechat_group_blocked_stable_member_ids` 与 `wechat_group_blocked_sender_ids` 继续作为兼容 fallback。
+- Web 控制台“群与管理员”页新增“群黑名单”面板，支持选择目标群、搜索已确认群成员、保存和删除黑名单成员；保存时写入结构化黑名单，不再扩展旧 flat 字段。
+- 微信群通道在入口处对黑名单成员静默跳过，覆盖主动 @ bot、引用 bot、拍一拍、图片/视频直接触发和普通自由回复候选；自由回复评分继续返回 `blocked_sender` 抑制原因用于诊断。
+- 补充回归测试覆盖黑名单归一化/作用域/fallback、direct reply 静默跳过、自由回复 blocked sender、Web extra/保存/UI 字段。
+
+验证记录：
+- `python -m unittest tests.test_wechat_group_permissions tests.test_wechat_group_channel tests.test_wechat_group_web`：通过，225 项 OK。
+- `node --check channel/web/static/js/console.js`：通过。
+- `python -m json.tool config-template.json`：通过。
+
 ## 2026-07-22
 
 ### 项目品牌迁移为 LightAgent

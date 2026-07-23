@@ -32,9 +32,11 @@ from channel.wechat_group.wechat_group_persona import (
     should_skip_persona_for_message,
 )
 from channel.wechat_group.wechat_group_permissions import (
+    build_wechat_group_blocked_sender_ids,
     build_wechat_group_admin_policy_block,
     build_wechat_group_admin_reject_message,
     get_blocked_admin_permissions_for_text,
+    is_wechat_group_blacklisted,
     is_wechat_group_admin,
 )
 from channel.wechat_group.wechat_group_style_service import WechatGroupStyleService
@@ -710,6 +712,14 @@ class WechatGroupChannel(ChatChannel):
             or getattr(msg, "is_quote_self", False) is True
             or is_pat_self
         )
+        if self._is_blacklisted_member(msg):
+            logger.info(
+                '[wechat_group] blacklisted member skipped: room="{}" sender="{}"'.format(
+                    _wechat_group_stable_room_scope(msg) or _wechat_group_log_value(getattr(msg, "other_user_id", "")).strip(),
+                    _wechat_group_stable_member_scope(msg) or _wechat_group_log_value(getattr(msg, "actual_user_id", "")).strip(),
+                )
+            )
+            return
         if self._handle_free_reply_mute_command(msg):
             return
         if self._should_suppress_at_during_free_reply_mute(msg):
@@ -842,6 +852,23 @@ class WechatGroupChannel(ChatChannel):
             )
         )
         return True
+
+    @staticmethod
+    def _is_blacklisted_member(msg: WechatGroupMessage) -> bool:
+        if not msg or not getattr(msg, "is_group", False):
+            return False
+        room_id = _wechat_group_stable_room_scope(msg) or _wechat_group_log_value(
+            getattr(msg, "other_user_id", "")
+        ).strip()
+        sender_id = _wechat_group_stable_member_scope(msg) or _wechat_group_log_value(
+            getattr(msg, "actual_user_id", "")
+        ).strip()
+        runtime_sender_id = _wechat_group_log_value(getattr(msg, "actual_user_id", "")).strip()
+        return is_wechat_group_blacklisted(
+            room_id,
+            sender_id,
+            runtime_sender_id=runtime_sender_id,
+        )
 
     def _is_free_reply_mute_command(self, msg: WechatGroupMessage) -> bool:
         if (
@@ -1760,13 +1787,12 @@ class WechatGroupChannel(ChatChannel):
                 )
             except Exception as e:
                 logger.debug("[wechat_group] failed to load free reply recent messages: {}".format(e))
-            blocked_sender_ids = list(conf().get("wechat_group_blocked_stable_member_ids", []) or [])
-            for legacy_id in list(conf().get("wechat_group_blocked_sender_ids", []) or []):
-                if legacy_id not in blocked_sender_ids:
-                    blocked_sender_ids.append(legacy_id)
             runtime_sender_id = _wechat_group_log_value(getattr(msg, "actual_user_id", "")).strip()
-            if member_scope and runtime_sender_id in blocked_sender_ids and member_scope not in blocked_sender_ids:
-                blocked_sender_ids.append(member_scope)
+            blocked_sender_ids = build_wechat_group_blocked_sender_ids(
+                room_scope or msg.other_user_id,
+                member_scope or msg.actual_user_id,
+                runtime_sender_id=runtime_sender_id,
+            )
             decision = evaluate_wechat_group_free_reply(
                 cfg,
                 room_id=room_scope or msg.other_user_id,

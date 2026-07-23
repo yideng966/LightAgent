@@ -93,6 +93,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_admin_sender_ids": conf().get("wechat_group_admin_sender_ids"),
             "wechat_group_admin_members": conf().get("wechat_group_admin_members"),
             "wechat_group_admin_required_permissions": conf().get("wechat_group_admin_required_permissions"),
+            "wechat_group_blacklist_members": conf().get("wechat_group_blacklist_members"),
             "wechat_group_alias_sync_cooldown_minutes": conf().get("wechat_group_alias_sync_cooldown_minutes"),
             "group_name_white_list": conf().get("group_name_white_list"),
             "group_shared_session": conf().get("group_shared_session"),
@@ -101,6 +102,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_free_reply_room_ids": conf().get("wechat_group_free_reply_room_ids"),
             "wechat_group_free_reply_stable_room_ids": conf().get("wechat_group_free_reply_stable_room_ids"),
             "wechat_group_blocked_stable_member_ids": conf().get("wechat_group_blocked_stable_member_ids"),
+            "wechat_group_blocked_sender_ids": conf().get("wechat_group_blocked_sender_ids"),
             "wechat_group_free_reply_names": conf().get("wechat_group_free_reply_names"),
             "wechat_group_free_reply_force_keywords": conf().get("wechat_group_free_reply_force_keywords"),
             "wechat_group_free_reply_activity_level": conf().get("wechat_group_free_reply_activity_level"),
@@ -2143,6 +2145,90 @@ class WechatGroupChannelTest(unittest.TestCase):
             my_msg=False,
             create_time=1005,
             msg_id="msg-free-reply-stable-blocked",
+            wechat_group_stable_room_id="wgr_room",
+            wechat_group_stable_member_id="wgm_alice",
+        )
+
+        should_enqueue, decision = channel._should_enqueue_free_reply_message(msg)
+
+        self.assertFalse(should_enqueue)
+        self.assertIn("blocked_sender", decision["suppressions"])
+        self.assertEqual("wgm_alice", decision["sender_id"])
+
+    def test_direct_reply_from_blacklist_member_is_silently_skipped(self):
+        conf()["wechat_group_room_ids"] = []
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_blacklist_members"] = [{
+            "stable_room_id": "wgr_room",
+            "stable_member_id": "wgm_alice",
+            "identity_status": "confirmed",
+        }]
+        conf()["wechat_group_emotion_enabled"] = False
+        channel = WechatGroupChannel(client=FakeClient(), archive=Mock(get_recent_messages=Mock(return_value=[])))
+        channel.produce = Mock()
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="@LightBot ping",
+            text="@LightBot ping",
+            from_user_id="room@@new",
+            other_user_id="room@@new",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice_new",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=True,
+            is_quote_self=False,
+            is_group=True,
+            is_pat_self=False,
+            at_list=["wxid_bot"],
+            self_display_name="LightBot",
+            message_type="text",
+            media_path="",
+            my_msg=False,
+            create_time=1005,
+            msg_id="msg-direct-blacklist",
+            wechat_group_stable_room_id="wgr_room",
+            wechat_group_stable_member_id="wgm_alice",
+        )
+
+        channel.handle_text(msg)
+
+        channel.produce.assert_not_called()
+
+    def test_free_reply_blocklist_uses_structured_blacklist_member(self):
+        conf()["wechat_group_room_ids"] = []
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_blacklist_members"] = [{
+            "stable_room_id": "wgr_room",
+            "stable_member_id": "wgm_alice",
+            "identity_status": "confirmed",
+        }]
+        conf()["wechat_group_emotion_enabled"] = False
+        channel = WechatGroupChannel(client=FakeClient(), archive=Mock(get_recent_messages=Mock(return_value=[])))
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="LightBot can you help?",
+            text="LightBot can you help?",
+            from_user_id="room@@new",
+            other_user_id="room@@new",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice_new",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            message_type="text",
+            media_path="",
+            my_msg=False,
+            create_time=1005,
+            msg_id="msg-free-reply-structured-blocked",
             wechat_group_stable_room_id="wgr_room",
             wechat_group_stable_member_id="wgm_alice",
         )

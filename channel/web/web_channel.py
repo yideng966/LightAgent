@@ -36,9 +36,11 @@ from channel.wechat_group.wechat_group_free_reply import (
 from channel.wechat_group.wechat_group_permissions import (
     DEFAULT_WECHAT_GROUP_ADMIN_REQUIRED_PERMISSIONS,
     get_wechat_group_admin_members,
+    get_wechat_group_blacklist_members,
     get_wechat_group_admin_permission_definitions,
     get_wechat_group_admin_required_permissions,
     normalize_wechat_group_admin_members,
+    normalize_wechat_group_blacklist_members,
 )
 from collections import OrderedDict
 from common import const
@@ -4235,6 +4237,7 @@ class ChannelsHandler:
             },
             "admin": {
                 "members": get_wechat_group_admin_members(),
+                "blacklist_members": get_wechat_group_blacklist_members(),
                 "required_permissions": get_wechat_group_admin_required_permissions(),
                 "permission_definitions": get_wechat_group_admin_permission_definitions(),
                 "blocked_stable_member_ids": conf().get("wechat_group_blocked_stable_member_ids", []) or [],
@@ -4393,6 +4396,7 @@ class ChannelsHandler:
             "wechat_group_stable_room_ids",
             "wechat_group_names",
             "wechat_group_admin_members",
+            "wechat_group_blacklist_members",
             "wechat_group_admin_required_permissions",
             "wechat_group_blocked_stable_member_ids",
             "wechat_group_blocked_sender_ids",
@@ -4534,6 +4538,8 @@ class ChannelsHandler:
                     value = cls._normalize_string_list(value)
             elif key == "wechat_group_admin_members":
                 value = normalize_wechat_group_admin_members(value)
+            elif key == "wechat_group_blacklist_members":
+                value = normalize_wechat_group_blacklist_members(value)
             elif key == "tools_web_fetch_proxy":
                 value = str(value or "").strip()
                 tools_cfg = local_config.get("tools")

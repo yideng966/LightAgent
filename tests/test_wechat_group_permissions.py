@@ -10,6 +10,9 @@ class WechatGroupPermissionsTest(unittest.TestCase):
             "wechat_group_admin_members": conf().get("wechat_group_admin_members"),
             "wechat_group_admin_sender_ids": conf().get("wechat_group_admin_sender_ids"),
             "wechat_group_admin_required_permissions": conf().get("wechat_group_admin_required_permissions"),
+            "wechat_group_blacklist_members": conf().get("wechat_group_blacklist_members"),
+            "wechat_group_blocked_stable_member_ids": conf().get("wechat_group_blocked_stable_member_ids"),
+            "wechat_group_blocked_sender_ids": conf().get("wechat_group_blocked_sender_ids"),
         }
 
     def tearDown(self):
@@ -120,6 +123,74 @@ class WechatGroupPermissionsTest(unittest.TestCase):
         self.assertEqual("room@@a", members[0]["room_id"])
         self.assertEqual("wxid_admin", members[0]["sender_id"])
         self.assertEqual("Alice", members[0]["sender_nickname"])
+
+    def test_blacklist_member_is_scoped_by_stable_room_and_member(self):
+        from channel.wechat_group.wechat_group_permissions import is_wechat_group_blacklisted
+
+        conf()["wechat_group_blacklist_members"] = [{
+            "stable_room_id": "wgr_room",
+            "stable_member_id": "wgm_blocked",
+            "identity_status": "confirmed",
+            "legacy_room_id": "room@@old",
+            "legacy_sender_id": "wxid_old",
+        }]
+        conf()["wechat_group_blocked_stable_member_ids"] = []
+        conf()["wechat_group_blocked_sender_ids"] = []
+
+        self.assertTrue(is_wechat_group_blacklisted("wgr_room", "wgm_blocked"))
+        self.assertTrue(is_wechat_group_blacklisted("room@@old", "wxid_old"))
+        self.assertFalse(is_wechat_group_blacklisted("wgr_other", "wgm_blocked"))
+        self.assertFalse(is_wechat_group_blacklisted("wgr_room", "wgm_other"))
+
+    def test_suspected_blacklist_member_is_ignored(self):
+        from channel.wechat_group.wechat_group_permissions import is_wechat_group_blacklisted
+
+        conf()["wechat_group_blacklist_members"] = [{
+            "stable_room_id": "wgr_room",
+            "stable_member_id": "wgm_blocked",
+            "identity_status": "suspected",
+        }]
+
+        self.assertFalse(is_wechat_group_blacklisted("wgr_room", "wgm_blocked"))
+
+    def test_blacklist_keeps_legacy_flat_fallback(self):
+        from channel.wechat_group.wechat_group_permissions import is_wechat_group_blacklisted
+
+        conf()["wechat_group_blacklist_members"] = []
+        conf()["wechat_group_blocked_stable_member_ids"] = ["wgm_blocked"]
+        conf()["wechat_group_blocked_sender_ids"] = ["wxid_legacy"]
+
+        self.assertTrue(is_wechat_group_blacklisted("wgr_room", "wgm_blocked"))
+        self.assertTrue(is_wechat_group_blacklisted("wgr_room", "wgm_other", runtime_sender_id="wxid_legacy"))
+        self.assertFalse(is_wechat_group_blacklisted("wgr_room", "wgm_other", runtime_sender_id="wxid_other"))
+
+    def test_blacklist_flat_fallback_still_applies_with_structured_members(self):
+        from channel.wechat_group.wechat_group_permissions import is_wechat_group_blacklisted
+
+        conf()["wechat_group_blacklist_members"] = [{
+            "stable_room_id": "wgr_other",
+            "stable_member_id": "wgm_other",
+            "identity_status": "confirmed",
+        }]
+        conf()["wechat_group_blocked_sender_ids"] = ["wxid_legacy"]
+
+        self.assertTrue(is_wechat_group_blacklisted("wgr_room", "wgm_alice", runtime_sender_id="wxid_legacy"))
+
+    def test_blocked_sender_ids_only_adds_current_structured_blacklist_sender(self):
+        from channel.wechat_group.wechat_group_permissions import build_wechat_group_blocked_sender_ids
+
+        conf()["wechat_group_blacklist_members"] = [{
+            "stable_room_id": "wgr_other",
+            "stable_member_id": "wgm_other",
+            "identity_status": "confirmed",
+        }]
+        conf()["wechat_group_blocked_stable_member_ids"] = []
+        conf()["wechat_group_blocked_sender_ids"] = []
+
+        blocked = build_wechat_group_blocked_sender_ids("wgr_room", "wgm_alice", runtime_sender_id="wxid_alice")
+
+        self.assertNotIn("wgm_other", blocked)
+        self.assertNotIn("wgm_alice", blocked)
 
     def test_default_required_permissions_are_enabled(self):
         from channel.wechat_group.wechat_group_permissions import (
