@@ -6,7 +6,7 @@
 
 - 将发布镜像改为 Node.js 22 + Python 3.10 多阶段构建：构建期执行 sidecar `npm ci --omit=dev` 与 49 项 Node 测试，最终镜像固定提供 `/usr/local/bin/node`、`/app/channel/wechat_group/sidecar/node_modules`，并验证 Wechaty 核心模块可导入。
 - 新增 `.dockerignore`，排除 Git/worktree、本地配置、密钥、依赖、缓存、日志、workspace 与 Docker 运行目录，避免宿主机私有数据进入镜像。
-- entrypoint 改为在 `LIGHTAGENT_DATA_DIR` 中幂等初始化 `config.json`，仅在文件缺失时复制模板；Compose 使用 `./config:/home/agent/.lightagent` 与 `./data:/home/agent/lightagent`，不挂载 `/app`，并通过 `.env` 强制提供 `WEB_PASSWORD` 后监听 `0.0.0.0`。
+- entrypoint 改为在 `LIGHTAGENT_DATA_DIR` 中幂等初始化 `config.json`，仅在文件缺失时复制模板；Compose 使用 `./config:/home/agent/.lightagent` 与 `./data:/home/agent/lightagent`，不挂载 `/app`。未提供 `WEB_PASSWORD` 时自动生成强随机密码、持久化到配置并输出到 Docker 日志，仍显式监听 `0.0.0.0`；`.env` 仅用于可选的自定义密码。
 - Compose 不再注入空 API Key、模型或固定 `CHANNEL_TYPE`，避免覆盖 Web 控制台保存的持久化配置；`config-template.json` 继续保留安全的 `web_host: ""` 自动策略。
 - 插件只读资源目录与可写数据目录分离：插件配置、`plugins.json` 和用户安装插件进入 `LIGHTAGENT_DATA_DIR/plugins`，同名用户插件不能遮蔽内置插件；CloudClient 配置写回统一改为数据根目录。
 - 合并 GitHub Actions 镜像发布链，单一工作流通过 Buildx 同时发布 `linux/amd64` 与 `linux/arm64`，移除独立 `*-arm64` 工作流。

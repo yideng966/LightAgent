@@ -10,7 +10,7 @@ services:
     environment:
       LIGHTAGENT_DATA_DIR: /home/agent/.lightagent
       WEB_HOST: "0.0.0.0"
-      WEB_PASSWORD: "${WEB_PASSWORD:?Set WEB_PASSWORD in docker/.env before starting LightAgent}"
+      WEB_PASSWORD: "${WEB_PASSWORD:-__LIGHTAGENT_AUTO_GENERATE__}"
     volumes:
       - ./config:/home/agent/.lightagent
       - ./data:/home/agent/lightagent

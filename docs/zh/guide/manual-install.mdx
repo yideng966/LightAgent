@@ -116,23 +116,22 @@ nohup python3 app.py & tail -f nohup.out
   需要安装 [Docker](https://docs.docker.com/engine/install/) 和 docker-compose。
 </Note>
 
-**1. 下载 Compose 与环境变量模板**
+**1. 下载 Compose**
 
 ```bash
 curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/docker-compose.yml
-curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/.env.example
-cp .env.example .env
 ```
 
-编辑 `.env`，把示例值替换为强随机密码。`WEB_PASSWORD` 为必填项，不能把真实密码提交到 Git。
+可以直接启动，无需先创建 `.env`。未设置 `WEB_PASSWORD` 时，entrypoint 会生成强随机密码并保存到 `./config/config.json`；如需固定自定义密码，可下载 `docker/.env.example`、复制为 Compose 同目录的 `.env` 后修改，不能把真实密码提交到 Git。
 
 **2. 启动容器**
 
 ```bash
 sudo docker compose up -d
+sudo docker compose logs lightagent
 ```
 
-首次启动后访问 `http://localhost:9899`，在 Web 控制台配置模型，然后进入“通道管理 -> 接入通道 -> 个人微信群”扫码。Docker 用户无需在宿主机执行 sidecar 的 `npm install`。
+日志会打印自动管理的 Web 控制台密码。首次启动后访问 `http://localhost:9899`，登录并配置模型，然后进入“通道管理 -> 接入通道 -> 个人微信群”扫码。Docker 用户无需在宿主机执行 sidecar 的 `npm install`。
 
 **3. 查看日志**
 
@@ -146,7 +145,7 @@ Compose 使用两个相对于 `docker-compose.yml` 的持久化目录：
 - `./data` 挂载到 `/home/agent/lightagent`，保存 Agent workspace、记忆、知识库、技能、MCP 和 scheduler。
 - `/app` 是随镜像升级的应用目录，包含项目代码、Playwright 和 sidecar `node_modules`，不要给它添加 volume。
 
-Compose 已让 Web 服务监听 `0.0.0.0` 并强制启用密码。若需要公网访问，还应在防火墙或安全组中限制 `9899` 的来源 IP。重启或重建容器不会覆盖 `./config` 和 `./data`。
+Compose 已让 Web 服务监听 `0.0.0.0`，并在未提供密码时自动生成密码。若需要公网访问，还应在防火墙或安全组中限制 `9899` 的来源 IP。重启或重建容器不会覆盖 `./config` 和 `./data`。
 
 ## 核心配置项
 
@@ -171,7 +170,7 @@ Compose 已让 Web 服务监听 `0.0.0.0` 并强制启用密码。若需要公�
     environment:
       LIGHTAGENT_DATA_DIR: /home/agent/.lightagent
       WEB_HOST: "0.0.0.0"
-      WEB_PASSWORD: "${WEB_PASSWORD:?Set WEB_PASSWORD in docker/.env before starting LightAgent}"
+      WEB_PASSWORD: "${WEB_PASSWORD:-__LIGHTAGENT_AUTO_GENERATE__}"
     volumes:
       - ./config:/home/agent/.lightagent
       - ./data:/home/agent/lightagent

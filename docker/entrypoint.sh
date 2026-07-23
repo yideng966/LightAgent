@@ -10,6 +10,7 @@ CHATGPT_ON_WECHAT_EXEC=${CHATGPT_ON_WECHAT_EXEC:-""}
 # writable config and private runtime data
 LIGHTAGENT_DATA_DIR=${LIGHTAGENT_DATA_DIR:-"/home/agent/.lightagent"}
 export LIGHTAGENT_DATA_DIR
+AUTO_WEB_PASSWORD_SENTINEL="__LIGHTAGENT_AUTO_GENERATE__"
 
 # use environment variables to pass parameters
 # if you have not defined environment variables, set them below
@@ -46,12 +47,45 @@ fi
 # fi
 
 
+ensure_web_password() {
+    if [ "${WEB_PASSWORD:-$AUTO_WEB_PASSWORD_SENTINEL}" != "$AUTO_WEB_PASSWORD_SENTINEL" ]; then
+        echo "[LightAgent] Web console password is provided by WEB_PASSWORD (value hidden)"
+        return
+    fi
+
+    unset WEB_PASSWORD
+    managed_password="$(
+        /usr/local/bin/python - "$LIGHTAGENT_DATA_DIR/config.json" <<'PY'
+import json
+import secrets
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as file:
+    config = json.load(file)
+
+password = str(config.get("web_password") or "")
+if not password:
+    password = secrets.token_urlsafe(18)
+    config["web_password"] = password
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(config, file, indent=2, ensure_ascii=False)
+        file.write("\n")
+
+print(password)
+PY
+    )"
+    echo "[LightAgent] Web console password: $managed_password"
+    echo "[LightAgent] Password is persisted in $LIGHTAGENT_DATA_DIR/config.json"
+}
+
 prepare_runtime_dirs() {
     mkdir -p "$LIGHTAGENT_DATA_DIR" /home/agent/lightagent
     if [ ! -f "$LIGHTAGENT_DATA_DIR/config.json" ]; then
         cp "$CHATGPT_ON_WECHAT_PREFIX/config-template.json" \
            "$LIGHTAGENT_DATA_DIR/config.json"
     fi
+    ensure_web_password
 }
 
 # Initialize mounted volumes, then drop to the non-root user.

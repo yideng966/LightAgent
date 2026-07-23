@@ -14,6 +14,8 @@ class DockerDeploymentContractTest(unittest.TestCase):
         self.assertIn("FROM node:22-bullseye-slim AS wechat-group-sidecar-build", text)
         self.assertIn("npm ci --omit=dev", text)
         self.assertIn("npm test", text)
+        self.assertIn("python3 make g++", text)
+        self.assertLess(text.index("python3 make g++"), text.index("npm ci --omit=dev"))
         self.assertIn("/usr/local/bin/node", text)
         self.assertIn("/app/channel/wechat_group/sidecar/node_modules", text)
         self.assertIn("import('wechaty')", text)
@@ -27,7 +29,7 @@ class DockerDeploymentContractTest(unittest.TestCase):
         self.assertEqual("/home/agent/.lightagent", environment["LIGHTAGENT_DATA_DIR"])
         self.assertEqual("0.0.0.0", environment["WEB_HOST"])
         self.assertEqual(
-            "${WEB_PASSWORD:?Set WEB_PASSWORD in docker/.env before starting LightAgent}",
+            "${WEB_PASSWORD:-__LIGHTAGENT_AUTO_GENERATE__}",
             environment["WEB_PASSWORD"],
         )
         self.assertNotIn("CHANNEL_TYPE", environment)
@@ -51,6 +53,14 @@ class DockerDeploymentContractTest(unittest.TestCase):
         )
         self.assertIn('if [ ! -f "$LIGHTAGENT_DATA_DIR/config.json" ]; then', text)
         self.assertIn("config-template.json", text)
+        self.assertIn("__LIGHTAGENT_AUTO_GENERATE__", text)
+        self.assertIn("secrets.token_urlsafe", text)
+        self.assertIn("unset WEB_PASSWORD", text)
+        self.assertIn(
+            'echo "[LightAgent] Web console password: $managed_password"',
+            text,
+        )
+        self.assertIn("Password is persisted in", text)
 
     def test_release_workflow_publishes_one_multiarch_image(self):
         workflow = (

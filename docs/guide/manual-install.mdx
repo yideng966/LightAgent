@@ -100,23 +100,22 @@ Docker deployment does not require cloning source code or installing Python, Nod
   Requires [Docker](https://docs.docker.com/engine/install/) and docker-compose.
 </Note>
 
-**1. Download Compose and the environment template**
+**1. Download Compose**
 
 ```bash
 curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/docker-compose.yml
-curl -O https://raw.githubusercontent.com/yideng966/LightAgent/master/docker/.env.example
-cp .env.example .env
 ```
 
-Edit `.env` and replace the example with a strong random password. `WEB_PASSWORD` is required; never commit the real value to Git.
+You can start directly without creating `.env`. If `WEB_PASSWORD` is unset, the entrypoint generates a strong random password and persists it in `./config/config.json`. To choose a fixed password, copy `docker/.env.example` to `.env` beside the Compose file and edit it; never commit the real value to Git.
 
 **2. Start container**
 
 ```bash
 sudo docker compose up -d
+sudo docker compose logs lightagent
 ```
 
-Open `http://localhost:9899`, configure a model in the Web console, then go to **Channel Management -> Add Channel -> Personal WeChat Group** to scan the QR code. Docker users do not run the sidecar `npm install` on the host.
+The logs print the automatically managed Web console password. Open `http://localhost:9899`, sign in, configure a model, then go to **Channel Management -> Add Channel -> Personal WeChat Group** to scan the QR code. Docker users do not run the sidecar `npm install` on the host.
 
 **3. View logs**
 
@@ -130,7 +129,7 @@ Compose uses two persistent directories relative to `docker-compose.yml`:
 - `./data` mounts at `/home/agent/lightagent`. It stores the Agent workspace, memories, knowledge base, skills, MCP configuration, and scheduler data.
 - `/app` belongs to the image and contains application code, Playwright, and sidecar `node_modules`. Do not mount a volume over it.
 
-Compose already binds the Web service to `0.0.0.0` and requires password authentication. Restrict inbound port `9899` in your firewall or security group when exposing it publicly. Restarting or recreating the container does not overwrite `./config` or `./data`.
+Compose binds the Web service to `0.0.0.0` and generates a password when one is not supplied. Restrict inbound port `9899` in your firewall or security group when exposing it publicly. Restarting or recreating the container does not overwrite `./config` or `./data`.
 
 ## Core Configuration
 
