@@ -2,6 +2,24 @@
 
 ## 2026-07-23
 
+### GitHub 标签自动发布 LightAgent 镜像
+
+- 将 AMD64 与 ARM64 Docker 工作流的宽泛 `create` 事件替换为显式 `push.tags: ['v*']`，保留 `master` 分支触发，并增加 `workflow_dispatch` 手动重试入口。
+- 将仓库运行条件更新为 `yideng966/LightAgent`，Docker Hub 与 GHCR 镜像统一为 `yideng966/lightagent`，移除 `zhayujie/chatgpt-on-wechat` 等旧发布目标。
+- 将 GHCR 清理目标 `package-name` 更新为 `lightagent`；AMD64 继续发布 Docker Hub 与 GHCR，ARM64 继续使用 `-arm64` 标签后缀发布到 GHCR。
+
+关键文件：
+
+- `.github/workflows/deploy-image.yml`
+- `.github/workflows/deploy-image-arm.yml`
+- `plans/20260723_GitHub标签自动发布.md`
+
+验证记录：
+
+- PyYAML 解析与触发器断言通过：两个工作流均包含 `master`、`v*` 和 `workflow_dispatch`，且不再包含 `create`。
+- Docker 工作流旧仓库、旧镜像和旧 package-name 残留扫描通过。
+- `git diff --check`：通过。
+
 ### GitHub 提交通知到指定微信群
 
 - 新增 `/api/github/webhook`：按 GitHub `X-Hub-Signature-256` 对原始请求体执行 HMAC-SHA256 恒定时间验签，只处理 `ping` 与目标仓库/分支的 `push`，并限制 25 MB 请求体。

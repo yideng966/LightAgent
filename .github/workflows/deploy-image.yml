@@ -12,15 +12,16 @@ name: Create and publish a Docker image
 on:
   push:
     branches: ['master']
-  create:
+    tags: ['v*']
+  workflow_dispatch:
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-  DOCKERHUB_IMAGE: zhayujie/chatgpt-on-wechat
+  IMAGE_NAME: yideng966/lightagent
+  DOCKERHUB_IMAGE: yideng966/lightagent
 
 jobs:
   build-and-push-image:
-    if: github.repository == 'zhayujie/LightAgent'
+    if: github.repository == 'yideng966/LightAgent'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -48,10 +49,8 @@ jobs:
         uses: docker/metadata-action@v4
         with:
           images: |
-            zhayujie/chatgpt-on-wechat
-            zhayujie/lightagent
-            ${{ env.REGISTRY }}/zhayujie/chatgpt-on-wechat
-            ${{ env.REGISTRY }}/zhayujie/lightagent
+            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
@@ -68,7 +67,7 @@ jobs:
 
       - uses: actions/delete-package-versions@v4
         with:
-          package-name: 'chatgpt-on-wechat'
+          package-name: 'lightagent'
           package-type: 'container'
           min-versions-to-keep: 10
           delete-only-untagged-versions: 'true'
