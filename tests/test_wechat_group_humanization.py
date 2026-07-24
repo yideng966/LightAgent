@@ -94,6 +94,83 @@ class WechatGroupHumanizationArchiveTest(unittest.TestCase):
         self.assertEqual("wgm_alice", exact["stable_member_id"])
         self.assertEqual("wxid_runtime", exact["runtime_sender_id"])
 
+    def test_summary_archive_context_rejects_other_room_runtime_id_collision(self):
+        self.archive.record_message(
+            message_id="room-a-message",
+            room_id="room@@a",
+            room_name="A群",
+            sender_id="wxid_alice",
+            sender_nickname="Alice",
+            message_type="text",
+            text="A群昨天确认了发布计划",
+            stable_room_id="wgr_room_a",
+            runtime_room_id="room@@a",
+            created_at=1000,
+        )
+        self.archive.record_message(
+            message_id="room-b-collision",
+            room_id="wgr_room_a",
+            room_name="B群",
+            sender_id="wxid_bob",
+            sender_nickname="Bob",
+            message_type="text",
+            text="B群机密内容不得出现在A群总结",
+            stable_room_id="wgr_room_b",
+            runtime_room_id="wgr_room_a",
+            created_at=1001,
+        )
+        self.archive.record_message(
+            message_id="legacy-message",
+            room_id="room@@legacy",
+            room_name="旧群",
+            sender_id="wxid_legacy",
+            sender_nickname="Legacy",
+            message_type="text",
+            text="未绑定稳定身份的历史消息",
+            created_at=1002,
+        )
+
+        recent = self.archive.get_recent_messages("wgr_room_a", limit=10, minutes=60, now=1010)
+        searched = self.archive.search_messages(
+            "wgr_room_a", since_ts=900, until_ts=1100, limit=10
+        )
+        distilled = self.archive.get_messages_for_distill(
+            "wgr_room_a", since_ts=900, until_ts=1100, limit=10
+        )
+        evidence = build_archive_evidence_block(
+            self.archive,
+            room_id="wgr_room_a",
+            query="",
+            now=1010,
+            days=1,
+            limit=10,
+            recent_limit=10,
+        )
+        summary = build_local_extractive_summary_block(
+            self.archive,
+            room_id="wgr_room_a",
+            now=1010,
+            hours=1,
+            limit=10,
+        )
+
+        for rows in (recent, searched, distilled):
+            self.assertEqual(["room-a-message"], [row["message_id"] for row in rows])
+        self.assertIn("A群昨天确认了发布计划", evidence)
+        self.assertIn("A群昨天确认了发布计划", summary)
+        self.assertNotIn("B群机密内容", evidence)
+        self.assertNotIn("B群机密内容", summary)
+        self.assertIsNone(self.archive.get_message_by_id("wgr_room_a", "room-b-collision"))
+        self.assertEqual(
+            ["legacy-message"],
+            [
+                row["message_id"]
+                for row in self.archive.get_recent_messages(
+                    "room@@legacy", limit=10, minutes=60, now=1010
+                )
+            ],
+        )
+
     def test_safe_recent_formatter_omits_internal_identifiers_and_paths(self):
         rows = [
             {

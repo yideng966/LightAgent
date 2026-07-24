@@ -312,6 +312,7 @@ docker push yideng966/lightagent:latest
 - 普通群成员可以问答、查询、总结和读取上下文，但不能触发知识库写入、永久记忆写入、群记忆写入、群友画像写入、自主进化、workspace 文件写入/编辑、定时任务修改或微信群配置修改。
 - 管理员门禁必须同时包含通道层拒绝、Agent 工具过滤和 Prompt 权限提示；不能只依赖模型自觉遵守提示词。
 - 微信群稳定身份改造后，`wechat_group_room_id` / `wechat_group_sender_id` 继续表示当前 Wechaty 登录态 runtime ID；长期配置、权限、会话、归档、记忆、画像、焦点、情绪、风格、表情和 scheduler 必须优先使用显式 stable 字段。
+- 微信群归档按群查询必须优先严格匹配 `stable_room_id`；只有归档记录自身未绑定稳定群 ID 时，才允许使用 legacy `room_id` 兼容读取，不得用无条件 `stable_room_id OR room_id` 扩大检索范围。
 - 微信群成员会话默认按 `stable_room_id + stable_member_id` 隔离；旧配置缺少 `group_shared_session` 时必须按 `false` 处理，不能回退为全群共享。显式开启全群共享时保持兼容，但不要通过提高同一共享会话的 `concurrency_in_session` 解决阻塞，以免引入会话历史和回复顺序竞争。
 - 身份恢复必须按 stable account -> stable room -> stable member 的顺序确认；未确认 account 不得确认 room，未确认 member 不得写入管理员 stable 配置或继承敏感权限。
 - legacy runtime room/member 如果在多个 stable account 下产生歧义，必须返回未解析并要求人工确认，不得按最近记录任取；在线成员解析应优先使用当前运行中 room 的 stable 映射。

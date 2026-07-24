@@ -164,7 +164,10 @@ class WechatGroupArchive:
                 """
                 SELECT COUNT(*) AS count
                 FROM wechat_group_image_create_usage
-                WHERE (stable_room_id = ? OR room_id = ?)
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
                   AND status = 'accepted'
                   AND created_at >= ?
                 """,
@@ -192,7 +195,10 @@ class WechatGroupArchive:
                        message_type, text, media_path, is_at, metadata, created_at,
                        stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
                 FROM wechat_group_messages
-                WHERE (stable_room_id = ? OR room_id = ?) AND created_at >= ?
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                ) AND created_at >= ?
                 ORDER BY created_at DESC, id DESC
                 LIMIT ?
                 """,
@@ -224,7 +230,10 @@ class WechatGroupArchive:
                        message_type, text, media_path, is_at, metadata, created_at,
                        stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
                 FROM wechat_group_messages
-                WHERE (stable_room_id = ? OR room_id = ?)
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
                   AND created_at >= ?
                   AND created_at <= ?
                 ORDER BY created_at ASC, id ASC
@@ -263,7 +272,10 @@ class WechatGroupArchive:
                        message_type, text, media_path, is_at, metadata, created_at,
                        stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
                 FROM wechat_group_messages
-                WHERE (stable_room_id = ? OR room_id = ?) AND message_id = ?
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                ) AND message_id = ?
                 LIMIT 1
                 """,
                 (str(room_id), str(room_id), str(message_id)),
@@ -290,7 +302,10 @@ class WechatGroupArchive:
                        message_type, text, media_path, is_at, metadata, created_at,
                        stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
                 FROM wechat_group_messages
-                WHERE (stable_room_id = ? OR room_id = ?)
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
                   AND created_at >= ?
                   AND created_at <= ?
                 ORDER BY created_at ASC, id ASC
@@ -321,7 +336,10 @@ class WechatGroupArchive:
                        message_type, text, media_path, is_at, metadata, created_at,
                        stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
                 FROM wechat_group_messages
-                WHERE (stable_room_id = ? OR room_id = ?)
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
                   AND id > ?
                 ORDER BY id ASC
                 LIMIT ?
@@ -338,7 +356,8 @@ class WechatGroupArchive:
             row = conn.execute(
                 """
                 SELECT COALESCE(MAX(id), 0) FROM wechat_group_messages
-                WHERE stable_room_id = ? OR room_id = ?
+                WHERE stable_room_id = ?
+                   OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
                 """,
                 (room_text, room_text),
             ).fetchone()
@@ -360,7 +379,10 @@ class WechatGroupArchive:
                 """
                 SELECT sender_id, sender_nickname, metadata, created_at, stable_member_id, runtime_sender_id
                 FROM wechat_group_messages
-                WHERE (stable_room_id = ? OR room_id = ?)
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
                   AND COALESCE(sender_id, '') != ''
                 ORDER BY created_at DESC, id DESC
                 """,
@@ -429,7 +451,10 @@ class WechatGroupArchive:
             return ""
         for table in ("wechat_group_messages", "wechat_group_assistant_replies"):
             with self._lock, closing(self._connect()) as conn:
-                room_clause = "(stable_room_id = ? OR room_id = ?)"
+                room_clause = (
+                    "(stable_room_id = ? OR "
+                    "(COALESCE(stable_room_id, '') = '' AND room_id = ?))"
+                )
                 row = conn.execute(
                     f"""
                     SELECT room_name
