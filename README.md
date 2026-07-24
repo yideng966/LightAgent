@@ -452,6 +452,17 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
 
 个人微信群是本仓库近期重点能力。它定位为 LightAgent 的一个消息渠道，不是独立 Agent 产品。
 
+默认情况下，同一个微信群中的不同成员使用独立 Agent 会话，避免某个成员的长任务阻塞其他成员；每个成员自己的消息仍按 `concurrency_in_session: 1` 串行处理。需要让全群显式共享同一段会话历史时，可在 `config.json` 中设置：
+
+```json
+{
+  "group_shared_session": true,
+  "concurrency_in_session": 1
+}
+```
+
+不建议在共享会话下提高 `concurrency_in_session`，否则并行请求可能造成回复顺序和会话历史竞争。旧配置缺少 `group_shared_session` 时按 `false` 处理。
+
 ### 组件边界
 
 - Python 通道层：`channel/wechat_group/`

@@ -81,8 +81,10 @@ class ChatChannel(Channel):
                         matched_wechat_group_room_id,
                     ]
                 ):
-                    # Check global group_shared_session config first
-                    group_shared_session = conf().get("group_shared_session", True)
+                    # Keep missing/legacy configs aligned with the documented
+                    # default: group members use independent sessions unless
+                    # shared group context is explicitly enabled.
+                    group_shared_session = conf().get("group_shared_session", False)
                     if context.get("channel_type") == "wechat_group" and stable_group_id:
                         if group_shared_session:
                             session_id = f"wechat_group:{stable_group_id}"

@@ -2,6 +2,26 @@
 
 ## 2026-07-24
 
+### 微信群成员会话默认隔离修复
+
+- 修正 `ChatChannel` 在旧配置缺少 `group_shared_session` 时错误回退为全群共享的问题，使运行时行为与 `config.py` 中声明的默认值 `false` 保持一致。
+- 在默认配置模板中显式写入 `group_shared_session: false` 与 `concurrency_in_session: 1`；同群不同成员按稳定群 ID 和稳定成员 ID 使用独立串行会话，显式设置 `group_shared_session: true` 时继续兼容全群共享。
+- 新增旧配置缺键场景的微信群会话隔离回归测试，并更新 README 与协作规则，说明共享会话的配置方式和并发风险。
+
+关键文件：
+
+- `channel/chat_channel.py`
+- `config-template.json`
+- `tests/test_wechat_group_channel.py`
+- `README.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 微信群消息、通道与 Web 组合回归：222 项通过。
+- 全量 Python 回归共运行 872 项，其中 869 项通过；3 项既有中英文全局状态顺序依赖断言失败，相关模块单独以中文环境运行时 3 项全部通过。
+- 配置模板 JSON 校验、Python 编译与 `git diff --check` 均通过。
+
 ### 按群设置自由回复档位
 
 - 新增 `wechat_group_free_reply_stable_room_activity_levels` 配置，以 `stable_room_id` 为键为自由回复群选择安静、普通、活跃或高频档位；未映射群继续使用全局档位，非法 stable ID、runtime ID 和非法档位会被服务端清理。
