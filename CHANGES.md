@@ -2,6 +2,29 @@
 
 ## 2026-07-24
 
+### 群聊菜单开关滑块错位修复
+
+- 修正群聊菜单中开关滑块的绝对定位基准：滑块现在相对各自的开关轨道定位，不再受外层点击区域高度影响而向上偏移。
+- 统一覆盖拟人化上下文、图片与生图、自由回复及其静默提及开关，保持开关点击区域、状态颜色和原有配置行为不变。
+- 清理 `chat.html` 中遗留的静态脚本版本参数，避免后端再次追加缓存时间戳后形成双查询串，确保浏览器能获取本次修复后的 `console.js`。
+- 新增 WebUI 合同测试，防止群聊菜单开关轨道再次丢失定位上下文。
+
+关键文件：
+
+- `channel/web/static/js/console.js`
+- `channel/web/chat.html`
+- `tests/test_wechat_group_web.py`
+- `docs/images/issue-5-group-menu-toggle-fixed.png`
+- `docs/images/issue-5-github-toggle-fixed.png`
+- `AGENTS.md`
+
+验证记录：
+
+- WebUI 开关轨道定位与静态资源缓存参数合同测试：2 项通过。
+- 微信群消息、通道与 Web 组合回归：224 项通过。
+- JavaScript 语法、Python 编译与 `git diff --check` 均通过。
+- 已重建并重启本地 Docker 服务，部署前后关键配置文件哈希保持一致；在已登录真实群聊页面确认开关轨道为 `position: relative`、轨道高 20px、滑块高 16px 且顶部偏移 2px，截图验收通过。
+
 ### 微信群成员会话默认隔离修复
 
 - 修正 `ChatChannel` 在旧配置缺少 `group_shared_session` 时错误回退为全群共享的问题，使运行时行为与 `config.py` 中声明的默认值 `false` 保持一致。

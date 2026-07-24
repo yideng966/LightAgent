@@ -8616,7 +8616,7 @@ function buildGroupsHumanizationToggle(id, labelKey, hintKey, enabled) {
             </div>
             <label class="relative inline-flex items-center justify-center w-11 h-11 cursor-pointer flex-shrink-0">
                 <input id="${id}" type="checkbox" class="sr-only peer" aria-label="${escapeHtml(t(labelKey))}" ${enabled ? 'checked' : ''}>
-                <div class="w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-[#111111] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+                <div class="relative w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-[#111111] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
             </label>
         </div>
     </div>`;
@@ -8719,7 +8719,7 @@ function buildGroupsImageToggle(id, labelKey, hintKey, checked) {
             </div>
             <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
                 <input id="${id}" type="checkbox" class="sr-only peer" ${checked ? 'checked' : ''}>
-                <div class="w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+                <div class="relative w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
             </label>
         </div>
     </div>`;
@@ -12197,7 +12197,7 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
                 </div>
                 <label class="relative inline-flex items-center cursor-pointer flex-shrink-0">
                     <input id="free-reply-enabled" type="checkbox" class="sr-only peer" ${free.enabled ? 'checked' : ''}>
-                    <div class="w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
+                    <div class="relative w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></div>
                 </label>
             </div>
             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
@@ -12210,7 +12210,7 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
                     <span class="relative inline-flex items-center flex-shrink-0">
                         <input id="free-reply-mute-mentions-enabled" type="checkbox" class="sr-only peer"
                             aria-describedby="free-reply-mute-mentions-enabled-hint" ${free.mute_mentions_enabled === true ? 'checked' : ''}>
-                        <span class="w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 peer-focus:ring-2 peer-focus:ring-primary-400 peer-focus:ring-offset-2 dark:peer-focus:ring-offset-[#111111] transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></span>
+                        <span class="relative w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 peer-focus:ring-2 peer-focus:ring-primary-400 peer-focus:ring-offset-2 dark:peer-focus:ring-offset-[#111111] transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></span>
                     </span>
                 </label>
             </div>
