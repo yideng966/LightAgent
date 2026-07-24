@@ -2153,6 +2153,37 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("groups-humanization-recent-limit", console_js)
         self.assertIn("groups-humanization-recent-minutes", console_js)
 
+    def test_console_anchors_wechat_group_switch_knobs_to_their_tracks(self):
+        with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
+            console_js = f.read()
+
+        humanization_start = console_js.index("function buildGroupsHumanizationToggle")
+        humanization_end = console_js.index("function buildGroupsNumberField", humanization_start)
+        humanization_block = console_js[humanization_start:humanization_end]
+        self.assertIn('class="relative w-10 h-5', humanization_block)
+
+        image_start = console_js.index("function buildGroupsImageToggle")
+        image_end = console_js.index("function buildGroupsImageNumberField", image_start)
+        image_block = console_js[image_start:image_end]
+        self.assertIn('class="relative w-10 h-5', image_block)
+
+        free_reply_start = console_js.index("function renderWechatGroupFreeReplySettings")
+        free_reply_end = console_js.index("function buildFreeReplyNumberField", free_reply_start)
+        free_reply_block = console_js[free_reply_start:free_reply_end]
+        self.assertEqual(2, free_reply_block.count('class="relative w-10 h-5'))
+
+    def test_chat_handler_emits_single_cache_bust_query_for_console_assets(self):
+        from channel.web.web_channel import ChatHandler
+
+        with patch("channel.web.web_channel.time.time", return_value=1234567890):
+            html = ChatHandler().GET()
+
+        self.assertIn('href="assets/css/console.css?v=1234567890"', html)
+        self.assertIn('src="assets/js/console.js?v=1234567890"', html)
+        self.assertEqual(1, html.count("assets/css/console.css?v="))
+        self.assertEqual(1, html.count("assets/js/console.js?v="))
+        self.assertNotIn("assets/js/console.js?v=1234567890?", html)
+
     def test_console_moves_recent_context_controls_to_humanization_panel(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
             console_js = f.read()
