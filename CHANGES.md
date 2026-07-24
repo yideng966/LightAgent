@@ -2,6 +2,33 @@
 
 ## 2026-07-24
 
+### 按群设置自由回复档位
+
+- 新增 `wechat_group_free_reply_stable_room_activity_levels` 配置，以 `stable_room_id` 为键为自由回复群选择安静、普通、活跃或高频档位；未映射群继续使用全局档位，非法 stable ID、runtime ID 和非法档位会被服务端清理。
+- 自由回复评分按当前稳定群解析实际档位，并继续复用四套全局 profile 参数；worker、LLM 二次判定、情绪修正和 `@` 必回链路保持不变。
+- Web 控制台在每个自由回复群勾选项右侧增加原生档位下拉框，提供“跟随全局”空映射选项；取消勾选会禁用并移除该群覆盖，小屏下选择器自动换行。
+- 补充配置归一化、跨群隔离、全局回退、runtime 映射拒绝、Web 保存校验和 UI 合同测试，并更新维护规则、README 与开发计划。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_free_reply.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `channel/web/static/css/console.css`
+- `config.py`
+- `config-template.json`
+- `tests/test_wechat_group_free_reply.py`
+- `tests/test_wechat_group_web.py`
+- `AGENTS.md`
+- `plans/20260724_按群设置自由回复档位.md`
+
+验证记录：
+
+- 自由回复、消息、通道与 Web 组合回归：260 项通过。
+- 全量 Python 回归：871 项通过。
+- Playwright 验收通过：显式档位覆盖、全局继承、勾选联动和保存读取正确；1440px 与 375px 视口无横向溢出。
+- JavaScript 语法、配置模板 JSON、Python 编译及 `git diff --check` 均通过。
+
 ### Docker 生图持久化与 Web 图片发送修复
 
 - 修正确确定性生图输出目录：显式 `IMAGE_OUTPUT_DIR` 继续优先；未配置时统一解析到 `<agent_workspace>/images`，不再因子进程工作目录为项目根目录而写入 Docker 的 `/app/images`。

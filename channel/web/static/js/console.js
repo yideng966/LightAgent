@@ -389,6 +389,8 @@ const I18N = {
         wechat_group_free_reply_force_keywords: '强触发关键词',
         wechat_group_free_reply_force_keywords_hint: '命中后只绕过低信息和评分阈值，不绕过群范围、安全、冷却和上限。',
         wechat_group_free_reply_level: '活跃档位',
+        wechat_group_free_reply_default_level_profiles: '默认活跃档位与档位参数',
+        wechat_group_free_reply_follow_global: '跟随全局',
         wechat_group_free_reply_threshold: '接话阈值',
         wechat_group_free_reply_interval: '最小间隔（秒）',
         wechat_group_free_reply_hourly: '每小时上限',
@@ -1235,6 +1237,8 @@ const I18N = {
         wechat_group_free_reply_force_keywords: 'Force trigger keywords',
         wechat_group_free_reply_force_keywords_hint: 'When matched, bypasses only low-information and score-threshold checks; scope, safety, cooldown and limits still apply.',
         wechat_group_free_reply_level: 'Activity level',
+        wechat_group_free_reply_default_level_profiles: 'Default activity level and profiles',
+        wechat_group_free_reply_follow_global: 'Follow global',
         wechat_group_free_reply_threshold: 'Reply threshold',
         wechat_group_free_reply_interval: 'Minimum interval (seconds)',
         wechat_group_free_reply_hourly: 'Hourly limit',
@@ -8172,10 +8176,16 @@ function translateGroupsStatusText(keyOrText) {
     return text;
 }
 
+const WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS = ['quiet', 'normal', 'active', 'crazy'];
+
 function translateWechatGroupActivityLevel(level) {
     const key = `wechat_group_free_reply_level_${String(level || '').trim()}`;
     const translated = t(key);
     return translated === key ? String(level || '-') : translated;
+}
+
+function getWechatGroupFreeReplyFollowGlobalLabel(level) {
+    return `${t('wechat_group_free_reply_follow_global')} (${translateWechatGroupActivityLevel(level)})`;
 }
 
 function translateGroupsMemoryRunStatus(status) {
@@ -12116,28 +12126,47 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
     ];
     const freeRoomIds = new Set(configuredFreeRoomIds.map(id => stableIdByRuntimeId.get(String(id)) || String(id)));
     const freeNames = Array.isArray(free.names) ? free.names : [];
-    const level = free.activity_level || 'normal';
+    const level = WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS.includes(free.activity_level) ? free.activity_level : 'normal';
+    const roomActivityLevels = free.stable_room_activity_levels
+        && typeof free.stable_room_activity_levels === 'object'
+        && !Array.isArray(free.stable_room_activity_levels)
+        ? free.stable_room_activity_levels
+        : {};
     const profiles = free.profiles || {};
     const profile = profiles[level] || {};
     const forceKeywords = Array.isArray(free.force_keywords) ? free.force_keywords : [];
     const worker = free.worker || {};
     const last = free.last_decision || {};
     const rules = free.rules || {};
-    const roomRows = rooms.length ? rooms.map(room => {
+    const roomRows = rooms.length ? rooms.map((room, index) => {
         const id = String(room.id || '');
         const name = String(room.name || id || t('groups_room_unnamed'));
         const selectable = isWechatGroupRoomSelectable(room);
-        const checked = selectable && freeRoomIds.has(id) ? 'checked' : '';
-        const disabled = selectable ? '' : 'disabled';
+        const isChecked = selectable && freeRoomIds.has(id);
+        const roomLevel = WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS.includes(roomActivityLevels[id])
+            ? roomActivityLevels[id]
+            : '';
+        const checkboxId = `free-reply-room-${index}`;
         const inAccess = !targetRoomIds.size || targetRoomIds.has(id);
-        return `<label class="flex items-start gap-2 rounded-lg px-2 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 ${selectable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}">
-            <input type="checkbox" class="mt-1 accent-primary-500" data-wechat-group-free-reply-room-id="${escapeHtml(id)}" ${checked} ${disabled}>
-            <span class="min-w-0 flex-1">
-                <span class="block text-slate-800 dark:text-slate-100 break-words">${escapeHtml(name)}</span>
-                <span class="block text-xs text-slate-400 dark:text-slate-500 font-mono break-all">${escapeHtml(id)}</span>
-                <span class="block text-[11px] ${inAccess ? 'text-primary-500' : 'text-amber-500'}">${inAccess ? t('wechat_group_free_reply_room_access') : t('groups_rooms_none_selected')}</span>
-            </span>
-        </label>`;
+        return `<div class="free-reply-room-row rounded-lg px-2 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">
+            <label for="${checkboxId}" class="free-reply-room-choice ${selectable ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}">
+                <input id="${checkboxId}" type="checkbox" class="mt-1 accent-primary-500 focus:ring-2 focus:ring-primary-400"
+                    data-wechat-group-free-reply-room-id="${escapeHtml(id)}"
+                    onchange="syncWechatGroupFreeReplyRoomLevelState(this)" ${isChecked ? 'checked' : ''} ${selectable ? '' : 'disabled'}>
+                <span class="min-w-0 flex-1">
+                    <span class="block text-slate-800 dark:text-slate-100 break-words">${escapeHtml(name)}</span>
+                    <span class="block text-xs text-slate-400 dark:text-slate-500 font-mono break-all">${escapeHtml(id)}</span>
+                    <span class="block text-[11px] ${inAccess ? 'text-primary-500' : 'text-amber-500'}">${inAccess ? t('wechat_group_free_reply_room_access') : t('groups_rooms_none_selected')}</span>
+                </span>
+            </label>
+            <select data-wechat-group-free-reply-room-level="${escapeHtml(id)}"
+                aria-label="${escapeHtml(`${name} ${t('wechat_group_free_reply_level')}`)}"
+                class="free-reply-room-level rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                ${selectable && isChecked ? '' : 'disabled'}>
+                <option value="" data-wechat-group-free-reply-follow-global ${roomLevel ? '' : 'selected'}>${escapeHtml(getWechatGroupFreeReplyFollowGlobalLabel(level))}</option>
+                ${WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS.map(item => `<option value="${item}" ${item === roomLevel ? 'selected' : ''}>${escapeHtml(translateWechatGroupActivityLevel(item))}</option>`).join('')}
+            </select>
+        </div>`;
     }).join('') : `<p class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">${t('wechat_group_rooms_empty')}</p>`;
     const lastHtml = Object.keys(last).length ? `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
@@ -12207,10 +12236,10 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
             <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">${t('wechat_group_free_reply_force_keywords_hint')}</p>
         </div>
         <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
-            <label class="block text-sm font-medium text-slate-800 dark:text-slate-100 mb-1.5">${t('wechat_group_free_reply_level')}</label>
+            <label class="block text-sm font-medium text-slate-800 dark:text-slate-100 mb-1.5">${t('wechat_group_free_reply_default_level_profiles')}</label>
             <select id="free-reply-activity-level" onchange="syncFreeReplyProfileFields((getWechatGroupChannel() || {}).extra?.free_reply || {})"
                 class="w-full md:w-64 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500">
-                ${['quiet', 'normal', 'active', 'crazy'].map(item => `<option value="${item}" ${item === level ? 'selected' : ''}>${escapeHtml(translateWechatGroupActivityLevel(item))}</option>`).join('')}
+                ${WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS.map(item => `<option value="${item}" ${item === level ? 'selected' : ''}>${escapeHtml(translateWechatGroupActivityLevel(item))}</option>`).join('')}
             </select>
             <div class="free-reply-compact-grid mt-3">
                 ${buildFreeReplyNumberField('free-reply-min-score', 'wechat_group_free_reply_threshold', profile.min_score ?? 50, 0, 100, 1)}
@@ -12280,6 +12309,17 @@ function syncFreeReplyProfileFields(saved = {}) {
     Object.entries(fields).forEach(([id, value]) => {
         const input = document.getElementById(id);
         if (input) input.value = Number(value ?? 0);
+    });
+    document.querySelectorAll('[data-wechat-group-free-reply-follow-global]').forEach(option => {
+        option.textContent = getWechatGroupFreeReplyFollowGlobalLabel(level);
+    });
+}
+
+function syncWechatGroupFreeReplyRoomLevelState(checkbox) {
+    const roomId = String(checkbox?.dataset?.wechatGroupFreeReplyRoomId || '');
+    document.querySelectorAll('[data-wechat-group-free-reply-room-level]').forEach(select => {
+        if (String(select.dataset.wechatGroupFreeReplyRoomLevel || '') !== roomId) return;
+        select.disabled = !!checkbox.disabled || !checkbox.checked;
     });
 }
 
@@ -12548,6 +12588,7 @@ function saveWechatGroupSettings() {
                 wechat_group_free_reply_room_ids: freeReplyRuntimeRoomIds,
                 wechat_group_free_reply_names: freeReply.names,
                 wechat_group_free_reply_activity_level: freeReply.activity_level,
+                wechat_group_free_reply_stable_room_activity_levels: freeReply.stable_room_activity_levels,
                 wechat_group_free_reply_mute_minutes: freeReply.mute_minutes,
                 wechat_group_free_reply_mute_mentions_enabled: freeReply.mute_mentions_enabled,
                 wechat_group_free_reply_queue_ttl_seconds: freeReply.queue_ttl_seconds,
@@ -12768,6 +12809,28 @@ function readWechatGroupFreeReplySettings(saved = {}) {
     const selectedRoomIds = roomControlsPresent
         ? Array.from(document.querySelectorAll('[data-wechat-group-free-reply-room-id]:checked:not(:disabled)')).map(el => el.dataset.wechatGroupFreeReplyRoomId).filter(Boolean)
         : [];
+    const savedRoomActivityLevels = saved.stable_room_activity_levels
+        && typeof saved.stable_room_activity_levels === 'object'
+        && !Array.isArray(saved.stable_room_activity_levels)
+        ? saved.stable_room_activity_levels
+        : {};
+    const roomActivityLevels = {};
+    if (roomControlsPresent) {
+        const selectedRoomIdSet = new Set(selectedRoomIds.map(String));
+        document.querySelectorAll('[data-wechat-group-free-reply-room-level]:not(:disabled)').forEach(select => {
+            const roomId = String(select.dataset.wechatGroupFreeReplyRoomLevel || '').trim();
+            const roomLevel = String(select.value || '').trim();
+            if (roomId.startsWith('wgr_') && selectedRoomIdSet.has(roomId) && WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS.includes(roomLevel)) {
+                roomActivityLevels[roomId] = roomLevel;
+            }
+        });
+    } else {
+        Object.entries(savedRoomActivityLevels).forEach(([roomId, roomLevel]) => {
+            if (String(roomId).startsWith('wgr_') && WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS.includes(roomLevel)) {
+                roomActivityLevels[String(roomId)] = roomLevel;
+            }
+        });
+    }
     profiles[level] = {
         min_score: clampNumber(document.getElementById('free-reply-min-score')?.value, 0, 100, profiles[level]?.min_score ?? 50),
         min_interval_seconds: clampNumber(document.getElementById('free-reply-min-interval')?.value, 0, 3600, profiles[level]?.min_interval_seconds ?? 10),
@@ -12783,9 +12846,10 @@ function readWechatGroupFreeReplySettings(saved = {}) {
             ? selectedRoomIds
             : (Array.isArray(saved.stable_room_ids) ? saved.stable_room_ids : []),
         legacy_room_ids: roomControlsPresent ? [] : (saved.legacy_room_ids || []),
+        stable_room_activity_levels: roomActivityLevels,
         names: document.getElementById('free-reply-names') ? splitWechatGroupLines(document.getElementById('free-reply-names').value || '') : (saved.names || []),
         force_keywords: document.getElementById('free-reply-force-keywords') ? splitWechatGroupList(document.getElementById('free-reply-force-keywords').value || '') : (saved.force_keywords || []),
-        activity_level: ['quiet', 'normal', 'active', 'crazy'].includes(level) ? level : 'normal',
+        activity_level: WECHAT_GROUP_FREE_REPLY_ACTIVITY_LEVELS.includes(level) ? level : 'normal',
         mute_minutes: clampNumber(document.getElementById('free-reply-mute-minutes')?.value, 1, 1440, saved.mute_minutes ?? 10),
         mute_mentions_enabled: document.getElementById('free-reply-mute-mentions-enabled')
             ? !!document.getElementById('free-reply-mute-mentions-enabled').checked

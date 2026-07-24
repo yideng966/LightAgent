@@ -207,6 +207,7 @@ available_setting = {
     "wechat_group_free_reply_names": [],
     "wechat_group_free_reply_force_keywords": [],
     "wechat_group_free_reply_activity_level": "normal",
+    "wechat_group_free_reply_stable_room_activity_levels": {},
     "wechat_group_free_reply_mute_minutes": 10,
     "wechat_group_free_reply_mute_mentions_enabled": False,
     "wechat_group_free_reply_queue_ttl_seconds": 120,

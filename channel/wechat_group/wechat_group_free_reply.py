@@ -128,6 +128,33 @@ def normalize_wechat_group_free_reply_profiles(raw_profiles=None) -> dict:
     return profiles
 
 
+def normalize_wechat_group_free_reply_stable_room_activity_levels(raw_levels=None) -> dict:
+    if not isinstance(raw_levels, dict):
+        return {}
+    levels = {}
+    for raw_room_id, raw_level in raw_levels.items():
+        room_id = str(raw_room_id or "").strip()
+        level = str(raw_level or "").strip()
+        if room_id.startswith("wgr_") and level in FREE_REPLY_ACTIVITY_LEVELS:
+            levels[room_id] = level
+    return levels
+
+
+def resolve_wechat_group_free_reply_activity_level(config, room_id) -> str:
+    config = config if isinstance(config, dict) else {}
+    level = str(config.get("activity_level") or "normal").strip()
+    if level not in FREE_REPLY_ACTIVITY_LEVELS:
+        level = "normal"
+    room_key = str(room_id or "").strip()
+    if not room_key.startswith("wgr_"):
+        return level
+    room_levels = config.get("stable_room_activity_levels")
+    if not isinstance(room_levels, dict):
+        return level
+    room_level = room_levels.get(room_key)
+    return room_level if room_level in FREE_REPLY_ACTIVITY_LEVELS else level
+
+
 def normalize_wechat_group_free_reply_rule_scores(raw_scores=None) -> dict:
     scores = copy.deepcopy(DEFAULT_POSITIVE_RULE_SCORES)
     if not isinstance(raw_scores, dict):
@@ -208,6 +235,9 @@ def get_wechat_group_free_reply_config() -> dict:
         "legacy_room_ids": legacy_room_ids,
         "names": _as_list(conf().get("wechat_group_free_reply_names", [])),
         "activity_level": level,
+        "stable_room_activity_levels": normalize_wechat_group_free_reply_stable_room_activity_levels(
+            conf().get("wechat_group_free_reply_stable_room_activity_levels", {})
+        ),
         "mute_minutes": _clamp_int(conf().get("wechat_group_free_reply_mute_minutes", 10), 10, 1, 1440),
         "mute_mentions_enabled": _as_bool(conf().get("wechat_group_free_reply_mute_mentions_enabled", False)),
         "queue_ttl_seconds": _clamp_int(conf().get("wechat_group_free_reply_queue_ttl_seconds", 120), 120, 10, 600),
@@ -493,7 +523,7 @@ def evaluate_wechat_group_free_reply(
     force_keywords = _as_list(config.get("force_keywords") or [])
     force_keyword_match = any(keyword and keyword in normalized_text for keyword in force_keywords)
     media_payload = _is_media_payload(normalized_text, message_type=message_type)
-    level = config.get("activity_level") or "normal"
+    level = resolve_wechat_group_free_reply_activity_level(config, room_id)
     profile = (config.get("profiles") or DEFAULT_FREE_REPLY_PROFILES).get(level, DEFAULT_FREE_REPLY_PROFILES["normal"])
     threshold = int(profile.get("min_score", 50))
     rule_scores = normalize_wechat_group_free_reply_rule_scores(config.get("rule_scores"))

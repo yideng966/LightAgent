@@ -708,6 +708,27 @@
     min-width: 0;
 }
 
+.free-reply-room-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.free-reply-room-choice {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.free-reply-room-level {
+    flex: 0 0 15rem;
+    width: 15rem;
+    min-height: 44px;
+    padding: 0 8px;
+}
+
 .free-reply-rules-table .free-reply-rule-score-input {
     width: 3.25rem;
     min-width: 0;
@@ -764,6 +785,18 @@
 @media (min-width: 768px) {
     .free-reply-compact-grid {
         grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 480px) {
+    .free-reply-room-row {
+        flex-wrap: wrap;
+    }
+
+    .free-reply-room-level {
+        flex-basis: calc(100% - 24px);
+        width: calc(100% - 24px);
+        margin-left: 24px;
     }
 }
 

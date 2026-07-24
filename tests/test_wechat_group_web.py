@@ -92,6 +92,7 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_blocked_sender_ids": conf().get("wechat_group_blocked_sender_ids"),
             "wechat_group_free_reply_names": conf().get("wechat_group_free_reply_names"),
             "wechat_group_free_reply_activity_level": conf().get("wechat_group_free_reply_activity_level"),
+            "wechat_group_free_reply_stable_room_activity_levels": conf().get("wechat_group_free_reply_stable_room_activity_levels"),
             "wechat_group_free_reply_mute_minutes": conf().get("wechat_group_free_reply_mute_minutes"),
             "wechat_group_free_reply_mute_mentions_enabled": conf().get("wechat_group_free_reply_mute_mentions_enabled"),
             "wechat_group_free_reply_queue_ttl_seconds": conf().get("wechat_group_free_reply_queue_ttl_seconds"),
@@ -1209,6 +1210,11 @@ class WechatGroupWebTest(unittest.TestCase):
                 "wechat_group_blocked_stable_member_ids": ["wgm_blocked"],
                 "wechat_group_free_reply_names": ["测试群"],
                 "wechat_group_free_reply_activity_level": "active",
+                "wechat_group_free_reply_stable_room_activity_levels": {
+                    "wgr_room": "quiet",
+                    "room@@legacy": "crazy",
+                    "wgr_invalid": "invalid",
+                },
                 "wechat_group_free_reply_mute_minutes": "9999",
                 "wechat_group_free_reply_mute_mentions_enabled": True,
                 "wechat_group_free_reply_queue_ttl_seconds": "999",
@@ -1249,6 +1255,10 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual(["wgm_blocked"], conf()["wechat_group_blocked_stable_member_ids"])
         self.assertEqual(["测试群"], conf()["wechat_group_free_reply_names"])
         self.assertEqual("active", conf()["wechat_group_free_reply_activity_level"])
+        self.assertEqual(
+            {"wgr_room": "quiet"},
+            conf()["wechat_group_free_reply_stable_room_activity_levels"],
+        )
         self.assertEqual(1440, conf()["wechat_group_free_reply_mute_minutes"])
         self.assertTrue(conf()["wechat_group_free_reply_mute_mentions_enabled"])
         self.assertEqual(600, conf()["wechat_group_free_reply_queue_ttl_seconds"])
@@ -1279,6 +1289,19 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("legacy_room_ids: roomControlsPresent ? []", console_js)
         self.assertIn("const selectable = isWechatGroupRoomSelectable(room);", console_js)
         self.assertIn("const pendingStatuses = ['suspected', 'legacy_imported', 'conflict', 'identity_unresolved'];", console_js)
+
+    def test_console_exposes_and_saves_per_room_free_reply_activity_levels(self):
+        console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
+
+        self.assertIn("data-wechat-group-free-reply-room-level", console_js)
+        self.assertIn("function syncWechatGroupFreeReplyRoomLevelState", console_js)
+        self.assertIn("wechat_group_free_reply_follow_global", console_js)
+        self.assertIn("stable_room_activity_levels", console_js)
+        self.assertIn(
+            "wechat_group_free_reply_stable_room_activity_levels: freeReply.stable_room_activity_levels",
+            console_js,
+        )
+        self.assertIn("wechat_group_free_reply_default_level_profiles", console_js)
 
     def test_channels_save_wechat_group_image_config(self):
         from channel.web.web_channel import ChannelsHandler

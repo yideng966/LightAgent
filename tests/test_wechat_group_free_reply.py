@@ -23,6 +23,7 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
                 "wechat_group_free_reply_room_ids",
                 "wechat_group_free_reply_names",
                 "wechat_group_free_reply_activity_level",
+                "wechat_group_free_reply_stable_room_activity_levels",
                 "wechat_group_free_reply_mute_minutes",
                 "wechat_group_free_reply_mute_mentions_enabled",
                 "wechat_group_free_reply_queue_ttl_seconds",
@@ -64,6 +65,22 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
         cfg = get_wechat_group_free_reply_config()
 
         self.assertEqual(["小灯", "小风", "前夜"], cfg["force_keywords"])
+
+    def test_config_normalizes_stable_room_activity_levels(self):
+        conf()["wechat_group_free_reply_stable_room_activity_levels"] = {
+            " wgr_quiet ": "quiet",
+            "wgr_active": "active",
+            "room@@runtime": "crazy",
+            "wgr_invalid": "invalid",
+            "": "normal",
+        }
+
+        cfg = get_wechat_group_free_reply_config()
+
+        self.assertEqual(
+            {"wgr_quiet": "quiet", "wgr_active": "active"},
+            cfg["stable_room_activity_levels"],
+        )
 
     def test_config_normalizes_mute_mentions_switch(self):
         conf()["wechat_group_free_reply_mute_mentions_enabled"] = "true"
@@ -195,6 +212,92 @@ class WechatGroupFreeReplyDecisionTest(unittest.TestCase):
 
                 self.assertTrue(decision["triggered"])
                 self.assertIn("ai_opinion", decision["reasons"])
+
+    def test_room_activity_level_override_is_isolated_by_stable_room(self):
+        cfg = self.enabled_cfg()
+        cfg["room_ids"] = ["wgr_active", "wgr_quiet"]
+        cfg["activity_level"] = "normal"
+        cfg["stable_room_activity_levels"] = {
+            "wgr_active": "active",
+            "wgr_quiet": "quiet",
+        }
+        cfg["rule_scores"] = {"group_question": 0}
+
+        active_decision = evaluate_wechat_group_free_reply(
+            cfg,
+            room_id="wgr_active",
+            room_name="活跃群",
+            sender_id="wgm_alice",
+            sender_name="Alice",
+            text="AI怎么看",
+            recent_messages=[],
+            state={},
+            now=100000,
+            bot_names=["LightAgent"],
+        )
+        quiet_decision = evaluate_wechat_group_free_reply(
+            cfg,
+            room_id="wgr_quiet",
+            room_name="安静群",
+            sender_id="wgm_alice",
+            sender_name="Alice",
+            text="AI怎么看",
+            recent_messages=[],
+            state={},
+            now=100000,
+            bot_names=["LightAgent"],
+        )
+
+        self.assertTrue(active_decision["triggered"])
+        self.assertEqual("active", active_decision["activity_level"])
+        self.assertEqual(35, active_decision["threshold"])
+        self.assertFalse(quiet_decision["triggered"])
+        self.assertEqual("quiet", quiet_decision["activity_level"])
+        self.assertEqual(65, quiet_decision["threshold"])
+
+    def test_runtime_room_activity_level_override_is_ignored(self):
+        cfg = self.enabled_cfg()
+        cfg["activity_level"] = "normal"
+        cfg["stable_room_activity_levels"] = {"room@@abc": "crazy"}
+        cfg["rule_scores"] = {"group_question": 0}
+
+        decision = evaluate_wechat_group_free_reply(
+            cfg,
+            room_id="room@@abc",
+            room_name="测试群",
+            sender_id="wxid_alice",
+            sender_name="Alice",
+            text="AI怎么看",
+            recent_messages=[],
+            state={},
+            now=100000,
+            bot_names=["LightAgent"],
+        )
+
+        self.assertFalse(decision["triggered"])
+        self.assertEqual("normal", decision["activity_level"])
+        self.assertEqual(50, decision["threshold"])
+
+    def test_unmapped_room_uses_global_activity_level(self):
+        cfg = self.enabled_cfg()
+        cfg["activity_level"] = "active"
+        cfg["stable_room_activity_levels"] = {"wgr_other": "quiet"}
+
+        decision = evaluate_wechat_group_free_reply(
+            cfg,
+            room_id="room@@abc",
+            room_name="测试群",
+            sender_id="wxid_alice",
+            sender_name="Alice",
+            text="AI怎么看",
+            recent_messages=[],
+            state={},
+            now=100000,
+        )
+
+        self.assertTrue(decision["triggered"])
+        self.assertEqual("active", decision["activity_level"])
+        self.assertEqual(35, decision["threshold"])
 
     def test_repeater_message_adds_score_for_three_distinct_senders(self):
         cfg = self.enabled_cfg()

@@ -32,6 +32,7 @@ from channel.wechat_group.wechat_group_free_reply import (
     normalize_wechat_group_free_reply_profiles,
     normalize_wechat_group_free_reply_rule_enabled,
     normalize_wechat_group_free_reply_rule_scores,
+    normalize_wechat_group_free_reply_stable_room_activity_levels,
 )
 from channel.wechat_group.wechat_group_permissions import (
     DEFAULT_WECHAT_GROUP_ADMIN_REQUIRED_PERMISSIONS,
@@ -4629,6 +4630,7 @@ class ChannelsHandler:
             "wechat_group_free_reply_names",
             "wechat_group_free_reply_force_keywords",
             "wechat_group_free_reply_activity_level",
+            "wechat_group_free_reply_stable_room_activity_levels",
             "wechat_group_free_reply_mute_minutes",
             "wechat_group_free_reply_mute_mentions_enabled",
             "wechat_group_free_reply_queue_ttl_seconds",
@@ -4888,6 +4890,8 @@ class ChannelsHandler:
                 value = str(value or "normal").strip()
                 if value not in ("quiet", "normal", "active", "crazy"):
                     value = "normal"
+            elif key == "wechat_group_free_reply_stable_room_activity_levels":
+                value = normalize_wechat_group_free_reply_stable_room_activity_levels(value)
             elif key == "wechat_group_free_reply_mute_minutes":
                 value = cls._clamp_int(value, 1, 1440, 10)
             elif key == "wechat_group_free_reply_queue_ttl_seconds":
