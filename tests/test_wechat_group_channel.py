@@ -10,6 +10,7 @@ from agent.tools.base_tool import ToolResult
 from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from channel.channel_factory import create_channel
+from channel.chat_channel import ChatChannel
 from channel.wechat_group.protocol import SidecarEventType, parse_sidecar_event
 from channel.wechat_group.wechat_group_client import WechatGroupClient
 from channel.wechat_group.wechat_group_channel import (
@@ -1040,6 +1041,47 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual("wgr_room", archived["stable_room_id"])
         note_signal.assert_called_once()
         self.assertEqual("wgr_room", note_signal.call_args.args[0])
+
+    def test_missing_group_shared_session_defaults_to_member_isolated_wechat_sessions(self):
+        conf()["wechat_group_room_ids"] = []
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_names"] = []
+        conf()["group_name_white_list"] = []
+        conf().pop("group_shared_session", None)
+        channel = WechatGroupChannel(client=FakeClient())
+
+        def compose_for_member(runtime_member_id, stable_member_id):
+            msg = Mock(
+                ctype=ContextType.TEXT,
+                content="@LightBot hello",
+                from_user_id="room@@runtime",
+                other_user_id="room@@runtime",
+                other_user_nickname="测试群",
+                actual_user_id=runtime_member_id,
+                actual_user_nickname="Member",
+                to_user_id="wxid_bot",
+                is_at=True,
+                at_list=["wxid_bot"],
+                self_display_name="LightBot",
+            )
+            return ChatChannel._compose_context(
+                channel,
+                ContextType.TEXT,
+                msg.content,
+                isgroup=True,
+                msg=msg,
+                channel_type="wechat_group",
+                wechat_group_stable_room_id="wgr_room",
+                wechat_group_stable_member_id=stable_member_id,
+                wechat_group_force_reply=True,
+            )
+
+        alice = compose_for_member("wxid_alice", "wgm_alice")
+        bob = compose_for_member("wxid_bob", "wgm_bob")
+
+        self.assertEqual("wechat_group:wgr_room:wgm_alice", alice["session_id"])
+        self.assertEqual("wechat_group:wgr_room:wgm_bob", bob["session_id"])
+        self.assertNotEqual(alice["session_id"], bob["session_id"])
 
     def test_wechat_group_scheduler_request_sets_scheduler_intent(self):
         conf()["wechat_group_room_ids"] = ["room@@allowed"]
@@ -3797,7 +3839,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
         self.assertEqual("room@@abc", context["receiver"])
-        self.assertEqual("room@@abc", context["session_id"])
+        self.assertEqual("wxid_alice", context["session_id"])
         self.assertTrue(context.content.endswith("哪里的用户名"))
         self.assertTrue(context["wechat_group_free_reply_triggered"])
 
