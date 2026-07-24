@@ -68,3 +68,4 @@ desktop/build/*
 desktop/resources/.icon-work/
 /$null
 plans
+/SERVER_ACCESS.md

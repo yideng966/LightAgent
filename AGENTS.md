@@ -103,6 +103,8 @@ npm run dev:hot
 
 ## Docker 构建与部署
 
+> **连接实际部署环境**：如需登录已部署的服务器进行运维、日志调查或更新部署，请参考 [SERVER_ACCESS.md](./SERVER_ACCESS.md)。该文档包含 SSH 连接信息、Docker 容器管理命令及常见运维场景。
+
 LightAgent 通过 `docker/Dockerfile.latest` 提供全功能 Docker 镜像，包含 Python 运行时、微信侧车 (Node.js Wechaty) 和可选的 Playwright/Chromium 浏览器引擎。简化的根 `Dockerfile` 基于预构建镜像 `ghcr.io/yideng966/lightagent:latest`，仅用于快速继承上游。
 
 ### 关键文件
