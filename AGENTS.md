@@ -103,7 +103,7 @@ npm run dev:hot
 
 ## Docker 构建与部署
 
-LightAgent 通过 `docker/Dockerfile.latest` 提供全功能 Docker 镜像，包含 Python 运行时、微信侧车 (Node.js Wechaty) 和可选的 Playwright/Chromium 浏览器引擎。简化的根 `Dockerfile` 基于预构建镜像 `ghcr.io/zhayujie/chatgpt-on-wechat:latest`，仅用于快速继承上游。
+LightAgent 通过 `docker/Dockerfile.latest` 提供全功能 Docker 镜像，包含 Python 运行时、微信侧车 (Node.js Wechaty) 和可选的 Playwright/Chromium 浏览器引擎。简化的根 `Dockerfile` 基于预构建镜像 `ghcr.io/yideng966/lightagent:latest`，仅用于快速继承上游。
 
 ### 关键文件
 
