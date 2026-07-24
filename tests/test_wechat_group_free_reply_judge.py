@@ -63,9 +63,10 @@ class WechatGroupFreeReplyJudgeTest(unittest.TestCase):
 
     def test_judge_uses_bridge_and_parses_reply(self):
         bridge = Mock()
-        bridge.fetch_reply_content.return_value = (
-            '{"should_reply": true, "confidence": 0.8, "reason": "可接话", "tone": "natural"}'
-        )
+        bridge.complete_text.return_value = {
+            "success": True,
+            "content": '{"should_reply": true, "confidence": 0.8, "reason": "可接话", "tone": "natural"}',
+        }
         judge = WechatGroupFreeReplyJudge(bridge=bridge)
 
         result = judge.judge(
@@ -80,7 +81,23 @@ class WechatGroupFreeReplyJudgeTest(unittest.TestCase):
         )
 
         self.assertTrue(result["approved"])
-        bridge.fetch_reply_content.assert_called_once()
+        bridge.complete_text.assert_called_once()
+        self.assertEqual(
+            "wechat_group_free_reply_judge",
+            bridge.complete_text.call_args.kwargs["purpose"],
+        )
+
+    def test_judge_rejects_failed_stateless_completion(self):
+        bridge = Mock()
+        bridge.complete_text.return_value = {"success": False, "content": "rate limit"}
+
+        result = WechatGroupFreeReplyJudge(bridge=bridge).judge(
+            {"room_id": "room@@abc", "text": "hello", "local_decision": {}},
+            {"llm_judge_min_confidence": 0.6},
+        )
+
+        self.assertFalse(result["approved"])
+        self.assertEqual("model_error", result["error"])
 
 
 if __name__ == "__main__":

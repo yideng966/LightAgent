@@ -103,7 +103,7 @@ class Tool(Plugin):
                         break
 
                 # Don't modify bot name
-                all_sessions = Bridge().get_bot("chat").sessions
+                all_sessions = Bridge().get_chat_sessions()
                 user_session = all_sessions.session_query(query, e_context["context"]["session_id"]).messages
 
                 logger.debug("[tool]: just-go")

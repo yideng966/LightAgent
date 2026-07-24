@@ -1448,9 +1448,18 @@ class WechatGroupChannel(ChatChannel):
             try:
                 from agent.memory.manager import MemoryManager
                 from agent.memory import create_default_embedding_provider
+                from bridge.bridge import Bridge
 
+                text_model = None
+                try:
+                    text_model = Bridge().get_text_model_router()
+                except Exception as e:
+                    logger.warning(
+                        "[wechat_group] shared text router unavailable for memory summaries: {}".format(e)
+                    )
                 self.memory_service.memory_manager = MemoryManager(
-                    embedding_provider=create_default_embedding_provider()
+                    embedding_provider=create_default_embedding_provider(),
+                    llm_model=text_model,
                 )
             except Exception:
                 self.memory_service.memory_manager = None

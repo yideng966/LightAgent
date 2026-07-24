@@ -31,6 +31,16 @@ class FakeCallModel:
         return self.response
 
 
+class FakeCompleteModel:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def complete(self, messages, purpose):
+        self.calls.append((messages, purpose))
+        return self.response
+
+
 class WechatGroupProfileLlmExtractorTest(unittest.TestCase):
     def test_prompt_and_result_use_only_opaque_member_tokens(self):
         model = FakeModel(
@@ -136,6 +146,38 @@ class WechatGroupProfileLlmExtractorTest(unittest.TestCase):
 
         self.assertEqual("member_001", result["profiles"][0]["member_token"])
         self.assertEqual("wechat-group-profile-evolution", extractor.model.requests[0].metadata["source"])
+
+    def test_extractor_uses_structured_stateless_completion(self):
+        model = FakeCompleteModel({
+            "success": True,
+            "content": '{"profiles":[{"member_token":"member_001"}]}',
+        })
+        extractor = WechatGroupProfileLlmExtractor(model=model)
+
+        result = extractor.extract(
+            "wgr_a",
+            "Group A",
+            [{"message_id": "m1", "member_token": "member_001", "text": "hello"}],
+            [],
+        )
+
+        self.assertEqual("member_001", result["profiles"][0]["member_token"])
+        messages, purpose = model.calls[0]
+        self.assertEqual("wechat_group_profile_evolution", purpose)
+        self.assertEqual("user", messages[0]["role"])
+
+    def test_extractor_classifies_failed_stateless_completion(self):
+        model = FakeCompleteModel({
+            "success": False,
+            "content": "service unavailable",
+            "raw": {"error": True, "message": "service unavailable", "status_code": 503},
+        })
+
+        with self.assertRaises(WechatGroupProfileExtractionError) as cm:
+            WechatGroupProfileLlmExtractor(model=model).extract("wgr_a", "Group A", [], [])
+
+        self.assertTrue(cm.exception.transient)
+        self.assertEqual(503, cm.exception.status_code)
 
     def test_extractor_classifies_model_error_before_json_parse(self):
         extractor = WechatGroupProfileLlmExtractor(

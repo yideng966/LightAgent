@@ -83,10 +83,20 @@ class KnowledgeService:
             # Reuse the shared embedding provider selection so knowledge index
             # sync gets vectors too, instead of degrading to keyword-only.
             from agent.memory.embedding import create_default_embedding_provider
+            from bridge.bridge import Bridge
             embedding_provider = create_default_embedding_provider()
+            text_model = None
+            try:
+                text_model = Bridge().get_text_model_router()
+            except Exception as e:
+                logger.warning(
+                    "[KnowledgeService] Shared text router unavailable for memory summaries: %s",
+                    e,
+                )
             self._memory_manager = MemoryManager(
                 MemoryConfig(workspace_root=self.workspace_root),
                 embedding_provider=embedding_provider,
+                llm_model=text_model,
             )
         return self._memory_manager
 

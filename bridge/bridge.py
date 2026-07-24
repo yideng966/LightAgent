@@ -1,5 +1,5 @@
 from models.bot_factory import create_bot
-from bridge.context import Context
+from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
@@ -90,6 +90,8 @@ class Bridge(object):
         self.chat_bots = {}
         self._agent_bridge = None
         self._agent_model_failover_state = None
+        self._text_model_router = None
+        self._text_model_sessions = None
 
     def refresh_voice(self):
         """Re-read voice_to_text / text_to_voice from config and drop the
@@ -153,7 +155,30 @@ class Bridge(object):
         return self.btype[typename]
 
     def fetch_reply_content(self, query, context: Context) -> Reply:
+        # Only text inference participates in the global fallback chain.
+        # Image generation, vision, voice and other capabilities retain their
+        # dedicated providers and configuration.
+        if context is not None and context.type == ContextType.TEXT:
+            return self.get_text_model_router().reply(query, context)
         return self.get_bot("chat").reply(query, context)
+
+    def get_text_model_router(self):
+        if self._text_model_router is None:
+            from bridge.agent_bridge import TextModelRouter
+            self._text_model_router = TextModelRouter(self)
+        return self._text_model_router
+
+    def complete_text(self, messages, purpose="text", system="", max_tokens=None):
+        return self.get_text_model_router().complete(
+            messages,
+            purpose=purpose,
+            system=system,
+            max_tokens=max_tokens,
+        )
+
+    def get_chat_sessions(self):
+        """Canonical text history for legacy plugins and normal chat mode."""
+        return self.get_text_model_router().sessions
 
     def fetch_voice_to_text(self, voiceFile) -> Reply:
         try:

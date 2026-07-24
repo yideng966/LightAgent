@@ -316,7 +316,7 @@ class Godcmd(Plugin):
                         ok, result = False, "你没有设置私有GPT模型"
                 elif cmd == "reset":
                     if bottype in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.LINKAI, const.BAIDU, const.QIANFAN, const.XUNFEI, const.QWEN, const.QWEN_DASHSCOPE, const.GEMINI, const.ZHIPU_AI, const.CLAUDEAPI]:
-                        bot.sessions.clear_session(session_id)
+                        Bridge().get_chat_sessions().clear_session(session_id)
                         if Bridge().chat_bots.get(bottype):
                             Bridge().chat_bots.get(bottype).sessions.clear_session(session_id)
                         channel.cancel_session(session_id)
@@ -344,7 +344,7 @@ class Godcmd(Plugin):
                                            const.BAIDU, const.QIANFAN, const.XUNFEI, const.QWEN, const.QWEN_DASHSCOPE, const.GEMINI, const.ZHIPU_AI, const.MOONSHOT,
                                            const.MODELSCOPE]:
                                 channel.cancel_all_session()
-                                bot.sessions.clear_all_session()
+                                Bridge().get_chat_sessions().clear_all_session()
                                 ok, result = True, "重置所有会话成功"
                             else:
                                 ok, result = False, "当前对话机器人不支持重置会话"

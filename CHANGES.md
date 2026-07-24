@@ -638,6 +638,14 @@
 
 ### Agent 模型故障熔断与界面说明
 
+- 将 Agent 已有的模型 fallback 与熔断能力抽取为共享 `TextModelRouter`，普通聊天、Agent 推理和会话标题统一使用同一候选顺序与运行时熔断状态；图片、视觉、语音和翻译仍走独立 Provider。
+- 普通聊天改用 Provider-neutral 会话历史，失败候选不会写入错误内容，只有最终成功回复会原子提交；角色扮演、文字冒险、Tool 和会话重置插件同步切换到共享会话存储。
+- Web 模型页支持拖拽或上下按钮调整备用模型优先级，并可保存 3、4、5 三档连续失败阈值。
+- 新增 `tests/test_text_model_router.py`，并扩展模型 API 和控制台合同测试。
+- 界面验收截图：`docs/images/text-model-failover-settings.png`。
+
+验证记录：文本路由、Agent fallback、模型 API 和控制台核心定向回归 60 项通过；记忆/知识/画像/自由回复定向回归 38 项通过；微信群消息、通道与 Web 组合回归 225 项通过；语音、图片与模型隔离回归 63 项通过；画像提取与演进回归 18 项通过；Python 编译、JavaScript 语法和差异格式检查通过。全量回归运行 887 项，其中 875 项通过、3 项跳过，8 项因当前虚拟环境缺少 `pytest`、`dashscope`、`PyYAML`、`croniter`、`Pillow` 而导入失败，另有 1 项既有缓存版本断言失败，均与本次改动无关。静态 Web 控制台已完成浏览器加载检查；真实 `/api/models` 支持下的拖拽保存未作为浏览器端到端通过项，排序合同和持久化由前端合同及后端接口测试覆盖。
+
 - 更新 `bridge/agent_bridge.py` 与 `bridge/bridge.py`：保留当前请求首次临时故障立即 fallback 的行为，并按 `bot_type + model` 跨会话记录主模型连续故障；默认连续 3 次后熔断 300 秒，冷却结束只允许一个并发请求试探主模型，成功后自动恢复；Bridge 重置时清空运行时状态。
 - 更新 `agent/protocol/agent_stream.py`：备用模型链全部耗尽时使用结构化标记终止 Agent 外层整链重试，避免重复请求主备模型并等待 30/45/60 秒。
 - 更新 `config.py`、`config-template.json` 与 `channel/web/web_channel.py`：新增 `model_failover_failure_threshold`、`model_failover_cooldown_seconds` 默认配置，并向模型管理页返回实际生效参数。

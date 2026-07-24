@@ -157,7 +157,6 @@ def get_wechat_group_profile_evolution_trigger() -> WechatGroupProfileEvolutionT
     global _default_trigger
     with _default_lock:
         if _default_trigger is None:
-            from bridge.agent_bridge import AgentLLMModel
             from bridge.bridge import Bridge
             from channel.wechat_group.wechat_group_profile_llm_extractor import (
                 WechatGroupProfileLlmExtractor,
@@ -166,7 +165,9 @@ def get_wechat_group_profile_evolution_trigger() -> WechatGroupProfileEvolutionT
             store = WechatGroupProfileEvolutionStore()
             executor = WechatGroupProfileEvolutionExecutor(
                 evolution_store=store,
-                extractor=WechatGroupProfileLlmExtractor(model=AgentLLMModel(Bridge())),
+                extractor=WechatGroupProfileLlmExtractor(
+                    model=Bridge().get_text_model_router(),
+                ),
                 batch_message_limit=conf().get("wechat_group_profile_evolution_batch_message_limit", 200),
             )
             _default_trigger = WechatGroupProfileEvolutionTrigger(

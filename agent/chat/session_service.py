@@ -31,22 +31,19 @@ def _truncate_fallback_title(user_message: str, max_len: int = 30) -> str:
 
 def generate_session_title(user_message: str, assistant_reply: str = "") -> str:
     """
-    Generate a short session title by calling the current bot's reply_text.
+    Generate a short session title through the shared text model router.
     Falls back to the first line of the user message if the LLM call fails
     or returns an obvious error sentinel.
     """
     fallback = _truncate_fallback_title(user_message)
     try:
         from bridge.bridge import Bridge
-        from models.session_manager import Session
-        bot = Bridge().get_bot("chat")
 
         prompt_parts = [f"User: {user_message[:300]}"]
         if assistant_reply:
             prompt_parts.append(f"Assistant: {assistant_reply[:300]}")
 
-        session = Session("__title_gen__", system_prompt="")
-        session.messages = [
+        messages = [
             {"role": "user", "content": (
                 "Generate a very short title (max 15 characters for Chinese, max 6 words for English) "
                 "summarizing this conversation. Return ONLY the title text, nothing else.\n\n"
@@ -54,7 +51,7 @@ def generate_session_title(user_message: str, assistant_reply: str = "") -> str:
             )}
         ]
 
-        result = bot.reply_text(session) or {}
+        result = Bridge().complete_text(messages, purpose="session_title") or {}
         # When bots fail (network error, auth error, rate limit, etc.) they
         # typically return completion_tokens=0 with a sentinel content like
         # "请再问我一次吧" / "我现在有点累了". Treat that as failure.
