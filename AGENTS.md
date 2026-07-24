@@ -190,7 +190,7 @@ docker run -d \
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `WEB_PASSWORD` | 自动生成并持久化 | Web 控制台登录密码。未设置时 entrypoint 用 `secrets.token_urlsafe(18)` 生成随机密码，写入 `config.json` 并打印到日志 |
+| `WEB_PASSWORD` | 自动生成并持久化 | Web 控制台登录密码。未设置时 entrypoint 用 `secrets.token_urlsafe(18)` 生成随机密码，写入 `config.json` 并打印到日志。 |
 | `WEB_HOST` | `0.0.0.0` | Web 服务绑定地址 |
 | `LIGHTAGENT_DATA_DIR` | `/home/agent/.lightagent` | 配置与运行时数据目录 |
 | `CHATGPT_ON_WECHAT_PREFIX` | `/app` | 应用根目录 |
