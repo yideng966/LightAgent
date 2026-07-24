@@ -8,6 +8,7 @@ services:
     ports:
       - "9899:9899"
     environment:
+      TZ: 'Asia/Shanghai'
       LIGHTAGENT_DATA_DIR: /home/agent/.lightagent
       IMAGE_OUTPUT_DIR: /home/agent/lightagent/images
       WEB_HOST: "0.0.0.0"
