@@ -9,6 +9,7 @@ services:
       - "9899:9899"
     environment:
       LIGHTAGENT_DATA_DIR: /home/agent/.lightagent
+      IMAGE_OUTPUT_DIR: /home/agent/lightagent/images
       WEB_HOST: "0.0.0.0"
       WEB_PASSWORD: "${WEB_PASSWORD:-__LIGHTAGENT_AUTO_GENERATE__}"
     volumes:

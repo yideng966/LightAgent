@@ -142,6 +142,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_sticker_enabled": conf().get("wechat_group_sticker_enabled"),
             "wechat_group_sticker_auto_collect_enabled": conf().get("wechat_group_sticker_auto_collect_enabled"),
             "image_create_prefix": conf().get("image_create_prefix"),
+            "agent_workspace": conf().get("agent_workspace"),
             "agent": conf().get("agent"),
             "skills": conf().get("skills"),
             "tools": conf().get("tools"),
@@ -1819,7 +1820,10 @@ class WechatGroupChannelTest(unittest.TestCase):
             stdout='{"images":[{"url":"D:/tmp/rabbit.png"}]}',
             stderr="",
         )
-        with patch("channel.channel.subprocess.run", return_value=completed) as run:
+        with tempfile.TemporaryDirectory() as workspace, \
+                patch.dict(os.environ, {"IMAGE_OUTPUT_DIR": ""}, clear=False), \
+                patch("channel.channel.subprocess.run", return_value=completed) as run:
+            conf()["agent_workspace"] = workspace
             reply = channel._build_image_create_reply("a rabbit", context)
 
         self.assertEqual(ReplyType.IMAGE, reply.type)
@@ -1838,6 +1842,34 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual(
             "utf-8",
             run.call_args.kwargs.get("env", {}).get("PYTHONIOENCODING"),
+        )
+        self.assertEqual(
+            os.path.realpath(os.path.join(workspace, "images")),
+            run.call_args.kwargs.get("env", {}).get("IMAGE_OUTPUT_DIR"),
+        )
+
+    def test_image_create_script_runner_preserves_explicit_output_dir(self):
+        channel = WechatGroupChannel(client=FakeClient())
+        context = Context(ContextType.IMAGE_CREATE, "a rabbit")
+        completed = Mock(
+            returncode=0,
+            stdout='{"images":[{"url":"D:/tmp/rabbit.png"}]}',
+            stderr="",
+        )
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            output_dir = os.path.join(tmpdir, "custom-images")
+            with patch.dict(
+                os.environ,
+                {"IMAGE_OUTPUT_DIR": output_dir},
+                clear=False,
+            ), patch("channel.channel.subprocess.run", return_value=completed) as run:
+                reply = channel._build_image_create_reply("a rabbit", context)
+
+        self.assertEqual(ReplyType.IMAGE, reply.type)
+        self.assertEqual(
+            os.path.realpath(output_dir),
+            run.call_args.kwargs.get("env", {}).get("IMAGE_OUTPUT_DIR"),
         )
 
     def test_image_create_script_payload_preserves_empty_proxy_domains(self):

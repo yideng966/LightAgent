@@ -10,6 +10,8 @@ CHATGPT_ON_WECHAT_EXEC=${CHATGPT_ON_WECHAT_EXEC:-""}
 # writable config and private runtime data
 LIGHTAGENT_DATA_DIR=${LIGHTAGENT_DATA_DIR:-"/home/agent/.lightagent"}
 export LIGHTAGENT_DATA_DIR
+IMAGE_OUTPUT_DIR=${IMAGE_OUTPUT_DIR:-"/home/agent/lightagent/images"}
+export IMAGE_OUTPUT_DIR
 AUTO_WEB_PASSWORD_SENTINEL="__LIGHTAGENT_AUTO_GENERATE__"
 
 # use environment variables to pass parameters
@@ -80,7 +82,7 @@ PY
 }
 
 prepare_runtime_dirs() {
-    mkdir -p "$LIGHTAGENT_DATA_DIR" /home/agent/lightagent
+    mkdir -p "$LIGHTAGENT_DATA_DIR" /home/agent/lightagent "$IMAGE_OUTPUT_DIR"
     if [ ! -f "$LIGHTAGENT_DATA_DIR/config.json" ]; then
         cp "$CHATGPT_ON_WECHAT_PREFIX/config-template.json" \
            "$LIGHTAGENT_DATA_DIR/config.json"
@@ -94,7 +96,8 @@ if [ "$(id -u)" = "0" ]; then
     chown agent:agent \
         "$LIGHTAGENT_DATA_DIR" \
         "$LIGHTAGENT_DATA_DIR/config.json" \
-        /home/agent/lightagent
+        /home/agent/lightagent \
+        "$IMAGE_OUTPUT_DIR"
     exec su agent -s /bin/bash -c \
         "cd $CHATGPT_ON_WECHAT_PREFIX && exec $CHATGPT_ON_WECHAT_EXEC"
 fi

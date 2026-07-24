@@ -355,6 +355,43 @@ class WebChannel(ChatChannel):
                     logger.debug(f"SSE phase for request {request_id}")
                     return
 
+                # Deterministic image generation does not pass through the
+                # Agent file_to_send callback. Emit the attachment explicitly
+                # and then finish the SSE request instead of rendering a local
+                # filesystem path as plain text.
+                if (
+                    context.type == ContextType.IMAGE_CREATE
+                    and reply.type in (ReplyType.IMAGE, ReplyType.IMAGE_URL)
+                ):
+                    image_url = content
+                    local_path = ""
+                    if content.startswith("file://"):
+                        local_path = content[7:]
+                    elif reply.type == ReplyType.IMAGE:
+                        local_path = content
+                    if local_path:
+                        from urllib.parse import quote
+                        image_url = f"/api/file?path={quote(local_path)}"
+
+                    now = time.time()
+                    self.sse_queues[request_id].put({
+                        "type": "image",
+                        "content": image_url,
+                        "request_id": request_id,
+                        "timestamp": now,
+                    })
+                    seqs = self._fetch_latest_pair_seqs(session_id)
+                    self.sse_queues[request_id].put({
+                        "type": "done",
+                        "content": getattr(reply, "text_content", "") or "",
+                        "request_id": request_id,
+                        "timestamp": now,
+                        "user_seq": seqs.get("user_seq"),
+                        "bot_seq": seqs.get("bot_seq"),
+                    })
+                    logger.debug(f"SSE image and done sent for request {request_id}")
+                    return
+
                 # Files are already pushed via on_event (file_to_send) during agent execution.
                 # Skip duplicate file pushes here; just let the done event through.
                 if reply.type in (ReplyType.IMAGE_URL, ReplyType.FILE) and content.startswith("file://"):

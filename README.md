@@ -52,7 +52,7 @@ docker compose up -d
 docker compose logs lightagent
 ```
 
-未设置 `WEB_PASSWORD` 时，首次启动会生成强随机密码并保存到 `./config/config.json`，`docker compose logs lightagent` 会输出该密码；如需预先指定，可将 `docker/.env.example` 复制为 Compose 同目录的 `.env` 后修改。镜像已内置 Node.js、Wechaty sidecar 和锁定后的 npm 依赖，Docker 宿主机无需安装 Node.js 或运行 `npm install`。Compose 会在当前目录创建 `./config` 与 `./data`：前者保存配置、密钥、日志、插件配置与用户插件、微信登录态、媒体和群数据库，后者保存 Agent workspace、记忆、知识库、技能、MCP 和 scheduler。不要挂载 `/app`，应用代码与 sidecar 依赖应随镜像升级。
+未设置 `WEB_PASSWORD` 时，首次启动会生成强随机密码并保存到 `./config/config.json`，`docker compose logs lightagent` 会输出该密码；如需预先指定，可将 `docker/.env.example` 复制为 Compose 同目录的 `.env` 后修改。镜像已内置 Node.js、Wechaty sidecar 和锁定后的 npm 依赖，Docker 宿主机无需安装 Node.js 或运行 `npm install`。Compose 会在当前目录创建 `./config` 与 `./data`：前者保存配置、密钥、日志、插件配置与用户插件、微信登录态、媒体和群数据库，后者保存 Agent workspace、记忆、知识库、技能、MCP 和 scheduler，生成图片位于 `./data/images`。不要挂载 `/app`，应用代码与 sidecar 依赖应随镜像升级。
 
 启动后访问：
 

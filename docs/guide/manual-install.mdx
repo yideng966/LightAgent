@@ -126,7 +126,7 @@ sudo docker logs -f lightagent
 Compose uses two persistent directories relative to `docker-compose.yml`:
 
 - `./config` mounts at `/home/agent/.lightagent`. It stores `config.json`, secrets, logs, plugin configuration and user-installed plugins, WeChat login state, media, and group databases. Despite its name, it is not only a configuration-file directory; back it up as a whole.
-- `./data` mounts at `/home/agent/lightagent`. It stores the Agent workspace, memories, knowledge base, skills, MCP configuration, and scheduler data.
+- `./data` mounts at `/home/agent/lightagent`. It stores the Agent workspace, memories, knowledge base, skills, MCP configuration, and scheduler data. Generated images are persisted in `./data/images` (`/home/agent/lightagent/images` inside the container).
 - `/app` belongs to the image and contains application code, Playwright, and sidecar `node_modules`. Do not mount a volume over it.
 
 Compose binds the Web service to `0.0.0.0` and generates a password when one is not supplied. Restrict inbound port `9899` in your firewall or security group when exposing it publicly. Restarting or recreating the container does not overwrite `./config` or `./data`.

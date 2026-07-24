@@ -1,5 +1,38 @@
 # CHANGES
 
+## 2026-07-24
+
+### Docker 生图持久化与 Web 图片发送修复
+
+- 修正确确定性生图输出目录：显式 `IMAGE_OUTPUT_DIR` 继续优先；未配置时统一解析到 `<agent_workspace>/images`，不再因子进程工作目录为项目根目录而写入 Docker 的 `/app/images`。
+- Docker Compose 和 entrypoint 显式使用 `/home/agent/lightagent/images`，启动时创建目录并调整为 `agent` 用户所有；宿主机通过现有 `./data` 卷在 `./data/images` 持久化生图结果。
+- Web SSE 对 `ContextType.IMAGE_CREATE` 的本地图片发送 `/api/file` 图片事件，并追加 `done` 事件正常结束请求；Agent 工具既有 `file_to_send` 去重链路保持不变。
+- 同步审计语音识别路径：微信群媒体位于 `./config/wechat_group/media`，其他渠道临时语音位于 `./data/tmp`，没有写入 `/app` 的同类问题；实测微信 `.sil` 扩展名下的 MP3 内容可转换为 16 kHz 单声道 WAV。
+- 新增输出目录覆盖、Docker 挂载范围和 Web SSE 图片事件回归测试；更新协作规则与开发计划，防止持久化路径回退。
+
+关键文件：
+
+- `channel/channel.py`
+- `channel/web/web_channel.py`
+- `docker/docker-compose.yml`
+- `docker/entrypoint.sh`
+- `tests/test_wechat_group_channel.py`
+- `tests/test_web_image_reply.py`
+- `tests/test_docker_deployment.py`
+- `AGENTS.md`
+- `plans/20260724_Docker生图路径修复.md`
+- `README.md`
+- `docs/*/guide/manual-install.mdx`
+
+验证记录：
+
+- 定向生图、Web SSE 与 Docker 合同测试：10 项通过。
+- 语音识别审计回归：33 项 Python 测试与 49 项 sidecar 测试通过；真实微信媒体格式探测和 WAV 转换通过。
+- 微信群组合回归：220 项通过；全量 Python 回归：866 项通过。
+- Compose 展开验证通过，`IMAGE_OUTPUT_DIR` 位于 `/home/agent/lightagent` 挂载范围内。
+- `git diff --check`、Python 编译与 `docker/entrypoint.sh` Shell 语法检查通过。
+- 本机 Docker Desktop Linux 引擎未运行，镜像构建和容器内持久化 smoke 未执行。
+
 ## 2026-07-23
 
 ### Docker 镜像开箱即用与双目录持久化

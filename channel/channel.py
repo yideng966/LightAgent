@@ -11,6 +11,7 @@ from bridge.bridge import Bridge
 from bridge.context import Context, ContextType
 from bridge.reply import *
 from common.log import logger
+from common.utils import expand_path
 from config import conf
 
 
@@ -162,6 +163,19 @@ class Channel(object):
 
         child_env = os.environ.copy()
         child_env["PYTHONIOENCODING"] = "utf-8"
+        configured_output_dir = str(child_env.get("IMAGE_OUTPUT_DIR") or "").strip()
+        if configured_output_dir:
+            image_output_dir = os.path.expanduser(configured_output_dir)
+            if not os.path.isabs(image_output_dir):
+                image_output_dir = os.path.join(project_root, image_output_dir)
+        else:
+            workspace_root = expand_path(conf().get("agent_workspace", "~/lightagent"))
+            image_output_dir = os.path.join(workspace_root, "images")
+        child_env["IMAGE_OUTPUT_DIR"] = os.path.realpath(image_output_dir)
+        logger.info(
+            "[Channel] image generation output directory: %s",
+            child_env["IMAGE_OUTPUT_DIR"],
+        )
         try:
             completed = subprocess.run(
                 [sys.executable, script, json.dumps(payload, ensure_ascii=False)],

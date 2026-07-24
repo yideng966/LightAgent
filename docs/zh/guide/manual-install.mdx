@@ -142,7 +142,7 @@ sudo docker logs -f lightagent
 Compose 使用两个相对于 `docker-compose.yml` 的持久化目录：
 
 - `./config` 挂载到 `/home/agent/.lightagent`，保存 `config.json`、密钥、日志、插件配置与用户安装插件、微信登录态、媒体和群数据库；它不只是单一配置文件目录，必须整体备份。
-- `./data` 挂载到 `/home/agent/lightagent`，保存 Agent workspace、记忆、知识库、技能、MCP 和 scheduler。
+- `./data` 挂载到 `/home/agent/lightagent`，保存 Agent workspace、记忆、知识库、技能、MCP 和 scheduler；生成图片位于 `./data/images`，容器内路径为 `/home/agent/lightagent/images`。
 - `/app` 是随镜像升级的应用目录，包含项目代码、Playwright 和 sidecar `node_modules`，不要给它添加 volume。
 
 Compose 已让 Web 服务监听 `0.0.0.0`，并在未提供密码时自动生成密码。若需要公网访问，还应在防火墙或安全组中限制 `9899` 的来源 IP。重启或重建容器不会覆盖 `./config` 和 `./data`。

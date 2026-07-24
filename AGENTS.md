@@ -101,6 +101,148 @@ Set-Location -LiteralPath .\desktop
 npm run dev:hot
 ```
 
+## Docker 构建与部署
+
+LightAgent 通过 `docker/Dockerfile.latest` 提供全功能 Docker 镜像，包含 Python 运行时、微信侧车 (Node.js Wechaty) 和可选的 Playwright/Chromium 浏览器引擎。简化的根 `Dockerfile` 基于预构建镜像 `ghcr.io/zhayujie/chatgpt-on-wechat:latest`，仅用于快速继承上游。
+
+### 关键文件
+
+| 文件 | 用途 |
+|------|------|
+| `Dockerfile`（根） | 基于上游预构建镜像的简化入口，仅设置 `ENTRYPOINT` |
+| `docker/Dockerfile.latest` | 多阶段构建文件，从源码生成独立运行镜像 |
+| `docker/docker-compose.yml` | 本地启动编排，映射端口 9899，挂载配置和数据卷 |
+| `docker/entrypoint.sh` | 容器入口脚本，负责初始配置生成、密码管理和运行时目录准备 |
+| `docker/build.latest.sh` | 构建脚本，从 `docker/` 目录运行 `cd .. && docker build -f docker/Dockerfile.latest ...` |
+| `docker/.env.example` | 环境变量参考，可覆盖 Web 控制台密码 |
+| `.dockerignore` | 排除 `.git`、`.worktrees/`、`node_modules`、`__pycache__`、日志、临时文件等 |
+
+### 构建参数
+
+`docker/Dockerfile.latest` 支持以下 `--build-arg`：
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `INSTALL_BROWSER` | `true` | 是否安装 Playwright/Chromium。设为 `false` 可大幅减小镜像体积并加速构建 |
+| `USE_CN_MIRROR` | `false` | 是否使用清华 apt/pip/Playwright 镜像（国内构建更快） |
+| `TZ` | `Asia/Shanghai` | 容器时区 |
+| `CHATGPT_ON_WECHAT_VER` | 无 | LightAgent 版本标签 |
+
+### 构建镜像
+
+**完整构建（含 Chromium，镜像约 2–3 GB，耗时 10–30 分钟）：**
+
+```bash
+docker build -f docker/Dockerfile.latest -t yideng966/lightagent .
+```
+
+**快速构建（跳过浏览器，适用于仅需 API/CLI/Web 功能的场景，镜像约 800 MB–1.2 GB）：**
+
+```bash
+docker build -f docker/Dockerfile.latest \
+  --build-arg INSTALL_BROWSER=false \
+  -t yideng966/lightagent .
+```
+
+**使用中国镜像加速（可选）：**
+
+```bash
+docker build -f docker/Dockerfile.latest \
+  --build-arg INSTALL_BROWSER=false \
+  --build-arg USE_CN_MIRROR=true \
+  -t yideng966/lightagent .
+```
+
+### Docker Compose 启动（推荐）
+
+1. 确保已构建或拉取镜像 `yideng966/lightagent:latest`
+2. 进入 `docker/` 目录并启动：
+
+```bash
+cd docker
+docker compose up -d
+```
+
+3. 查看启动日志，获取自动生成的 Web 控制台密码（如未通过 `WEB_PASSWORD` 环境变量预设）：
+
+```bash
+docker compose logs lightagent | grep "Web console password"
+```
+
+4. 浏览器访问 `http://localhost:9899`，使用上述密码登录 Web 控制台。
+
+首次启动时，`docker compose` 会自动在宿主机 `docker/` 下创建 `config/` 和 `data/` 目录，分别映射到容器内的 `/home/agent/.lightagent` 和 `/home/agent/lightagent`。
+
+### Docker CLI 直接启动
+
+```bash
+docker run -d \
+  --name lightagent \
+  --security-opt seccomp:unconfined \
+  -p 9899:9899 \
+  -e WEB_HOST="0.0.0.0" \
+  -v ./docker/config:/home/agent/.lightagent \
+  -v ./docker/data:/home/agent/lightagent \
+  yideng966/lightagent:latest
+```
+
+### 环境变量
+
+| 变量 | 默认值 | 说明 |
+|------|--------|------|
+| `WEB_PASSWORD` | 自动生成并持久化 | Web 控制台登录密码。未设置时 entrypoint 用 `secrets.token_urlsafe(18)` 生成随机密码，写入 `config.json` 并打印到日志 |
+| `WEB_HOST` | `0.0.0.0` | Web 服务绑定地址 |
+| `LIGHTAGENT_DATA_DIR` | `/home/agent/.lightagent` | 配置与运行时数据目录 |
+| `CHATGPT_ON_WECHAT_PREFIX` | `/app` | 应用根目录 |
+| `CHATGPT_ON_WECHAT_EXEC` | `python app.py` | 容器启动命令 |
+
+其他 LLM API Key、渠道配置等环境变量（如 `OPEN_AI_API_KEY`、`OPEN_AI_PROXY` 等）可通过 `docker-compose.yml` 的 `environment` 段传入。完整变量列表见 `config-template.json` 和 `docker/entrypoint.sh` 中的注释段。
+
+### 容器管理
+
+```bash
+# 查看实时日志
+docker compose -f docker/docker-compose.yml logs -f lightagent
+
+# 停止并移除容器
+docker compose -f docker/docker-compose.yml down
+
+# 重启容器
+docker compose -f docker/docker-compose.yml restart
+
+# 进入容器调试
+docker exec -it lightagent bash
+```
+
+### 容器内目录结构
+
+| 路径 | 说明 |
+|------|------|
+| `/app` | LightAgent 代码根目录 |
+| `/home/agent/.lightagent/config.json` | 运行时配置（由 entrypoint 从 `config-template.json` 初始化） |
+| `/home/agent/lightagent` | 运行时数据目录（logs、workspace、tmp 等） |
+| `/app/channel/wechat_group/sidecar/node_modules` | 微信侧车 Node.js 依赖（从构建阶段复制） |
+| `/app/ms-playwright` | Chromium 浏览器文件（仅 `INSTALL_BROWSER=true` 时存在） |
+| `/entrypoint.sh` | 容器入口脚本 |
+
+### entrypoint.sh 启动流程
+
+1. 容器以 `root` 启动，执行 `prepare_runtime_dirs()`
+2. 如果 `LIGHTAGENT_DATA_DIR/config.json` 不存在，从 `/app/config-template.json` 复制
+3. `ensure_web_password()`：如果未设置 `WEB_PASSWORD` 环境变量，用 Python `secrets.token_urlsafe(18)` 生成随机密码，写入 `config.json`，打印到标准输出
+4. 将配置和数据目录的权限归属到 `agent` 用户
+5. 通过 `su agent` 降权，切换到 `/app`，执行 `python app.py`
+
+### 镜像发布（CI）
+
+GitHub Actions 在推送带版本号的标签（如 `v1.0.0`）时自动触发 `docker` 工作流，构建 `docker/Dockerfile.latest` 并推送到 Docker Hub `yideng966/lightagent`。本地手动发布可使用：
+
+```bash
+cd docker
+bash build.latest.sh
+docker push yideng966/lightagent:latest
+```
+
 ## 修改原则
 
 - 修改前先读当前文件，禁止凭记忆改代码。
@@ -118,6 +260,7 @@ npm run dev:hot
 - 修改 `config.py` 默认配置时，同步检查 `config-template.json`、Web 设置页、文档和相关测试。
 - 修改模型路由时，同步检查 `Bridge`、`models/bot_factory.py`、`common/const.py`、Web 模型管理接口和测试。
 - 修改语音路由时，同步检查 `voice/factory.py`、`Bridge`、Web ASR/TTS 能力接口、控制台选择器和语音测试；`custom:<id>` 必须按显式能力复用对应自定义 Provider 的 Key/Base，不能隐式回退到当前聊天 Provider。
+- 确定性生图等需要跨容器重建保留的用户产物必须默认写入 `agent_workspace`；Docker 生图目录固定在 `/home/agent/lightagent/images`（宿主机 `./data/images`），不得回退到随镜像更新且不挂载的 `/app/images`。Web SSE 发送本地生图时必须同时产生可访问的 `image` 事件和结束请求的 `done` 事件。
 - 修改 Agent 工具时，同步检查工具注册、工具 schema、异常返回格式、文档和安全测试。
 - 修改桌面后端启动逻辑时，特别注意端口、数据目录、打包后路径和 Windows 行为。
 

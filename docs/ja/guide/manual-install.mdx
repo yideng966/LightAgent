@@ -126,7 +126,7 @@ sudo docker logs -f lightagent
 Compose は `docker-compose.yml` からの相対パスで、次の 2 つの永続化ディレクトリを使用します：
 
 - `./config` は `/home/agent/.lightagent` にマウントされ、`config.json`、シークレット、ログ、プラグイン設定とユーザーがインストールしたプラグイン、WeChat ログイン状態、メディア、グループデータベースを保存します。名前にかかわらず設定ファイルだけのディレクトリではないため、ディレクトリ全体をバックアップしてください。
-- `./data` は `/home/agent/lightagent` にマウントされ、Agent workspace、メモリ、ナレッジベース、スキル、MCP 設定、scheduler データを保存します。
+- `./data` は `/home/agent/lightagent` にマウントされ、Agent workspace、メモリ、ナレッジベース、スキル、MCP 設定、scheduler データを保存します。生成画像は `./data/images`（コンテナ内では `/home/agent/lightagent/images`）に永続化されます。
 - `/app` はイメージに属し、アプリケーションコード、Playwright、sidecar の `node_modules` を含みます。ここに volume をマウントしないでください。
 
 Compose は Web サービスを `0.0.0.0` にバインドし、パスワードが指定されていない場合は自動生成します。公開する場合は、ファイアウォールまたはセキュリティグループでポート `9899` の接続元を制限してください。コンテナを再起動または再作成しても `./config` と `./data` は上書きされません。

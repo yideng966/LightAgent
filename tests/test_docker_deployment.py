@@ -27,6 +27,10 @@ class DockerDeploymentContractTest(unittest.TestCase):
         service = compose["services"]["lightagent"]
         environment = service["environment"]
         self.assertEqual("/home/agent/.lightagent", environment["LIGHTAGENT_DATA_DIR"])
+        self.assertEqual(
+            "/home/agent/lightagent/images",
+            environment["IMAGE_OUTPUT_DIR"],
+        )
         self.assertEqual("0.0.0.0", environment["WEB_HOST"])
         self.assertEqual(
             "${WEB_PASSWORD:-__LIGHTAGENT_AUTO_GENERATE__}",
@@ -35,6 +39,9 @@ class DockerDeploymentContractTest(unittest.TestCase):
         self.assertNotIn("CHANNEL_TYPE", environment)
         self.assertIn("./config:/home/agent/.lightagent", service["volumes"])
         self.assertIn("./data:/home/agent/lightagent", service["volumes"])
+        self.assertTrue(
+            environment["IMAGE_OUTPUT_DIR"].startswith("/home/agent/lightagent/")
+        )
         volume_targets = [item.rsplit(":", 1)[-1] for item in service["volumes"]]
         self.assertNotIn("/app", volume_targets)
         self.assertNotIn("version", compose)
@@ -51,6 +58,14 @@ class DockerDeploymentContractTest(unittest.TestCase):
             'LIGHTAGENT_DATA_DIR=${LIGHTAGENT_DATA_DIR:-"/home/agent/.lightagent"}',
             text,
         )
+        self.assertIn(
+            'IMAGE_OUTPUT_DIR=${IMAGE_OUTPUT_DIR:-"/home/agent/lightagent/images"}',
+            text,
+        )
+        self.assertIn(
+            'mkdir -p "$LIGHTAGENT_DATA_DIR" /home/agent/lightagent "$IMAGE_OUTPUT_DIR"',
+            text,
+        )
         self.assertIn('if [ ! -f "$LIGHTAGENT_DATA_DIR/config.json" ]; then', text)
         self.assertIn("config-template.json", text)
         self.assertIn("__LIGHTAGENT_AUTO_GENERATE__", text)
@@ -60,6 +75,7 @@ class DockerDeploymentContractTest(unittest.TestCase):
             'echo "[LightAgent] Web console password: $managed_password"',
             text,
         )
+        self.assertIn('"$IMAGE_OUTPUT_DIR"', text)
         self.assertIn("Password is persisted in", text)
 
     def test_release_workflow_publishes_one_multiarch_image(self):
