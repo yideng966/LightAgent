@@ -30,6 +30,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Write version from tag
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "${GITHUB_REF_NAME#v}" > cli/VERSION
+          fi
+          echo "VERSION=$(cat cli/VERSION)"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
