@@ -53,7 +53,21 @@ class SkillManager:
             custom_dir=self.custom_dir,
         )
         self._sync_skills_config()
+        self._sync_wechat_group_skill_access()
         logger.debug(f"SkillManager: Loaded {len(self.skills)} skills")
+
+    def _sync_wechat_group_skill_access(self):
+        """Keep the WeChat group ACL catalog aligned with every skill refresh."""
+        try:
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+
+            get_wechat_group_skill_access_service().sync_skill_catalog(self)
+        except Exception as e:
+            # Skill loading must remain available for non-WeChat channels even
+            # when the optional channel persistence is temporarily unavailable.
+            logger.warning(f"[SkillManager] Failed to sync WeChat group skill ACL: {e}")
 
     # ------------------------------------------------------------------
     # skills_config.json management
@@ -112,6 +126,9 @@ class SkillManager:
             display_name = prev.get("display_name")
             if display_name:
                 entry_dict["display_name"] = display_name
+            source_identity = prev.get("source_identity")
+            if source_identity:
+                entry_dict["source_identity"] = source_identity
             merged[name] = entry_dict
 
         self.skills_config = merged
@@ -183,7 +200,9 @@ class SkillManager:
                         name = subitem.strip()
                         if name:
                             normalized.append(name)
-        return normalized or None
+        # ``None`` means no restriction; an explicit empty list means that
+        # this request has no usable skills.
+        return normalized
 
     def filter_skills(
         self,

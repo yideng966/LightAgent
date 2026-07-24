@@ -561,6 +561,7 @@ class WechatGroupChannel(ChatChannel):
             result.append({
                 "sender_id": sender_id,
                 "sender_nickname": nickname or sender_id,
+                "room_alias": str(raw.get("room_alias") or raw.get("roomAlias") or "").strip(),
                 "wechat_id": str(raw.get("wechat_id") or raw.get("wechatId") or "").strip(),
                 "last_seen_at": int(raw.get("last_seen_at") or 0),
                 "message_count": int(raw.get("message_count") or 0),
@@ -1664,13 +1665,17 @@ class WechatGroupChannel(ChatChannel):
             if not runtime_sender_id:
                 result.append(item)
                 continue
-            display_name = str(item.get("sender_nickname") or runtime_sender_id).strip()
+            nickname = str(item.get("sender_nickname") or "").strip()
+            room_alias = str(item.get("room_alias") or "").strip()
+            display_name = room_alias or nickname
+            if self._looks_like_raw_member_name(display_name, runtime_sender_id):
+                display_name = ""
             try:
                 resolution = service.resolve_member(
                     stable_room_id,
                     runtime_sender_id,
                     display_name,
-                    display_name,
+                    room_alias,
                     {"wechat_id": str(item.get("wechat_id") or "").strip()},
                 )
                 item["stable_member_id"] = resolution.stable_id
@@ -1678,6 +1683,11 @@ class WechatGroupChannel(ChatChannel):
                 item["identity_status"] = resolution.status
                 item["identity_confidence"] = resolution.confidence
                 item["identity_requires_confirmation"] = bool(resolution.requires_confirmation)
+                resolved_name = str(resolution.display_name or "").strip()
+                visible_name = room_alias or nickname or resolved_name
+                if self._looks_like_raw_member_name(visible_name, runtime_sender_id):
+                    visible_name = ""
+                item["display_name"] = visible_name
             except Exception as e:
                 item["stable_member_id"] = ""
                 item["runtime_sender_id"] = runtime_sender_id

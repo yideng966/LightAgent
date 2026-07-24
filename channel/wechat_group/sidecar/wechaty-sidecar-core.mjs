@@ -441,6 +441,9 @@ function extractSenderNameFromRawPayload(rawPayload = {}) {
   const original = String(rawPayload?.OriginalContent || '')
   const candidates = [
     rawPayload?.ActualNickName,
+    rawPayload?.DisplayName,
+    rawPayload?.RemarkName,
+    rawPayload?.NickName,
     rawPayload?.RecommendInfo?.NickName,
     rawPayload?.User?.NickName,
   ]
@@ -478,11 +481,14 @@ export async function resolveContactWechatId(contact, rawPayload = null) {
 
 export async function buildRoomMemberPayload(contact, room = null, rawPayload = null) {
   const senderId = String(contact?.id || '').trim()
+  let roomAlias = ''
+  try { roomAlias = await room?.alias?.(contact) || '' } catch {}
   const nickname = await resolveContactDisplayName(contact, room, rawPayload)
   const wechatId = await resolveContactWechatId(contact, rawPayload)
   return {
     sender_id: senderId,
     sender_nickname: nickname || senderId,
+    room_alias: cleanVisibleMentionName(roomAlias),
     wechat_id: wechatId,
   }
 }

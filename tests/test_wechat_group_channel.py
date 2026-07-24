@@ -3953,6 +3953,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             status="confirmed",
             confidence="manual",
             requires_confirmation=False,
+            display_name="Alice",
         )
         channel = WechatGroupChannel(client=FakeClient(), identity_service=identity_service)
 
@@ -3971,9 +3972,35 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wgr_room",
             "wxid_alice",
             "Alice",
-            "Alice",
+            "",
             {"wechat_id": ""},
         )
+
+    def test_channel_member_display_name_prefers_room_alias(self):
+        identity_service = Mock()
+        identity_service.resolve_legacy_room_id.return_value = "wgr_room"
+        identity_service.resolve_member.return_value = Mock(
+            stable_id="wgm_alice",
+            status="confirmed",
+            confidence="manual",
+            requires_confirmation=False,
+            display_name="微信昵称",
+        )
+        channel = WechatGroupChannel(client=FakeClient(), identity_service=identity_service)
+
+        self.assertTrue(channel.consume_sidecar_event(parse_sidecar_event({
+            "type": "room_members",
+            "room_id": "room@@abc",
+            "members": [{
+                "sender_id": "@raw_runtime_member_id_123456",
+                "sender_nickname": "@raw_runtime_member_id_123456",
+                "room_alias": "群里的名字",
+            }],
+        })))
+
+        member = channel.get_room_members("room@@abc", limit=20, refresh=False)[0]
+        self.assertEqual("群里的名字", member["display_name"])
+        self.assertEqual("群里的名字", member["room_alias"])
 
     def test_channel_member_identity_prefers_current_room_mapping(self):
         identity_service = Mock()
@@ -3983,6 +4010,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             status="confirmed",
             confidence="manual",
             requires_confirmation=False,
+            display_name="Alice",
         )
         channel = WechatGroupChannel(client=FakeClient(), identity_service=identity_service)
         channel.rooms = [{
@@ -4001,7 +4029,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wgr_current_account",
             "wxid_alice",
             "Alice",
-            "Alice",
+            "",
             {"wechat_id": ""},
         )
         identity_service.resolve_legacy_room_id.assert_not_called()

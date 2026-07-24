@@ -1326,6 +1326,9 @@ class WebChannel(ChatChannel):
             '/api/feishu/register', 'FeishuRegisterHandler',
             '/api/tools', 'ToolsHandler',
             '/api/skills', 'SkillsHandler',
+            '/api/skills/access', 'SkillsAccessHandler',
+            '/api/skills/access/bulk', 'SkillsAccessBulkHandler',
+            '/api/skills/access/templates', 'SkillsAccessTemplatesHandler',
             '/api/memory', 'MemoryHandler',
             '/api/memory/content', 'MemoryContentHandler',
             '/api/knowledge/list', 'KnowledgeListHandler',
@@ -6992,8 +6995,10 @@ class SkillsHandler:
             from agent.skills.manager import SkillManager
             workspace_root = _get_workspace_root()
             manager = SkillManager(custom_dir=os.path.join(workspace_root, "skills"))
-            service = SkillService(manager)
-            skills = service.query()
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+            skills = get_wechat_group_skill_access_service().list_skills(manager)
             return json.dumps({"status": "success", "skills": skills}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Skills API error: {e}")
@@ -7023,6 +7028,110 @@ class SkillsHandler:
         except Exception as e:
             logger.error(f"[WebChannel] Skills POST error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+
+def _skill_access_manager():
+    from agent.skills.manager import SkillManager
+
+    return SkillManager(custom_dir=os.path.join(_get_workspace_root(), "skills"))
+
+
+class SkillsAccessHandler:
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            params = web.input(name="")
+            if not str(params.name or "").strip():
+                raise ValueError("name is required")
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+
+            service = get_wechat_group_skill_access_service()
+            policy = service.get_access(params.name, _skill_access_manager())
+            return json.dumps({"status": "success", "access": policy}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Skills access GET error: {e}")
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            body = json.loads(web.data() or "{}")
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+
+            policy = get_wechat_group_skill_access_service().save_access(
+                skill_name=str(body.get("name") or ""),
+                mode=str(body.get("mode") or ""),
+                grants=body.get("grants") or [],
+                expected_version=body.get("expected_version"),
+                manager=_skill_access_manager(),
+            )
+            return json.dumps({"status": "success", "access": policy}, ensure_ascii=False)
+        except RuntimeError as e:
+            web.ctx.status = "409 Conflict"
+            return json.dumps({"status": "error", "code": "version_conflict", "message": str(e)}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Skills access POST error: {e}")
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+
+
+class SkillsAccessBulkHandler:
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            body = json.loads(web.data() or "{}")
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+
+            policies = get_wechat_group_skill_access_service().bulk_apply(
+                body, _skill_access_manager()
+            )
+            return json.dumps({"status": "success", "access": policies}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Skills access bulk POST error: {e}")
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+
+
+class SkillsAccessTemplatesHandler:
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+
+            templates = get_wechat_group_skill_access_service().list_templates()
+            return json.dumps({"status": "success", "templates": templates}, ensure_ascii=False)
+        except Exception as e:
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            body = json.loads(web.data() or "{}")
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+
+            service = get_wechat_group_skill_access_service()
+            if body.get("action") == "delete":
+                service.delete_template(str(body.get("template_id") or ""))
+                result = None
+            else:
+                result = service.save_template(body)
+            return json.dumps({"status": "success", "template": result}, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"[WebChannel] Skills access templates POST error: {e}")
+            return json.dumps({"status": "error", "message": str(e)}, ensure_ascii=False)
 
 
 class MemoryHandler:

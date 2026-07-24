@@ -5888,6 +5888,7 @@ function loadSkillsSection() {
             card.dataset.skillName = sk.name;
             card.dataset.skillDesc = sk.description || '';
             card.dataset.enabled = sk.enabled ? '1' : '0';
+            card._skillData = sk;
             renderSkillCard(card, sk);
             listEl.appendChild(card);
         });
@@ -5901,7 +5902,19 @@ function renderSkillCard(card, sk) {
         ? 'bg-primary-400'
         : 'bg-slate-200 dark:bg-slate-700';
     const thumbTranslate = enabled ? 'translate-x-3' : 'translate-x-0.5';
+    const modeLabels = {
+        unrestricted: currentLang === 'zh' ? '微信群全部成员' : 'All WeChat group members',
+        restricted: currentLang === 'zh' ? '仅授权对象' : 'Authorized only',
+        disabled_for_wechat_group: currentLang === 'zh' ? '微信群禁用' : 'Disabled for WeChat groups',
+    };
+    const statusClass = sk.access_mode === 'unrestricted'
+        ? 'bg-green-50 text-green-600 dark:bg-green-900/20'
+        : (sk.access_mode === 'disabled_for_wechat_group'
+            ? 'bg-slate-100 text-slate-500 dark:bg-white/10'
+            : 'bg-amber-50 text-amber-600 dark:bg-amber-900/20');
     card.innerHTML = `
+        <input type="checkbox" data-skill-bulk-select value="${escapeHtml(sk.name)}"
+            class="mt-2 accent-primary-500" title="${currentLang === 'zh' ? '选择用于批量授权' : 'Select for bulk access'}">
         <div class="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center flex-shrink-0">
             <i class="fas fa-bolt ${iconColor} text-sm"></i>
         </div>
@@ -5919,7 +5932,17 @@ function renderSkillCard(card, sk) {
                 </button>
             </div>
             <p class="text-xs text-slate-400 dark:text-slate-500 line-clamp-2">${escapeHtml(sk.description || '--')}</p>
+            <div class="flex flex-wrap items-center gap-2 mt-3">
+                <span class="px-2 py-1 rounded-md text-[11px] ${statusClass}">${escapeHtml(modeLabels[sk.access_mode] || modeLabels.restricted)}</span>
+                <span class="text-[11px] text-slate-400">${currentLang === 'zh' ? '群' : 'rooms'} ${Number(sk.authorized_room_count || 0)} · ${currentLang === 'zh' ? '成员' : 'members'} ${Number(sk.authorized_member_count || 0)}</span>
+                ${sk.is_new ? `<span class="px-2 py-1 rounded-md text-[11px] bg-red-50 text-red-500 dark:bg-red-900/20">${currentLang === 'zh' ? '新安装·待授权' : 'New · pending access'}</span>` : ''}
+                <button type="button" onclick="openSkillAccess('${escapeHtml(sk.name)}')"
+                    class="ml-auto px-2.5 py-1 rounded-md text-[11px] font-medium text-primary-600 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100">
+                    ${currentLang === 'zh' ? '授权管理' : 'Manage access'}
+                </button>
+            </div>
         </div>`;
+    card._skillData = sk;
 }
 
 function toggleSkill(name, currentlyEnabled) {
@@ -5939,7 +5962,7 @@ function toggleSkill(name, currentlyEnabled) {
                 const desc = card.dataset.skillDesc || '';
                 card.dataset.enabled = currentlyEnabled ? '0' : '1';
                 card.style.opacity = '1';
-                renderSkillCard(card, { name, description: desc, enabled: !currentlyEnabled });
+                renderSkillCard(card, { ...(card._skillData || {}), name, description: desc, enabled: !currentlyEnabled });
             }
         } else {
             if (card) card.style.opacity = '1';
@@ -5950,6 +5973,350 @@ function toggleSkill(name, currentlyEnabled) {
         if (card) card.style.opacity = '1';
         alert(currentLang === 'zh' ? '操作失败，请稍后再试' : 'Operation failed, please try again');
     });
+}
+
+let skillAccessState = {
+    name: '',
+    policy: null,
+    rooms: [],
+    adminMembers: [],
+    roomModes: {},
+    roomMembers: {},
+    selectedMembers: {},
+    bulkNames: [],
+};
+
+function ensureSkillAccessModal() {
+    let modal = document.getElementById('skill-access-modal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'skill-access-modal';
+    modal.className = 'hidden fixed inset-0 z-[100] bg-slate-950/50 flex justify-end';
+    modal.innerHTML = `
+        <div class="w-full max-w-3xl h-full bg-white dark:bg-[#111] shadow-2xl flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-200 dark:border-white/10 flex items-center gap-3">
+                <div>
+                    <h3 id="skill-access-title" class="font-semibold text-slate-800 dark:text-slate-100">技能授权管理</h3>
+                    <p class="text-xs text-slate-400 mt-1">授权依据为稳定群和稳定成员身份，名称与 runtime ID 不参与权限判断。</p>
+                </div>
+                <button type="button" onclick="closeSkillAccess()" class="ml-auto w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-white/10">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="skill-access-body" class="flex-1 overflow-y-auto p-6"></div>
+            <div class="px-6 py-4 border-t border-slate-200 dark:border-white/10 flex items-center gap-2">
+                <button type="button" onclick="applyOnlyGroupAdmins()" class="px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-white/10">仅群管理员</button>
+                <button type="button" onclick="copySkillAccessPolicy()" class="px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-white/10">复制技能权限</button>
+                <button type="button" onclick="applySkillAccessTemplate()" class="px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-white/10">应用模板</button>
+                <button type="button" onclick="saveCurrentSkillAccessTemplate()" class="px-3 py-2 rounded-lg text-xs bg-slate-100 dark:bg-white/10">保存为模板</button>
+                <span class="flex-1"></span>
+                <button type="button" onclick="closeSkillAccess()" class="px-4 py-2 rounded-lg text-sm border border-slate-200 dark:border-white/10">取消</button>
+                <button type="button" onclick="saveSkillAccess()" class="px-4 py-2 rounded-lg text-sm text-white bg-primary-500 hover:bg-primary-600">保存授权</button>
+            </div>
+        </div>`;
+    modal.addEventListener('click', event => {
+        if (event.target === modal) closeSkillAccess();
+    });
+    document.body.appendChild(modal);
+    return modal;
+}
+
+function closeSkillAccess() {
+    const modal = document.getElementById('skill-access-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function openSkillAccess(name, bulkNames = []) {
+    const modal = ensureSkillAccessModal();
+    modal.classList.remove('hidden');
+    document.getElementById('skill-access-body').innerHTML = '<div class="text-sm text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>加载授权信息...</div>';
+    try {
+        const [accessData, channelsDataResult] = await Promise.all([
+            fetch('/api/skills/access?name=' + encodeURIComponent(name)).then(r => r.json()),
+            fetch('/api/channels').then(r => r.json()),
+        ]);
+        if (accessData.status !== 'success') throw new Error(accessData.message || '加载失败');
+        const channel = (channelsDataResult.channels || []).find(item => item.name === 'wechat_group') || {};
+        const rooms = (channel.extra && Array.isArray(channel.extra.rooms)) ? channel.extra.rooms : [];
+        const adminMembers = channel.extra?.admin?.members || [];
+        skillAccessState = {
+            name,
+            policy: accessData.access,
+            rooms,
+            adminMembers,
+            roomModes: {},
+            roomMembers: {},
+            selectedMembers: {},
+            bulkNames,
+        };
+        rooms.forEach(room => {
+            const roomId = getWechatGroupRoomOptionId(room);
+            const grants = (accessData.access.grants || []).filter(item => item.stable_room_id === roomId);
+            skillAccessState.roomModes[roomId] = grants.some(item => item.grant_type === 'room')
+                ? 'room' : (grants.some(item => item.grant_type === 'member') ? 'member' : 'none');
+            skillAccessState.selectedMembers[roomId] = new Set(
+                grants.filter(item => item.grant_type === 'member').map(item => item.stable_member_id)
+            );
+        });
+        renderSkillAccessDrawer();
+    } catch (error) {
+        document.getElementById('skill-access-body').innerHTML = `<p class="text-sm text-red-500">${escapeHtml(error.message || '加载失败')}</p>`;
+    }
+}
+
+function renderSkillAccessDrawer() {
+    const state = skillAccessState;
+    document.getElementById('skill-access-title').textContent =
+        `${state.bulkNames.length ? '批量授权' : '技能授权管理'} · ${state.bulkNames.length ? state.bulkNames.length + ' 个技能' : state.name}`;
+    const mode = state.policy.mode;
+    const roomCards = state.rooms.map(room => {
+        const roomId = getWechatGroupRoomOptionId(room);
+        const selectable = isWechatGroupRoomSelectable(room);
+        const roomMode = state.roomModes[roomId] || 'none';
+        const selectedCount = (state.selectedMembers[roomId] || new Set()).size;
+        return `<section class="rounded-xl border border-slate-200 dark:border-white/10 p-4 ${selectable ? '' : 'opacity-60'}">
+            <div class="flex items-center gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="font-medium text-sm text-slate-700 dark:text-slate-200 truncate">${escapeHtml(room.name || roomId)}</div>
+                    <div class="text-[11px] text-slate-400 truncate">${escapeHtml(roomId)}</div>
+                </div>
+                <select onchange="changeSkillRoomMode('${escapeHtml(roomId)}', this.value)" ${selectable ? '' : 'disabled'}
+                    class="px-3 py-2 rounded-lg text-xs border border-slate-200 dark:border-white/10 bg-white dark:bg-[#1a1a1a]">
+                    <option value="none" ${roomMode === 'none' ? 'selected' : ''}>不授权</option>
+                    <option value="room" ${roomMode === 'room' ? 'selected' : ''}>全群授权</option>
+                    <option value="member" ${roomMode === 'member' ? 'selected' : ''}>指定成员 (${selectedCount})</option>
+                </select>
+            </div>
+            ${roomMode === 'member' ? buildSkillMemberPicker(roomId) : ''}
+            ${selectable ? '' : '<p class="text-xs text-amber-500 mt-2">群稳定身份尚未确认，暂不可授权。</p>'}
+        </section>`;
+    }).join('');
+    document.getElementById('skill-access-body').innerHTML = `
+        <section class="mb-5">
+            <label class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-2">微信群权限模式</label>
+            <select id="skill-access-mode" class="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#1a1a1a]">
+                <option value="unrestricted" ${mode === 'unrestricted' ? 'selected' : ''}>微信群全部成员可用</option>
+                <option value="restricted" ${mode === 'restricted' ? 'selected' : ''}>仅授权群或成员可用</option>
+                <option value="disabled_for_wechat_group" ${mode === 'disabled_for_wechat_group' ? 'selected' : ''}>微信群完全禁用</option>
+            </select>
+        </section>
+        <div class="flex items-center gap-2 mb-3">
+            <h4 class="text-sm font-semibold text-slate-700 dark:text-slate-200">按群授权</h4>
+            <span class="text-xs text-slate-400">成员列表按需刷新，稳定 ID 变化由身份重定向自动承接。</span>
+        </div>
+        <div class="space-y-3">${roomCards || '<p class="text-sm text-slate-400">暂无已确认群，请先在群聊页面刷新并确认群身份。</p>'}</div>`;
+}
+
+function buildSkillMemberPicker(roomId) {
+    const members = skillAccessState.roomMembers[roomId];
+    if (!members) {
+        setTimeout(() => loadSkillRoomMembers(roomId), 0);
+        return '<div class="mt-3 text-xs text-slate-400"><i class="fas fa-spinner fa-spin mr-1"></i>加载群成员...</div>';
+    }
+    const selected = skillAccessState.selectedMembers[roomId] || new Set();
+    const items = members.map(member => {
+        const stableId = String(member.stable_member_id || '').trim();
+        const memberName = String(
+            member.room_alias
+            || member.display_name
+            || member.sender_nickname
+            || member.profile_nickname
+            || ''
+        ).trim();
+        const weak = member.identity_requires_confirmation === true || !stableId;
+        return `<label class="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-white/5 ${weak ? 'opacity-60' : ''}" data-skill-member-name="${escapeHtml(memberName.toLowerCase())}">
+            <input type="checkbox" ${selected.has(stableId) ? 'checked' : ''} ${weak ? 'disabled' : ''}
+                onchange="toggleSkillMember('${escapeHtml(roomId)}','${escapeHtml(stableId)}',this.checked)" class="accent-primary-500">
+            <span class="flex-1 min-w-0">
+                <span class="block text-sm truncate">${escapeHtml(memberName || '未获取到群昵称')}</span>
+                <span class="block text-[10px] text-slate-500 truncate">${escapeHtml(stableId)}</span>
+            </span>
+            ${weak ? '<span class="text-[10px] text-amber-500">身份待确认</span>' : ''}
+        </label>`;
+    }).join('');
+    return `<div class="mt-3 rounded-lg bg-slate-50 dark:bg-white/5 p-3">
+        <div class="flex gap-2 mb-2">
+            <input oninput="filterSkillMembers('${escapeHtml(roomId)}', this.value)" placeholder="搜索成员"
+                class="flex-1 px-3 py-2 rounded-lg text-xs border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111]">
+            <button type="button" onclick="selectAllSkillMembers('${escapeHtml(roomId)}')" class="px-2 text-xs text-primary-500">全选</button>
+            <button type="button" onclick="invertSkillMembers('${escapeHtml(roomId)}')" class="px-2 text-xs text-primary-500">反选</button>
+            <button type="button" onclick="clearSkillMembers('${escapeHtml(roomId)}')" class="px-2 text-xs text-slate-500">清空</button>
+        </div>
+        <div id="skill-members-${escapeHtml(roomId)}" class="max-h-56 overflow-y-auto">${items || '<p class="text-xs text-slate-400 py-2">暂无成员</p>'}</div>
+    </div>`;
+}
+
+async function loadSkillRoomMembers(roomId) {
+    try {
+        const data = await fetch('/api/wechat-group/members?stable_room_id=' + encodeURIComponent(roomId) + '&limit=500').then(r => r.json());
+        skillAccessState.roomMembers[roomId] = data.status === 'success' ? (data.members || []) : [];
+    } catch (_) {
+        skillAccessState.roomMembers[roomId] = [];
+    }
+    renderSkillAccessDrawer();
+}
+
+function changeSkillRoomMode(roomId, mode) {
+    skillAccessState.roomModes[roomId] = mode;
+    if (!skillAccessState.selectedMembers[roomId]) skillAccessState.selectedMembers[roomId] = new Set();
+    renderSkillAccessDrawer();
+}
+
+function toggleSkillMember(roomId, memberId, checked) {
+    const selected = skillAccessState.selectedMembers[roomId] || new Set();
+    checked ? selected.add(memberId) : selected.delete(memberId);
+    skillAccessState.selectedMembers[roomId] = selected;
+}
+
+function filterSkillMembers(roomId, query) {
+    const root = document.querySelector('#skill-members-' + CSS.escape(roomId));
+    if (!root) return;
+    const q = String(query || '').toLowerCase();
+    root.querySelectorAll('[data-skill-member-name]').forEach(el => {
+        el.classList.toggle('hidden', !el.dataset.skillMemberName.includes(q));
+    });
+}
+
+function selectAllSkillMembers(roomId) {
+    const members = skillAccessState.roomMembers[roomId] || [];
+    skillAccessState.selectedMembers[roomId] = new Set(
+        members.filter(member => member.stable_member_id && member.identity_requires_confirmation !== true)
+            .map(member => String(member.stable_member_id))
+    );
+    renderSkillAccessDrawer();
+}
+
+function clearSkillMembers(roomId) {
+    skillAccessState.selectedMembers[roomId] = new Set();
+    renderSkillAccessDrawer();
+}
+
+function invertSkillMembers(roomId) {
+    const members = skillAccessState.roomMembers[roomId] || [];
+    const selected = skillAccessState.selectedMembers[roomId] || new Set();
+    const next = new Set();
+    members.filter(member => member.stable_member_id && member.identity_requires_confirmation !== true)
+        .forEach(member => {
+            const memberId = String(member.stable_member_id);
+            if (!selected.has(memberId)) next.add(memberId);
+        });
+    skillAccessState.selectedMembers[roomId] = next;
+    renderSkillAccessDrawer();
+}
+
+function collectSkillAccessGrants() {
+    const grants = [];
+    Object.entries(skillAccessState.roomModes).forEach(([roomId, mode]) => {
+        if (mode === 'room') grants.push({ stable_room_id: roomId, grant_type: 'room', stable_member_id: '' });
+        if (mode === 'member') {
+            (skillAccessState.selectedMembers[roomId] || new Set()).forEach(memberId => {
+                grants.push({ stable_room_id: roomId, grant_type: 'member', stable_member_id: memberId });
+            });
+        }
+    });
+    return grants;
+}
+
+async function saveSkillAccess() {
+    const mode = document.getElementById('skill-access-mode').value;
+    const grants = collectSkillAccessGrants();
+    const previous = skillAccessState.policy.grants || [];
+    if (!confirm(`即将保存：${grants.length} 条授权（原 ${previous.length} 条）。是否继续？`)) return;
+    const names = skillAccessState.bulkNames.length ? skillAccessState.bulkNames : [skillAccessState.name];
+    const endpoint = names.length > 1 ? '/api/skills/access/bulk' : '/api/skills/access';
+    const payload = names.length > 1
+        ? { operation: 'apply', skill_names: names, mode, grants }
+        : { name: names[0], mode, grants, expected_version: skillAccessState.policy.version };
+    const response = await fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (data.status !== 'success') {
+        alert(data.code === 'version_conflict' ? '授权已被其他管理员修改，请重新打开后再保存。' : (data.message || '保存失败'));
+        return;
+    }
+    closeSkillAccess();
+    loadSkillsSection();
+}
+
+function openSkillBulkAccess() {
+    const names = Array.from(document.querySelectorAll('[data-skill-bulk-select]:checked')).map(el => el.value);
+    if (!names.length) {
+        alert('请先勾选要批量授权的技能。');
+        return;
+    }
+    openSkillAccess(names[0], names);
+}
+
+function applyOnlyGroupAdmins() {
+    skillAccessState.rooms.forEach(room => {
+        const roomId = getWechatGroupRoomOptionId(room);
+        const admins = skillAccessState.adminMembers.filter(item =>
+            String(item.stable_room_id || item.room_id || '') === roomId && item.stable_member_id
+        );
+        skillAccessState.roomModes[roomId] = admins.length ? 'member' : 'none';
+        skillAccessState.selectedMembers[roomId] = new Set(admins.map(item => String(item.stable_member_id)));
+    });
+    const modeEl = document.getElementById('skill-access-mode');
+    if (modeEl) modeEl.value = 'restricted';
+    skillAccessState.policy.mode = 'restricted';
+    renderSkillAccessDrawer();
+}
+
+async function saveCurrentSkillAccessTemplate() {
+    const name = prompt('模板名称');
+    if (!name) return;
+    const templateId = 'template_' + Date.now();
+    const data = await fetch('/api/skills/access/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            template_id: templateId,
+            name,
+            mode: document.getElementById('skill-access-mode').value,
+            grants: collectSkillAccessGrants(),
+            is_default: confirm('是否将此模板设为后续新技能的默认授权模板？'),
+        })
+    }).then(r => r.json());
+    alert(data.status === 'success' ? '模板已保存。' : (data.message || '模板保存失败'));
+}
+
+async function copySkillAccessPolicy() {
+    const source = prompt('输入要复制权限的技能名称');
+    if (!source) return;
+    const data = await fetch('/api/skills/access?name=' + encodeURIComponent(source)).then(r => r.json());
+    if (data.status !== 'success') {
+        alert(data.message || '技能权限读取失败');
+        return;
+    }
+    applyPolicyToSkillAccessState(data.access);
+}
+
+async function applySkillAccessTemplate() {
+    const data = await fetch('/api/skills/access/templates').then(r => r.json());
+    const templates = data.templates || [];
+    if (!templates.length) {
+        alert('暂无授权模板。');
+        return;
+    }
+    const names = templates.map(item => `${item.template_id}: ${item.name}`).join('\n');
+    const templateId = prompt(`输入模板 ID：\n${names}`, templates[0].template_id);
+    const template = templates.find(item => item.template_id === templateId);
+    if (template) applyPolicyToSkillAccessState(template);
+}
+
+function applyPolicyToSkillAccessState(policy) {
+    skillAccessState.policy.mode = policy.mode;
+    skillAccessState.rooms.forEach(room => {
+        const roomId = getWechatGroupRoomOptionId(room);
+        const grants = (policy.grants || []).filter(item => item.stable_room_id === roomId);
+        skillAccessState.roomModes[roomId] = grants.some(item => item.grant_type === 'room')
+            ? 'room' : (grants.some(item => item.grant_type === 'member') ? 'member' : 'none');
+        skillAccessState.selectedMembers[roomId] = new Set(
+            grants.filter(item => item.grant_type === 'member').map(item => item.stable_member_id)
+        );
+    });
+    renderSkillAccessDrawer();
 }
 
 // =====================================================================
