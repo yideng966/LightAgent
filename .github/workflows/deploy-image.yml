@@ -57,8 +57,7 @@ jobs:
             ${{ env.DOCKERHUB_IMAGE }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
+            type=raw,value=latest,enable={{is_git_tag}}
             type=ref,event=tag
 
       - name: Build and push Docker image
