@@ -92,6 +92,46 @@ class TestModelsHandler(unittest.TestCase):
         write_file.assert_called_once_with(file_config)
         reset_bridge.assert_called_once()
 
+    def test_set_chat_persists_all_valid_failover_thresholds(self):
+        from channel.web.web_channel import ModelsHandler
+
+        for threshold in (3, 4, 5):
+            with self.subTest(threshold=threshold):
+                local_config = {"bot_type": "deepseek", "model": "deepseek-v4-flash"}
+                file_config = dict(local_config)
+                handler = ModelsHandler()
+                with patch("channel.web.web_channel.conf", return_value=local_config), \
+                        patch.object(ModelsHandler, "_read_file_config", return_value=file_config), \
+                        patch.object(ModelsHandler, "_write_file_config"), \
+                        patch.object(ModelsHandler, "_reset_bridge"):
+                    result = json.loads(handler._handle_set_capability({
+                        "capability": "chat",
+                        "provider_id": "deepseek",
+                        "model": "deepseek-v4-flash",
+                        "failover_failure_threshold": threshold,
+                    }))
+
+                self.assertEqual("success", result["status"])
+                self.assertEqual(threshold, local_config["model_failover_failure_threshold"])
+                self.assertEqual(threshold, file_config["model_failover_failure_threshold"])
+
+    def test_set_chat_rejects_invalid_failover_threshold(self):
+        from channel.web.web_channel import ModelsHandler
+
+        handler = ModelsHandler()
+        with patch("channel.web.web_channel.conf", return_value={}), \
+                patch.object(ModelsHandler, "_read_file_config", return_value={}), \
+                patch.object(ModelsHandler, "_write_file_config") as write_file:
+            result = json.loads(handler._handle_set_capability({
+                "capability": "chat",
+                "provider_id": "openai",
+                "model": "gpt-5.4",
+                "failover_failure_threshold": 2,
+            }))
+
+        self.assertEqual("error", result["status"])
+        write_file.assert_not_called()
+
     def test_image_capability_exposes_custom_providers(self):
         from config import Config
         import config as config_module

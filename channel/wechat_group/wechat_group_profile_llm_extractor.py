@@ -38,10 +38,18 @@ class WechatGroupProfileLlmExtractor:
         return self._normalize_result(data)
 
     def _call_model(self, prompt: str) -> str:
-        for method_name in ("reply_text", "complete", "ask"):
+        for method_name in ("reply_text", "ask"):
             method = getattr(self.model, method_name, None)
             if callable(method):
                 return str(method(prompt) or "")
+        complete = getattr(self.model, "complete", None)
+        if callable(complete):
+            response = complete(
+                [{"role": "user", "content": prompt}],
+                purpose="wechat_group_profile_evolution",
+            )
+            _raise_if_model_error(response)
+            return _extract_model_text(response)
         call = getattr(self.model, "call", None)
         if callable(call):
             from agent.protocol.models import LLMRequest
@@ -213,10 +221,19 @@ def _normalize_string_list(value: Any) -> List[str]:
 
 
 def _raise_if_model_error(response: Any) -> None:
-    if not isinstance(response, dict) or not response.get("error"):
+    if not isinstance(response, dict):
         return
-    status_code = int(response.get("status_code") or 0)
-    raw_message = str(response.get("message") or "LLM provider returned an error").strip()
+    failed_completion = response.get("success") is False
+    if not response.get("error") and not failed_completion:
+        return
+    raw_response = response.get("raw") if isinstance(response.get("raw"), dict) else {}
+    status_code = int(response.get("status_code") or raw_response.get("status_code") or 0)
+    raw_message = str(
+        response.get("message")
+        or response.get("content")
+        or raw_response.get("message")
+        or "LLM provider returned an error"
+    ).strip()
     if status_code in _TRANSIENT_LLM_STATUS_CODES:
         message = "LLM provider temporarily unavailable"
         transient = True

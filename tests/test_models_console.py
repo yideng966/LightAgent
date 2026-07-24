@@ -23,6 +23,11 @@ class TestModelsConsole(unittest.TestCase):
         self.assertIn("function readChatFallbackRows", console_js)
         self.assertIn("renderChatFallbacksSection(cap)", console_js)
         self.assertIn("payload.fallbacks = extras.fallbacks;", console_js)
+        self.assertIn("handleChatFallbackDragStart", console_js)
+        self.assertIn("moveChatFallbackRow", console_js)
+        self.assertIn("refreshChatFallbackPriorities", console_js)
+        self.assertIn("cap-chat-failover-threshold", console_js)
+        self.assertIn("payload.failover_failure_threshold", console_js)
 
 
 if __name__ == "__main__":

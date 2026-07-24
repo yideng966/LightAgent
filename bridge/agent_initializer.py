@@ -282,7 +282,18 @@ class AgentInitializer:
                 memory_config, session_id=session_id
             )
 
-            memory_manager = MemoryManager(memory_config, embedding_provider=embedding_provider)
+            text_model = None
+            try:
+                text_model = self.bridge.get_text_model_router()
+            except Exception as e:
+                logger.warning(
+                    "[AgentInitializer] Shared text router unavailable for memory summaries: {}".format(e)
+                )
+            memory_manager = MemoryManager(
+                memory_config,
+                embedding_provider=embedding_provider,
+                llm_model=text_model,
+            )
             self._sync_memory(memory_manager, session_id)
 
             memory_tools = [

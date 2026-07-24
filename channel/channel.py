@@ -116,6 +116,9 @@ class Channel(object):
                     clear_history=False
                 )
             except Exception as e:
+                if getattr(e, "model_fallback_exhausted", False):
+                    logger.error("[Channel] Agent text model chain exhausted; skipping legacy replay")
+                    return Reply(ReplyType.ERROR, f"Agent error: {e}")
                 logger.error(f"[Channel] Agent mode failed, fallback to normal mode: {e}")
                 # Fallback to normal mode if agent fails
                 return Bridge().fetch_reply_content(query, context)

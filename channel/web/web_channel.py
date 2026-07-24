@@ -3476,7 +3476,11 @@ class ModelsHandler:
 
         if capability == "chat":
             fallbacks = data.get("fallbacks") if "fallbacks" in data else None
-            return self._set_chat(provider_id, model, fallbacks)
+            threshold = (
+                data.get("failover_failure_threshold")
+                if "failover_failure_threshold" in data else None
+            )
+            return self._set_chat(provider_id, model, fallbacks, threshold)
         if capability == "vision":
             return self._set_vision(provider_id, model)
         if capability == "asr":
@@ -3551,7 +3555,8 @@ class ModelsHandler:
             "model": model,
         })
 
-    def _set_chat(self, provider_id: str, model: str, fallbacks=None) -> str:
+    def _set_chat(self, provider_id: str, model: str, fallbacks=None,
+                  failover_failure_threshold=None) -> str:
         # Accept expanded custom provider ids ("custom:<id>") as well as the
         # built-in vendors, so the chat capability card and the custom
         # providers section behave consistently.
@@ -3569,6 +3574,21 @@ class ModelsHandler:
         applied = {}
         local_config = conf()
         file_cfg = self._read_file_config()
+
+        normalized_threshold = None
+        if failover_failure_threshold is not None:
+            try:
+                normalized_threshold = int(failover_failure_threshold)
+            except (TypeError, ValueError):
+                return json.dumps({
+                    "status": "error",
+                    "message": "failover_failure_threshold must be 3, 4, or 5",
+                })
+            if normalized_threshold not in (3, 4, 5):
+                return json.dumps({
+                    "status": "error",
+                    "message": "failover_failure_threshold must be 3, 4, or 5",
+                })
 
         # Fall back to the custom provider's default model when none is given.
         if not model and custom_provider:
@@ -3592,6 +3612,10 @@ class ModelsHandler:
             local_config["model_fallbacks"] = normalized_fallbacks
             file_cfg["model_fallbacks"] = normalized_fallbacks
             applied["model_fallbacks"] = normalized_fallbacks
+        if normalized_threshold is not None:
+            local_config["model_failover_failure_threshold"] = normalized_threshold
+            file_cfg["model_failover_failure_threshold"] = normalized_threshold
+            applied["model_failover_failure_threshold"] = normalized_threshold
 
         if not applied:
             return json.dumps({"status": "success", "applied": {}, "noop": True})
@@ -6046,9 +6070,18 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
             try:
                 from agent.memory.manager import MemoryManager
                 from agent.memory import create_default_embedding_provider
+                from bridge.bridge import Bridge
 
+                text_model = None
+                try:
+                    text_model = Bridge().get_text_model_router()
+                except Exception as e:
+                    logger.warning(
+                        "[WebChannel] shared text router unavailable for memory summaries: {}".format(e)
+                    )
                 cls._context_service.memory_manager = MemoryManager(
-                    embedding_provider=create_default_embedding_provider()
+                    embedding_provider=create_default_embedding_provider(),
+                    llm_model=text_model,
                 )
             except Exception:
                 cls._context_service.memory_manager = None

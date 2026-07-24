@@ -3,7 +3,6 @@
 import json
 
 from bridge.bridge import Bridge
-from bridge.context import Context, ContextType
 
 
 def _empty_decision(error="", reason="") -> dict:
@@ -98,18 +97,13 @@ class WechatGroupFreeReplyJudge:
             }
         try:
             prompt = build_free_reply_judge_prompt(task)
-            context = Context(
-                ContextType.TEXT,
-                prompt,
-                {
-                    "session_id": "wechat_group_free_reply:{}".format(task.get("room_id", "")),
-                    "receiver": task.get("room_id", ""),
-                    "wechat_group_free_reply_judge": True,
-                    "free_reply_judge_timeout_seconds": config.get("llm_judge_timeout_seconds", 8),
-                },
+            result = self.bridge.complete_text(
+                [{"role": "user", "content": prompt}],
+                purpose="wechat_group_free_reply_judge",
             )
-            reply = self.bridge.fetch_reply_content(prompt, context)
-            text = getattr(reply, "content", reply)
+            if not result.get("success"):
+                return _empty_decision("model_error", result.get("content", ""))
+            text = result.get("content", "")
             return parse_free_reply_judge_reply(text, config.get("llm_judge_min_confidence", 0.6))
         except Exception as e:
             return _empty_decision("exception", str(e))

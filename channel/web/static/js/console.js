@@ -48,8 +48,13 @@ const I18N = {
         models_chat_fallback_add: '添加备用',
         models_chat_fallback_infer_provider: '按模型名推断',
         models_chat_fallback_remove: '移除备用模型',
+        models_chat_fallback_priority: '优先级 {value}',
+        models_chat_fallback_move_up: '上移',
+        models_chat_fallback_move_down: '下移',
+        models_chat_fallback_drag: '拖动调整优先级',
+        models_chat_failover_threshold: '主模型连续故障阈值',
         models_chat_failover_title: '自动切换规则',
-        models_chat_failover_scope: '配置备用模型后自动生效，不会改写主模型配置。',
+        models_chat_failover_scope: '适用于所有通用文本大模型调用，备用模型按从上到下的顺序尝试。',
         models_chat_failover_immediate: '当前请求：主模型遇到临时故障时，立即按顺序尝试备用模型。',
         models_chat_failover_circuit: '连续故障：主模型连续出现{threshold}次临时故障后熔断，后续请求在{cooldown}内跳过主模型。',
         models_chat_failover_recovery: '自动恢复：冷却结束后仅放行一个请求试探主模型；成功恢复，失败则重新熔断。',
@@ -896,8 +901,13 @@ const I18N = {
         models_chat_fallback_add: 'Add fallback',
         models_chat_fallback_infer_provider: 'Infer from model name',
         models_chat_fallback_remove: 'Remove fallback model',
+        models_chat_fallback_priority: 'Priority {value}',
+        models_chat_fallback_move_up: 'Move up',
+        models_chat_fallback_move_down: 'Move down',
+        models_chat_fallback_drag: 'Drag to reorder',
+        models_chat_failover_threshold: 'Consecutive primary failures',
         models_chat_failover_title: 'Automatic failover',
-        models_chat_failover_scope: 'Takes effect after fallbacks are configured and never rewrites the main model setting.',
+        models_chat_failover_scope: 'Applies to all general text-model calls. Fallbacks are tried from top to bottom.',
         models_chat_failover_immediate: 'Current request: a temporary main-model failure immediately tries fallbacks in order.',
         models_chat_failover_circuit: 'Repeated failures: after {threshold} consecutive temporary failures, requests skip the main model for {cooldown}.',
         models_chat_failover_recovery: 'Automatic recovery: after cooldown, one request probes the main model; success restores it, while failure reopens the circuit.',
@@ -7109,7 +7119,9 @@ function renderChatFallbacksSection(cap) {
                     <i class="fas fa-plus text-[10px]"></i>${t('models_chat_fallback_add')}
                 </button>
             </div>
-            <div id="cap-chat-fallbacks-list" class="space-y-2">${rowsHtml}</div>
+            <div id="cap-chat-fallbacks-list" class="space-y-2"
+                 ondragover="handleChatFallbackDragOver(event)"
+                 ondrop="handleChatFallbackDrop(event)">${rowsHtml}</div>
             <div class="border-t border-slate-200 dark:border-white/10 pt-3"
                  role="note" aria-label="${escapeHtml(t('models_chat_failover_title'))}">
                 <div class="flex items-start gap-2.5">
@@ -7117,6 +7129,13 @@ function renderChatFallbacksSection(cap) {
                     <div class="min-w-0">
                         <p class="text-sm font-medium text-slate-700 dark:text-slate-300">${t('models_chat_failover_title')}</p>
                         <p class="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">${t('models_chat_failover_scope')}</p>
+                        <label class="mt-2 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                            <span>${t('models_chat_failover_threshold')}</span>
+                            <select id="cap-chat-failover-threshold"
+                                    class="rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] px-2 py-1 text-xs">
+                                ${[3, 4, 5].map(value => `<option value="${value}" ${threshold === value ? 'selected' : ''}>${value}</option>`).join('')}
+                            </select>
+                        </label>
                         <ul class="mt-1.5 list-disc space-y-1 pl-4 text-xs leading-5 text-slate-500 dark:text-slate-400">
                             <li>${t('models_chat_failover_immediate')}</li>
                             <li>${circuitText}</li>
@@ -7133,8 +7152,21 @@ function renderChatFallbackRow(index, fallback) {
     const providerId = String(item.provider_id || item.provider || item.bot_type || '').trim();
     const model = String(item.model || '').trim();
     return `
-        <div class="grid grid-cols-1 md:grid-cols-[minmax(180px,0.9fr)_minmax(220px,1.1fr)_auto] gap-2 items-start"
+        <div class="grid grid-cols-1 md:grid-cols-[auto_minmax(180px,0.9fr)_minmax(220px,1.1fr)_auto] gap-2 items-start"
              data-chat-fallback-row data-fallback-provider="${escapeHtml(providerId)}">
+            <div class="h-10 flex items-center gap-1">
+                <button type="button" draggable="true"
+                        ondragstart="handleChatFallbackDragStart(event)"
+                        ondragend="handleChatFallbackDragEnd(event)"
+                        title="${escapeHtml(t('models_chat_fallback_drag'))}"
+                        aria-label="${escapeHtml(t('models_chat_fallback_drag'))}"
+                        class="h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-grab active:cursor-grabbing">
+                    <i class="fas fa-grip-vertical text-xs"></i>
+                </button>
+                <span data-chat-fallback-priority
+                      class="min-w-6 text-center text-xs font-semibold text-slate-500 dark:text-slate-400"
+                      aria-label="${escapeHtml(t('models_chat_fallback_priority').replace('{value}', String(index + 1)))}">${index + 1}</span>
+            </div>
             <div id="cap-chat-fallback-provider-${index}" data-chat-fallback-provider class="cfg-dropdown" tabindex="0">
                 <div class="cfg-dropdown-selected">
                     <span class="cfg-dropdown-text">--</span>
@@ -7147,14 +7179,22 @@ function renderChatFallbackRow(index, fallback) {
                    class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
                           bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100
                           focus:outline-none focus:border-primary-500 font-mono transition-colors">
-            <button type="button" onclick="removeChatFallbackRow(this)"
-                    title="${escapeHtml(t('models_chat_fallback_remove'))}"
-                    aria-label="${escapeHtml(t('models_chat_fallback_remove'))}"
-                    class="h-10 w-10 inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-white/10
-                           text-slate-400 hover:text-red-500 hover:border-red-200 dark:hover:border-red-500/40
-                           bg-white dark:bg-[#111111] cursor-pointer transition-colors">
-                <i class="fas fa-trash text-xs"></i>
-            </button>
+            <div class="h-10 flex items-center gap-1">
+                <button type="button" onclick="moveChatFallbackRow(this, -1)" title="${escapeHtml(t('models_chat_fallback_move_up'))}"
+                        aria-label="${escapeHtml(t('models_chat_fallback_move_up'))}" class="h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-primary-500">
+                    <i class="fas fa-arrow-up text-xs"></i>
+                </button>
+                <button type="button" onclick="moveChatFallbackRow(this, 1)" title="${escapeHtml(t('models_chat_fallback_move_down'))}"
+                        aria-label="${escapeHtml(t('models_chat_fallback_move_down'))}" class="h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-primary-500">
+                    <i class="fas fa-arrow-down text-xs"></i>
+                </button>
+                <button type="button" onclick="removeChatFallbackRow(this)"
+                        title="${escapeHtml(t('models_chat_fallback_remove'))}"
+                        aria-label="${escapeHtml(t('models_chat_fallback_remove'))}"
+                        class="h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-red-500">
+                    <i class="fas fa-trash text-xs"></i>
+                </button>
+            </div>
         </div>`;
 }
 
@@ -7188,6 +7228,61 @@ function initChatFallbackRows(scope) {
             dd._chatFallbackBound = true;
         }
     });
+    refreshChatFallbackPriorities();
+}
+
+let draggedChatFallbackRow = null;
+
+function refreshChatFallbackPriorities() {
+    document.querySelectorAll('#cap-chat-fallbacks-list [data-chat-fallback-row]').forEach((row, index) => {
+        const label = row.querySelector('[data-chat-fallback-priority]');
+        if (!label) return;
+        const value = index + 1;
+        label.textContent = String(value);
+        label.setAttribute('aria-label', t('models_chat_fallback_priority').replace('{value}', String(value)));
+    });
+}
+
+function moveChatFallbackRow(button, direction) {
+    const row = button ? button.closest('[data-chat-fallback-row]') : null;
+    const list = row ? row.parentElement : null;
+    if (!row || !list) return;
+    if (direction < 0 && row.previousElementSibling) {
+        list.insertBefore(row, row.previousElementSibling);
+    } else if (direction > 0 && row.nextElementSibling) {
+        list.insertBefore(row.nextElementSibling, row);
+    }
+    refreshChatFallbackPriorities();
+}
+
+function handleChatFallbackDragStart(event) {
+    draggedChatFallbackRow = event.currentTarget.closest('[data-chat-fallback-row]');
+    if (!draggedChatFallbackRow) return;
+    draggedChatFallbackRow.classList.add('opacity-50');
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', 'chat-fallback-row');
+}
+
+function handleChatFallbackDragOver(event) {
+    if (!draggedChatFallbackRow) return;
+    event.preventDefault();
+    const list = event.currentTarget;
+    const target = event.target.closest('[data-chat-fallback-row]');
+    if (!target || target === draggedChatFallbackRow || target.parentElement !== list) return;
+    const rect = target.getBoundingClientRect();
+    list.insertBefore(draggedChatFallbackRow, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
+    refreshChatFallbackPriorities();
+}
+
+function handleChatFallbackDrop(event) {
+    event.preventDefault();
+    refreshChatFallbackPriorities();
+}
+
+function handleChatFallbackDragEnd() {
+    if (draggedChatFallbackRow) draggedChatFallbackRow.classList.remove('opacity-50');
+    draggedChatFallbackRow = null;
+    refreshChatFallbackPriorities();
 }
 
 function addChatFallbackRow() {
@@ -7200,6 +7295,7 @@ function addChatFallbackRow() {
     if (!row) return;
     list.appendChild(row);
     initChatFallbackRows(row);
+    refreshChatFallbackPriorities();
     const input = row.querySelector('[data-chat-fallback-model]');
     if (input) input.focus();
 }
@@ -7207,6 +7303,7 @@ function addChatFallbackRow() {
 function removeChatFallbackRow(button) {
     const row = button ? button.closest('[data-chat-fallback-row]') : null;
     if (row) row.remove();
+    refreshChatFallbackPriorities();
 }
 
 function readChatFallbackRows() {
@@ -7914,6 +8011,8 @@ function saveCapability(capId) {
     const extras = { voice };
     if (capId === 'chat') {
         extras.fallbacks = readChatFallbackRows();
+        const threshold = document.getElementById('cap-chat-failover-threshold');
+        extras.failoverFailureThreshold = threshold ? Number.parseInt(threshold.value, 10) : 3;
     }
 
     // Embedding changes invalidate any pre-existing vector index because
@@ -7963,6 +8062,9 @@ function _persistCapability(capId, provider, model, onAfterSuccess, extras) {
     const payload = { action: 'set_capability', capability: capId, provider_id: provider, model: model };
     if (extras && extras.voice !== undefined) payload.voice = extras.voice;
     if (extras && extras.fallbacks !== undefined) payload.fallbacks = extras.fallbacks;
+    if (extras && extras.failoverFailureThreshold !== undefined) {
+        payload.failover_failure_threshold = extras.failoverFailureThreshold;
+    }
     fetch('/api/models', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

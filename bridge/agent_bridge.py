@@ -14,12 +14,12 @@ from agent.protocol import Agent, LLMModel, LLMRequest, get_cancel_registry
 from bridge.agent_event_handler import AgentEventHandler
 from bridge.agent_initializer import AgentInitializer
 from bridge.bridge import Bridge
-from bridge.context import Context
+from bridge.context import Context, ContextType
 from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
 from common.utils import expand_path
-from config import conf
+from config import conf, load_config
 from models.openai_compatible_bot import OpenAICompatibleBot
 
 
@@ -118,7 +118,99 @@ class _ModelFailoverState:
 _MODEL_FAILOVER_STATE_INIT_LOCK = threading.Lock()
 
 
-class AgentLLMModel(LLMModel):
+class _CanonicalTextSession:
+    """Provider-neutral conversation state used by legacy chat mode."""
+
+    def __init__(self, session_id, system_prompt=""):
+        self.session_id = session_id
+        self.system_prompt = system_prompt or ""
+        self.messages = []
+        if self.system_prompt:
+            self.messages.append({"role": "system", "content": self.system_prompt})
+
+    def set_system_prompt(self, system_prompt):
+        self.system_prompt = system_prompt or ""
+        self.messages = []
+        if self.system_prompt:
+            self.messages.append({"role": "system", "content": self.system_prompt})
+
+
+class _CanonicalTextSessionStore:
+    """Thread-safe canonical history; failed candidates never mutate it."""
+
+    def __init__(self):
+        self._sessions = {}
+        self._locks = {}
+        self._lock = threading.RLock()
+
+    def session_lock(self, session_id):
+        key = session_id or "__stateless__"
+        with self._lock:
+            return self._locks.setdefault(key, threading.RLock())
+
+    def build_session(self, session_id, system_prompt=None):
+        with self._lock:
+            if session_id not in self._sessions:
+                prompt = conf().get("character_desc", "") if system_prompt is None else system_prompt
+                self._sessions[session_id] = _CanonicalTextSession(session_id, prompt)
+            elif system_prompt is not None and self._sessions[session_id].system_prompt != system_prompt:
+                self._sessions[session_id] = _CanonicalTextSession(session_id, system_prompt)
+            return self._sessions[session_id]
+
+    def snapshot_with_query(self, session_id, query):
+        session = self.build_session(session_id)
+        messages = [dict(item) for item in session.messages]
+        messages.append({"role": "user", "content": query})
+        return messages
+
+    def commit_exchange(self, session_id, query, reply):
+        session = self.build_session(session_id)
+        session.messages.extend([
+            {"role": "user", "content": query},
+            {"role": "assistant", "content": reply},
+        ])
+        self._trim(session)
+
+    @staticmethod
+    def _trim(session):
+        try:
+            limit = max(1, int(conf().get("conversation_max_tokens", 1000)))
+        except (TypeError, ValueError):
+            limit = 1000
+        # Provider-independent conservative estimate. Keep the system prompt and
+        # remove complete user/assistant turns so history remains well formed.
+        def size():
+            return sum(len(str(item.get("content", ""))) for item in session.messages)
+
+        start = 1 if session.messages and session.messages[0].get("role") == "system" else 0
+        while size() > limit and len(session.messages) - start > 2:
+            del session.messages[start:start + 2]
+
+    def clear_session(self, session_id):
+        with self._lock:
+            self._sessions.pop(session_id, None)
+            self._locks.pop(session_id or "__stateless__", None)
+
+    def clear_all_session(self):
+        with self._lock:
+            self._sessions.clear()
+            self._locks.clear()
+
+    # Compatibility for plugins that only need to append/read canonical history.
+    def session_query(self, query, session_id):
+        session = self.build_session(session_id)
+        session.messages.append({"role": "user", "content": query})
+        self._trim(session)
+        return session
+
+    def session_reply(self, reply, session_id, total_tokens=None):
+        session = self.build_session(session_id)
+        session.messages.append({"role": "assistant", "content": reply})
+        self._trim(session)
+        return session
+
+
+class TextModelRouter(LLMModel):
     """
     LLM Model adapter that uses LightAgent's existing bot infrastructure
     """
@@ -165,6 +257,13 @@ class AgentLLMModel(LLMModel):
         self._bot_model = None
         self._candidate_bots = {}
         self._failover_state = failover_state or self._shared_failover_state(bridge)
+        self.sessions = (
+            bridge._text_model_sessions
+            if bridge is not None and getattr(bridge, "_text_model_sessions", None) is not None
+            else _CanonicalTextSessionStore()
+        )
+        if bridge is not None:
+            bridge._text_model_sessions = self.sessions
 
     @staticmethod
     def _shared_failover_state(bridge):
@@ -653,6 +752,95 @@ class AgentLLMModel(LLMModel):
         """Format Claude stream chunk to our expected format"""
         # This would need to be implemented based on Claude's stream format
         return chunk
+
+
+    @staticmethod
+    def _extract_text_response(response):
+        """Return (text, success) from OpenAI/Claude-compatible payloads."""
+        if not isinstance(response, dict):
+            return str(response or ""), bool(response)
+        if response.get("error"):
+            error = response.get("error")
+            if isinstance(error, dict):
+                return str(error.get("message") or response.get("message") or ""), False
+            return str(response.get("message") or error or ""), False
+        choices = response.get("choices") or []
+        if choices:
+            first = choices[0] or {}
+            message = first.get("message") or {}
+            content = message.get("content")
+            if content is None:
+                content = first.get("text")
+            if isinstance(content, list):
+                content = "".join(
+                    str(block.get("text", "")) if isinstance(block, dict) else str(block)
+                    for block in content
+                )
+            return str(content or ""), content is not None
+        content = response.get("content")
+        if isinstance(content, list):
+            content = "".join(
+                str(block.get("text", "")) if isinstance(block, dict) else str(block)
+                for block in content
+            )
+        return str(content or response.get("message") or ""), content is not None
+
+    def complete(self, messages, purpose="text", system="", max_tokens=None):
+        """Run a stateless text completion through the shared fallback chain."""
+        request = LLMRequest(
+            messages=[dict(item) for item in (messages or [])],
+            tools=[],
+            system=system or "",
+            max_tokens=max_tokens,
+            stream=False,
+        )
+        response = self.call(request)
+        text, success = self._extract_text_response(response)
+        logger.debug(
+            "[TextModelRouter] completion finished: purpose=%s success=%s",
+            purpose,
+            success,
+        )
+        return {
+            "content": text,
+            "completion_tokens": 1 if success else 0,
+            "total_tokens": 0,
+            "success": success,
+            "raw": response,
+        }
+
+    def reply(self, query, context=None):
+        """Provider-neutral legacy chat entry point with atomic history commit."""
+        if context is None or context.type != ContextType.TEXT:
+            return self.bridge.get_bot("chat").reply(query, context)
+
+        session_id = context.get("session_id")
+        clear_commands = conf().get("clear_memory_commands", ["#清除记忆"])
+        if query in clear_commands:
+            self.sessions.clear_session(session_id)
+            return Reply(ReplyType.INFO, "记忆已清除")
+        if query == "#清除所有":
+            self.sessions.clear_all_session()
+            return Reply(ReplyType.INFO, "所有人记忆已清除")
+        if query == "#更新配置":
+            load_config()
+            return Reply(ReplyType.INFO, "配置已更新")
+
+        lock = self.sessions.session_lock(session_id)
+        with lock:
+            messages = self.sessions.snapshot_with_query(session_id, query)
+            result = self.complete(messages, purpose="legacy_chat")
+            if not result.get("success"):
+                return Reply(ReplyType.ERROR, result.get("content") or "模型调用失败")
+            content = result.get("content") or ""
+            self.sessions.commit_exchange(session_id, query, content)
+            return Reply(ReplyType.TEXT, content)
+
+
+class AgentLLMModel(TextModelRouter):
+    """Backward-compatible Agent protocol adapter for the shared text router."""
+
+    pass
 
 
 class AgentBridge:

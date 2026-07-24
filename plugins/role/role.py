@@ -131,7 +131,7 @@ class Role(Plugin):
         if btype not in [const.OPEN_AI, const.OPENAI, const.CHATGPT, const.CHATGPTONAZURE, const.QWEN_DASHSCOPE, const.XUNFEI, const.BAIDU, const.QIANFAN, const.ZHIPU_AI, const.MOONSHOT, const.MiniMax, const.LINKAI, const.MODELSCOPE]:
             logger.debug(f'不支持的bot: {btype}')
             return
-        bot = Bridge().get_bot("chat")
+        bot = Bridge().get_text_model_router()
         content = e_context["context"].content[:]
         clist = e_context["context"].content.split(maxsplit=1)
         desckey = None
