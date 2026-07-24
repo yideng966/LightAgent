@@ -22,6 +22,51 @@
 - 全量 Python 回归共运行 875 项，其中 874 项通过；1 项远端基线既有的 WebUI 缓存参数断言失败，单独复跑结果一致，与本次归档改动无关。
 - 相关 Python 文件编译与 `git diff --check` 均通过。
 
+### 技能授权成员名称展示修复
+
+- 微信侧车读取群成员时补充群内昵称，并在联系人基础名称缺失时从原始联系人数据的 `DisplayName`、`RemarkName`、`NickName` 字段恢复可读名称。
+- 后端成员列表保留群内昵称和展示名称，不再把 `wgm_` 稳定 ID 或运行时 ID 当作成员名称写回身份库。
+- 技能授权抽屉改为优先显示群内昵称、微信昵称，稳定成员 ID 仅作为次级识别信息；暂未取得名称的成员会明确显示“未获取到群昵称”。
+- 新增群内昵称优先级及微信原始名称字段回归测试。
+
+验证记录：
+
+- 微信侧车 Node.js 测试 50 项通过。
+- 微信群成员名称相关 Python 定向测试 3 项通过。
+- Python 编译、JavaScript 语法与 `git diff --check` 通过。
+- 真实运行界面截图：`docs/images/wechat-group-skill-access-members.png`。
+
+### 微信群技能授权管理
+
+- 新增动态技能 ACL 目录与独立 SQLite 权限库，内置、Web、CLI、手工复制及后续新增技能在刷新时自动注册；首次迁移技能保持可用，新发现技能默认待授权，同源升级和重装保留授权，不同来源同名技能不继承。
+- 新增按技能的微信群权限模式、全群/成员授权、版本冲突控制、授权模板、默认新技能模板、批量应用、审计日志、停用历史保留和 90 天清理能力。
+- 扩展技能管理 API 与 Web 技能页：技能卡显示权限状态和授权统计，支持授权抽屉、群与成员选择、搜索、全选、反选、清空、仅群管理员、复制策略、批量授权及模板管理。
+- 在微信群 Agent 链路增加 Prompt、技能文件读取和工具执行三层门禁；修正空 `skill_filter` 语义，并覆盖工具不存在自动读取、绝对/相对/符号链接路径、Bash 直接引用、执行中撤权、图片发送及历史会话脚本调用。
+- 定时任务保存创建者稳定成员身份，执行时重新按当前 ACL 校验；缺少创建者稳定身份时受限技能保持不可用。
+- CLI 与 Web 安装保存来源身份，技能刷新、安装及卸载后同步 ACL；成员授权按 canonical stable member 判断，身份重定向后无需逐技能重新授权。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_skill_access.py`
+- `agent/skills/manager.py`
+- `agent/protocol/agent_stream.py`
+- `bridge/agent_bridge.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `channel/web/chat.html`
+- `cli/commands/skill.py`
+- `agent/tools/scheduler/*`
+- `tests/test_wechat_group_skill_access.py`
+- `plans/20260724_微信群技能授权管理.md`
+
+验证记录：
+
+- 新增 ACL 单元测试 8 项通过，覆盖首次迁移、新技能默认限制、来源隔离、身份重定向、默认模板、并发版本冲突、空过滤、符号链接路径，以及拒绝后阻断后续媒体工具。
+- 完整 Docker 依赖环境中的 ACL、稳定身份、定时任务、群工具和会话持久化组合回归 57 项通过。
+- 已重建并重启本地 Docker 服务；`/chat` 返回 200，微信群登录保持 `connected`，ACL 数据库已写入持久化配置目录，现有 7 个技能均按首次迁移规则保持可用。
+- 技能、单技能授权和模板 API 实测通过；运行态 HTML 与 JavaScript 已包含批量授权、授权抽屉和模板操作。
+- Python 编译、JavaScript 语法和 `git diff --check` 通过。
+
 ### 群聊菜单开关滑块错位修复
 
 - 修正群聊菜单中开关滑块的绝对定位基准：滑块现在相对各自的开关轨道定位，不再受外层点击区域高度影响而向上偏移。

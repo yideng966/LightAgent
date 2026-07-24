@@ -256,6 +256,9 @@ def _apply_wechat_group_delivery_context(context: Context, action: dict) -> None
     if stable_receiver:
         context["wechat_group_stable_room_id"] = stable_receiver
         context["wechat_group_stable_receiver"] = stable_receiver
+    creator_member_id = str(action.get("creator_stable_member_id") or "").strip()
+    if creator_member_id:
+        context["wechat_group_stable_member_id"] = creator_member_id
     if runtime_receiver:
         context["wechat_group_runtime_room_id"] = runtime_receiver
         context["wechat_group_room_id"] = runtime_receiver
@@ -449,6 +452,7 @@ def _execute_agent_task(task: dict, agent_bridge) -> bool:
         context["receiver"] = receiver
         context["isgroup"] = is_group
         context["session_id"] = scheduler_session_id
+        context["channel_type"] = channel_type
         _apply_wechat_group_delivery_context(context, action)
         
         # Channel-specific setup

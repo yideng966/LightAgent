@@ -4,6 +4,7 @@ Agent Bridge - Integrates Agent system with existing LightAgent bridge
 
 import os
 import re
+import html
 import threading
 import time
 import types
@@ -863,6 +864,7 @@ class AgentBridge:
             filtered_tools = original_tools
             tools_modified = False
             suffix_modified = False
+            skill_filter = None
             
             # If this is a scheduled task execution, exclude scheduler tool to prevent recursion
             if context and context.get("is_scheduled_task"):
@@ -917,6 +919,86 @@ class AgentBridge:
                 except Exception as e:
                     logger.warning(f"[AgentBridge] WeChat group permission tool filter failed: {e}")
 
+                try:
+                    from channel.wechat_group.wechat_group_skill_access import (
+                        DENIAL_TEXT,
+                        get_wechat_group_skill_access_service,
+                    )
+
+                    skill_manager = getattr(agent, "skill_manager", None)
+                    if skill_manager:
+                        stable_room_id = (
+                            context.get("wechat_group_stable_room_id") or ""
+                        )
+                        stable_member_id = (
+                            ""
+                            if context.get("wechat_group_identity_requires_confirmation") is True
+                            else context.get("wechat_group_stable_member_id") or ""
+                        )
+                        access_service = get_wechat_group_skill_access_service()
+                        skill_filter = access_service.allowed_skill_names(
+                            skill_manager,
+                            stable_room_id,
+                            stable_member_id,
+                            request_id=request_id or "",
+                        )
+                        allowed = set(skill_filter)
+                        denied_entries = [
+                            entry
+                            for entry in skill_manager.list_skills()
+                            if entry.skill.name not in allowed
+                            and skill_manager.is_skill_enabled(entry.skill.name)
+                        ]
+                        context["wechat_group_skill_access_enabled"] = True
+                        context["wechat_group_allowed_skill_names"] = list(skill_filter)
+                        context["wechat_group_denied_skill_names"] = [
+                            entry.skill.name for entry in denied_entries
+                        ]
+                        context["wechat_group_skill_roots"] = {
+                            entry.skill.name: os.path.realpath(entry.skill.base_dir)
+                            for entry in skill_manager.list_skills()
+                        }
+                        context["wechat_group_active_skill_key"] = ""
+                        if denied_entries:
+                            denied_prompt = [
+                                "<wechat_group_restricted_skills>",
+                                "These skills are installed but unavailable to the current member.",
+                                "If the request clearly requires one of them, reply with exactly the denial text below and do not call any tool.",
+                            ]
+                            for entry in denied_entries:
+                                denied_prompt.append(
+                                    "  <skill><name>{}</name><description>{}</description>"
+                                    "<denial>{}</denial></skill>".format(
+                                        html.escape(entry.skill.name),
+                                        html.escape(entry.skill.description),
+                                        html.escape(DENIAL_TEXT.format(
+                                            skill_name=entry.skill.name
+                                        )),
+                                    )
+                                )
+                            denied_prompt.append("</wechat_group_restricted_skills>")
+                            suffix = "\n".join(denied_prompt)
+                            agent.extra_system_suffix = (
+                                f"{original_extra_system_suffix}\n\n{suffix}".strip()
+                                if original_extra_system_suffix
+                                else suffix
+                            )
+                            suffix_modified = True
+                        logger.info(
+                            "[AgentBridge] WeChat group skill ACL applied: %s/%s skills",
+                            len(skill_filter),
+                            len(skill_manager.skills),
+                        )
+                except Exception as e:
+                    # Fail closed for the WeChat group channel. Other channels
+                    # keep their original unrestricted semantics.
+                    skill_filter = []
+                    context["wechat_group_skill_access_enabled"] = True
+                    context["wechat_group_allowed_skill_names"] = []
+                    logger.error(
+                        f"[AgentBridge] WeChat group skill ACL failed closed: {e}"
+                    )
+
             wechat_group_tools = self._create_wechat_group_memory_tools(agent, context)
             if wechat_group_tools:
                 existing_names = {tool.name for tool in filtered_tools}
@@ -928,9 +1010,10 @@ class AgentBridge:
                     agent.tools = list(filtered_tools) + scoped_tools
                     tools_modified = True
                 suffix = self._build_wechat_group_memory_tool_prompt()
+                current_suffix = getattr(agent, "extra_system_suffix", "") or ""
                 agent.extra_system_suffix = (
-                    f"{original_extra_system_suffix}\n\n{suffix}".strip()
-                    if original_extra_system_suffix else suffix
+                    f"{current_suffix}\n\n{suffix}".strip()
+                    if current_suffix else suffix
                 )
                 suffix_modified = True
             
@@ -979,6 +1062,7 @@ class AgentBridge:
                     user_message=query,
                     on_event=event_handler.handle_event,
                     clear_history=clear_history,
+                    skill_filter=skill_filter,
                     cancel_event=cancel_event,
                     context=context,
                 )

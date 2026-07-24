@@ -5,6 +5,7 @@ import re
 import sys
 import json
 import hashlib
+import logging
 import shutil
 import zipfile
 import tempfile
@@ -15,6 +16,8 @@ from urllib.parse import urlparse
 
 import click
 import requests
+
+logger = logging.getLogger(__name__)
 
 from cli.utils import (
     get_project_root,
@@ -276,7 +279,12 @@ def _batch_install_skills(discovered, spec, skills_dir, source, result: InstallR
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir)
         shutil.copytree(sdir, target_dir)
-        _register_installed_skill(safe_name, source=source, display_name=display_name if single else "")
+        _register_installed_skill(
+            safe_name,
+            source=source,
+            display_name=display_name if single else "",
+            source_identity=spec,
+        )
         result.installed.append(safe_name)
         result.messages.append(f"  + {safe_name}")
 
@@ -313,7 +321,7 @@ def _install_local(path: str, result: InstallResult):
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir)
         shutil.copytree(path, target_dir)
-        _register_installed_skill(skill_name, source="local")
+        _register_installed_skill(skill_name, source="local", source_identity=path)
         result.installed.append(skill_name)
         result.messages.append(f"Installed '{skill_name}' from local path.")
         return
@@ -325,7 +333,12 @@ def _install_local(path: str, result: InstallResult):
     _batch_install_skills(discovered, path, skills_dir, "local", result)
 
 
-def _register_installed_skill(name: str, source: str = "skill_hub", display_name: str = ""):
+def _register_installed_skill(
+    name: str,
+    source: str = "skill_hub",
+    display_name: str = "",
+    source_identity: str = "",
+):
     """Register a newly installed skill into skills_config.json.
 
     source values: builtin, lightagent, github, clawhub, linkai, local, url
@@ -342,8 +355,15 @@ def _register_installed_skill(name: str, source: str = "skill_hub", display_name
             config = {}
 
     if name in config:
+        changed = False
         if display_name and not config[name].get("display_name"):
             config[name]["display_name"] = display_name
+            changed = True
+        if source_identity and config[name].get("source_identity") != source_identity:
+            config[name]["source_identity"] = source_identity
+            config[name]["source"] = source
+            changed = True
+        if changed:
             try:
                 with open(config_path, "w", encoding="utf-8") as f:
                     json.dump(config, f, indent=4, ensure_ascii=False)
@@ -363,6 +383,8 @@ def _register_installed_skill(name: str, source: str = "skill_hub", display_name
     }
     if display_name:
         entry["display_name"] = display_name
+    if source_identity:
+        entry["source_identity"] = source_identity
     config[name] = entry
 
     try:
@@ -838,9 +860,21 @@ def install_skill(name: str) -> InstallResult:
     result = InstallResult()
     try:
         _route_install(name, result)
+        if result.installed:
+            _sync_wechat_group_skill_catalog()
     except SkillInstallError as e:
         result.error = str(e)
     return result
+
+
+def _sync_wechat_group_skill_catalog():
+    """Refresh the dynamic ACL catalog after a CLI lifecycle operation."""
+    try:
+        from agent.skills.manager import SkillManager
+
+        SkillManager(custom_dir=get_skills_dir()).refresh_skills()
+    except Exception as e:
+        logger.warning(f"Failed to sync WeChat group skill ACL catalog: {e}")
 
 
 def _route_install(name: str, result: InstallResult):
@@ -1205,7 +1239,7 @@ def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, 
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
             shutil.copytree(api_dest, target_dir)
-        _register_installed_skill(skill_name, source=source)
+        _register_installed_skill(skill_name, source=source, source_identity=spec)
         result.installed.append(skill_name)
         result.messages.append(f"Installed '{skill_name}' from GitHub.")
     except Exception as e:
@@ -1231,7 +1265,7 @@ def _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, so
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
             shutil.copytree(source_dir, target_dir)
-            _register_installed_skill(skill_name, source=source)
+            _register_installed_skill(skill_name, source=source, source_identity=spec)
             result.installed.append(skill_name)
             result.messages.append(f"Installed '{skill_name}' from {source}.")
             return
@@ -1255,7 +1289,7 @@ def _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, so
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
             shutil.copytree(repo_root, target_dir)
-            _register_installed_skill(skill_name, source=source)
+            _register_installed_skill(skill_name, source=source, source_identity=spec)
             result.installed.append(skill_name)
             result.messages.append(f"Installed '{skill_name}' from {source}.")
             return
@@ -1384,6 +1418,7 @@ def uninstall(name, yes):
         except Exception:
             pass
 
+    _sync_wechat_group_skill_catalog()
     click.echo(click.style(f"✓ Skill '{name}' uninstalled.", fg="green"))
 
 

@@ -356,6 +356,20 @@ test('resolveContactDisplayName uses raw payload sender nickname when contact na
   assert.equal(name, 'Alice Raw')
 })
 
+test('resolveContactDisplayName uses common wechat4u raw nickname fields', async () => {
+  const rawSenderId = '@ec16ad646512ce039fd5b1885a848f170362fed7b7fbe874d257455cf85ea0b2'
+  const contact = { id: rawSenderId, name: () => rawSenderId }
+
+  assert.equal(
+    await resolveContactDisplayName(contact, null, { DisplayName: '群昵称' }),
+    '群昵称',
+  )
+  assert.equal(
+    await resolveContactDisplayName(contact, null, { NickName: '微信昵称' }),
+    '微信昵称',
+  )
+})
+
 test('resolveContactWechatId reads wechat id from contact payload aliases', async () => {
   const contact = {
     id: '@alice',
@@ -384,6 +398,7 @@ test('buildRoomMemberPayload includes wechat id from raw Alias fallback', async 
   assert.deepEqual(payload, {
     sender_id: '@alice',
     sender_nickname: 'Alice',
+    room_alias: '',
     wechat_id: 'yideng0803',
   })
 })

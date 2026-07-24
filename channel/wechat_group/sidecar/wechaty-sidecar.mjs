@@ -81,6 +81,14 @@ async function listRoomMembers(command) {
   const members = []
   for (const contact of contacts) {
     let payload = await buildRoomMemberPayload(contact, room)
+    const displayNameMissing = !String(payload.sender_nickname || '').trim()
+      || String(payload.sender_nickname || '').trim() === String(payload.sender_id || '').trim()
+    if (displayNameMissing) {
+      const rawPayload = await contactRawPayload(contact)
+      if (rawPayload) {
+        payload = await buildRoomMemberPayload(contact, room, rawPayload)
+      }
+    }
     if (query && !memberPayloadMatchesQuery(payload, query)) {
       const rawPayload = await contactRawPayload(contact)
       if (rawPayload) {

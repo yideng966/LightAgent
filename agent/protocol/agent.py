@@ -380,6 +380,30 @@ class Agent:
 
         return action
 
+    @staticmethod
+    def _sanitize_restricted_skill_history(messages, denied_names, skill_roots):
+        """Remove stale restricted skill instructions from a request snapshot."""
+        denied = {str(name).strip() for name in denied_names if str(name).strip()}
+        markers = [
+            str(skill_roots.get(name) or "").strip()
+            for name in denied
+            if str(skill_roots.get(name) or "").strip()
+        ]
+        markers.extend(f"--- SKILL: {name}" for name in denied)
+
+        def scrub(value):
+            if isinstance(value, str):
+                if any(marker in value for marker in markers):
+                    return "[Restricted skill content removed for this WeChat group request]"
+                return value
+            if isinstance(value, list):
+                return [scrub(item) for item in value]
+            if isinstance(value, dict):
+                return {key: scrub(item) for key, item in value.items()}
+            return value
+
+        return [scrub(dict(message)) for message in messages]
+
     def run_stream(self, user_message: str, on_event=None, clear_history: bool = False,
                    skill_filter=None, cancel_event=None, context=None) -> str:
         """
@@ -432,6 +456,12 @@ class Agent:
         with self.messages_lock:
             messages_copy = self.messages.copy()
             original_length = len(self.messages)
+        if context and context.get("wechat_group_skill_access_enabled"):
+            messages_copy = self._sanitize_restricted_skill_history(
+                messages_copy,
+                context.get("wechat_group_denied_skill_names") or [],
+                context.get("wechat_group_skill_roots") or {},
+            )
 
         # Get max_context_turns from config
         from config import conf

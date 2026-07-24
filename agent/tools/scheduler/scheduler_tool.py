@@ -202,6 +202,9 @@ class SchedulerTool(BaseTool):
             action["receiver_kind"] = receiver_kind
             action["stable_receiver"] = stable_receiver
             action["runtime_receiver"] = receiver or ""
+            action["creator_stable_member_id"] = (
+                context.get("wechat_group_stable_member_id") or ""
+            )
         
         # 针对钉钉单聊，额外存储 sender_staff_id
         msg = context.kwargs.get("msg")

@@ -4,6 +4,7 @@ Agent Stream Execution Module - Multi-turn reasoning based on tool-call
 Provides streaming output, event system, and complete tool-call loop
 """
 import json
+import os
 import re
 import time
 from typing import List, Dict, Any, Optional, Callable, Tuple
@@ -405,6 +406,7 @@ class AgentStreamExecutor:
         
         # Track files to send (populated by read tool)
         self.files_to_send = []  # List of file metadata dicts
+        self._skill_permission_denied = ""
 
     def _check_cancelled(self) -> None:
         """Raise AgentCancelledError if the user requested cancellation.
@@ -1472,6 +1474,21 @@ class AgentStreamExecutor:
         tool_id = tool_call["id"]
         arguments = tool_call["arguments"]
 
+        denied_message = self._guard_wechat_group_skill_tool(tool_name, arguments)
+        if denied_message:
+            result = {
+                "status": "critical_error",
+                "result": denied_message,
+                "execution_time": 0,
+            }
+            self._record_tool_result(tool_name, arguments, False)
+            self._emit_event("tool_execution_end", {
+                "tool_call_id": tool_id,
+                "tool_name": tool_name,
+                **result,
+            })
+            return result
+
         if "_parse_error" in tool_call:
             result = {
                 "status": "error",
@@ -1579,6 +1596,154 @@ class AgentStreamExecutor:
             })
             return error_result
 
+    def _guard_wechat_group_skill_tool(
+        self, tool_name: str, arguments: Dict[str, Any]
+    ) -> str:
+        """Re-check WeChat group skill ACL before every tool execution."""
+        context = self.context
+        if not context or not context.get("wechat_group_skill_access_enabled"):
+            return ""
+        if self._skill_permission_denied:
+            return self._skill_permission_denied
+
+        roots = context.get("wechat_group_skill_roots") or {}
+        allowed = set(context.get("wechat_group_allowed_skill_names") or [])
+        referenced_skill = (
+            tool_name
+            if tool_name in roots
+            else self._skill_referenced_by_arguments(arguments, roots)
+        )
+        active_skill = str(
+            context.get("wechat_group_active_skill_key") or ""
+        ).strip()
+        skill_name = referenced_skill or active_skill
+        if not skill_name:
+            return ""
+
+        manager = getattr(self.agent, "skill_manager", None)
+        if manager:
+            enabled = manager.is_skill_enabled(skill_name)
+            try:
+                persisted = manager._load_skills_config().get(skill_name, {})
+                enabled = bool(persisted.get("enabled", enabled))
+            except Exception:
+                pass
+            if not enabled or skill_name not in allowed:
+                return self._deny_wechat_group_skill(
+                    skill_name, "filtered_or_disabled"
+                )
+
+        try:
+            from channel.wechat_group.wechat_group_skill_access import (
+                get_wechat_group_skill_access_service,
+            )
+
+            service = get_wechat_group_skill_access_service()
+            permitted, reason = service.check_access(
+                skill_name,
+                context.get("wechat_group_stable_room_id") or "",
+                context.get("wechat_group_stable_member_id") or "",
+                request_id=context.get("request_id") or "",
+                manager=manager,
+            )
+            if not permitted:
+                return self._deny_wechat_group_skill(skill_name, reason)
+        except Exception as e:
+            logger.error(f"[Agent] WeChat group skill execution gate failed: {e}")
+            return self._deny_wechat_group_skill(skill_name, "gate_error")
+
+        if referenced_skill and self._arguments_read_skill_md(tool_name, arguments):
+            context["wechat_group_active_skill_key"] = referenced_skill
+        return ""
+
+    @staticmethod
+    def _argument_strings(value: Any):
+        if isinstance(value, str):
+            yield value
+        elif isinstance(value, dict):
+            for item in value.values():
+                yield from AgentStreamExecutor._argument_strings(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                yield from AgentStreamExecutor._argument_strings(item)
+
+    @classmethod
+    def _skill_referenced_by_arguments(cls, arguments, roots) -> str:
+        strings = list(cls._argument_strings(arguments))
+        blob = "\n".join(strings)
+        for name, raw_root in roots.items():
+            root = os.path.realpath(str(raw_root or ""))
+            if not root:
+                continue
+            if root in blob:
+                return str(name)
+            if re.search(
+                r"(?:^|[/\\])" + re.escape(os.path.basename(root)) + r"(?:[/\\])",
+                blob,
+            ):
+                return str(name)
+            for value in strings:
+                candidates = [value]
+                candidates.extend(
+                    re.findall(
+                        r"(?:^|[\s\"'])((?:\.{0,2}/|/)[^\s\"';|&]+)",
+                        value,
+                    )
+                )
+                for candidate in candidates:
+                    candidate = str(candidate).strip()
+                    if not candidate or (
+                        not os.path.isabs(candidate)
+                        and "/" not in candidate
+                        and "\\" not in candidate
+                    ):
+                        continue
+                    resolved_candidates = [os.path.realpath(candidate)]
+                    if not os.path.isabs(candidate):
+                        resolved_candidates.append(
+                            os.path.realpath(
+                                os.path.join(os.path.dirname(root), candidate)
+                            )
+                        )
+                    for resolved in resolved_candidates:
+                        try:
+                            if os.path.commonpath([root, resolved]) == root:
+                                return str(name)
+                        except ValueError:
+                            continue
+        return ""
+
+    @staticmethod
+    def _arguments_read_skill_md(tool_name: str, arguments: Dict[str, Any]) -> bool:
+        if tool_name != "read":
+            return False
+        return any(
+            os.path.basename(str(value).strip()) == "SKILL.md"
+            for value in AgentStreamExecutor._argument_strings(arguments)
+        )
+
+    def _deny_wechat_group_skill(self, skill_name: str, reason: str) -> str:
+        from channel.wechat_group.wechat_group_skill_access import (
+            DENIAL_TEXT,
+            get_wechat_group_skill_access_service,
+        )
+
+        message = DENIAL_TEXT.format(skill_name=skill_name)
+        self._skill_permission_denied = message
+        try:
+            get_wechat_group_skill_access_service().audit(
+                self.context.get("request_id") or "",
+                None,
+                skill_name,
+                self.context.get("wechat_group_stable_room_id") or "",
+                self.context.get("wechat_group_stable_member_id") or "",
+                False,
+                reason,
+            )
+        except Exception:
+            pass
+        return message
+
     @staticmethod
     def _is_successful_scheduler_create(tool_name: str, arguments: Dict[str, Any], result: ToolResult) -> bool:
         if tool_name != "scheduler":
@@ -1608,6 +1773,13 @@ class AgentStreamExecutor:
         skill_entry = skill_manager.get_skill(tool_name)
         if not skill_entry:
             return base_msg
+
+        denied = self._guard_wechat_group_skill_tool(
+            tool_name,
+            {"path": skill_entry.skill.file_path},
+        )
+        if denied:
+            return denied
 
         skill = skill_entry.skill
         skill_md_path = skill.file_path

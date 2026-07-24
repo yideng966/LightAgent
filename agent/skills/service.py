@@ -115,11 +115,28 @@ class SkillService:
         else:
             self._add_url(name, payload)
 
+        files = payload.get("files") or []
+        source_identity = payload.get("source_identity") or payload.get("source_url")
+        if not source_identity and files:
+            source_identity = files[0].get("url")
+        if source_identity:
+            saved = self.manager._load_skills_config()
+            entry = dict(saved.get(name) or {})
+            entry["source_identity"] = str(source_identity)
+            entry.setdefault("name", name)
+            entry.setdefault("source", str(payload.get("source") or payload_type))
+            entry.setdefault("enabled", bool(payload.get("enabled", True)))
+            entry.setdefault("category", payload.get("category") or "skill")
+            saved[name] = entry
+            self.manager.skills_config = saved
+            self.manager._save_skills_config()
+
         self.manager.refresh_skills()
 
         category = payload.get("category")
-        if category and name in self.manager.skills_config:
-            self.manager.skills_config[name]["category"] = category
+        if name in self.manager.skills_config:
+            if category:
+                self.manager.skills_config[name]["category"] = category
             self.manager._save_skills_config()
 
     def _add_url(self, name: str, payload: dict) -> None:
