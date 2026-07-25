@@ -174,7 +174,12 @@ const I18N = {
         config_password_hint: '留空则不启用密码保护',
         config_password_changed: '密码已更新，请重新登录',
         config_password_cleared: '密码已清除',
-        skills_title: '技能管理', skills_desc: '查看、启用或禁用 Agent 工具和技能', skills_hub_btn: '探索技能广场',
+        skills_title: '技能管理', skills_desc: '查看、启用或禁用 Agent 工具和技能', skills_hub_btn: '获取在线技能',
+        skill_hub_title: '在线技能库', skill_hub_desc: '从 LightAgent Skill Hub 获取经过签名校验的技能，安装前可查看依赖与权限。',
+        skill_hub_search_placeholder: '搜索名称、描述、作者或标签', skill_hub_all_risks: '全部风险等级',
+        skill_hub_risk_low: '低风险', skill_hub_risk_medium: '中风险', skill_hub_risk_high: '高风险',
+        skill_hub_all_categories: '全部分类', skill_hub_refresh: '刷新', skill_hub_empty: '没有匹配的在线技能',
+        skill_hub_empty_hint: '尝试调整搜索词或筛选条件。', skill_hub_prev: '上一页', skill_hub_next: '下一页',
         skills_loading: '加载技能中...', skills_loading_desc: '技能加载后将显示在此处',
         tools_section_title: '内置工具', tools_loading: '加载工具中...',
         skills_section_title: '技能', skill_enable: '启用', skill_disable: '禁用',
@@ -1027,7 +1032,12 @@ const I18N = {
         config_password_hint: 'Leave empty to disable password protection',
         config_password_changed: 'Password updated, please re-login',
         config_password_cleared: 'Password cleared',
-        skills_title: 'Skills', skills_desc: 'View, enable, or disable agent tools and skills', skills_hub_btn: 'Skill Hub',
+        skills_title: 'Skills', skills_desc: 'View, enable, or disable agent tools and skills', skills_hub_btn: 'Get online skills',
+        skill_hub_title: 'Online Skill Library', skill_hub_desc: 'Get signed skills from LightAgent Skill Hub and review dependencies and permissions before installation.',
+        skill_hub_search_placeholder: 'Search name, description, author, or tag', skill_hub_all_risks: 'All risk levels',
+        skill_hub_risk_low: 'Low risk', skill_hub_risk_medium: 'Medium risk', skill_hub_risk_high: 'High risk',
+        skill_hub_all_categories: 'All categories', skill_hub_refresh: 'Refresh', skill_hub_empty: 'No matching online skills',
+        skill_hub_empty_hint: 'Try another search term or filter.', skill_hub_prev: 'Previous', skill_hub_next: 'Next',
         skills_loading: 'Loading skills...', skills_loading_desc: 'Skills will be displayed here after loading',
         tools_section_title: 'Built-in Tools', tools_loading: 'Loading tools...',
         skills_section_title: 'Skills', skill_enable: 'Enable', skill_disable: 'Disable',
@@ -5831,62 +5841,232 @@ function getToolIcon(name) {
 function loadSkillsView() {
     loadToolsSection();
     loadSkillsSection();
-    loadSkillHub();
 }
 
 let skillHubSearchTimer = null;
+const skillHubState = {
+    page: 1,
+    pageSize: 12,
+    total: 0,
+    totalPages: 1,
+    skills: [],
+    loaded: false,
+};
+
+function openSkillHubModal() {
+    const modal = document.getElementById('skill-hub-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    document.getElementById('skill-hub-search')?.focus();
+    if (!skillHubState.loaded) loadSkillHub();
+}
+
+function closeSkillHubModal() {
+    closeSkillHubDetail();
+    document.getElementById('skill-hub-modal')?.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+}
+
+function handleSkillHubBackdrop(event) {
+    if (event.target?.id === 'skill-hub-modal') closeSkillHubModal();
+}
+
+function handleSkillHubDetailBackdrop(event) {
+    if (event.target?.id === 'skill-hub-detail-modal') closeSkillHubDetail();
+}
+
+function resetAndLoadSkillHub() {
+    skillHubState.page = 1;
+    loadSkillHub();
+}
+
+function changeSkillHubPage(delta) {
+    const next = Math.min(skillHubState.totalPages, Math.max(1, skillHubState.page + delta));
+    if (next === skillHubState.page) return;
+    skillHubState.page = next;
+    loadSkillHub();
+    document.getElementById('skill-hub-scroll')?.scrollTo({top: 0, behavior: 'smooth'});
+}
 
 function loadSkillHub() {
     const listEl = document.getElementById('skill-hub-list');
     const statusEl = document.getElementById('skill-hub-status');
     const searchEl = document.getElementById('skill-hub-search');
+    const riskEl = document.getElementById('skill-hub-risk');
+    const categoryEl = document.getElementById('skill-hub-category');
+    const loadingEl = document.getElementById('skill-hub-loading');
+    const emptyEl = document.getElementById('skill-hub-empty');
+    const errorEl = document.getElementById('skill-hub-error');
     if (!listEl || !statusEl) return;
-    statusEl.classList.remove('hidden');
-    statusEl.textContent = currentLang === 'zh' ? '正在加载技能中心...' : 'Loading Skill Hub...';
-    const query = searchEl ? searchEl.value.trim() : '';
-    fetch('/api/skill-hub?q=' + encodeURIComponent(query)).then(r => r.json()).then(data => {
+
+    listEl.classList.add('hidden');
+    emptyEl?.classList.add('hidden');
+    errorEl?.classList.add('hidden');
+    loadingEl?.classList.remove('hidden');
+    statusEl.textContent = currentLang === 'zh' ? '正在获取在线技能...' : 'Loading online skills...';
+
+    const params = new URLSearchParams({
+        q: searchEl?.value.trim() || '',
+        risk: riskEl?.value || '',
+        category: categoryEl?.value || '',
+        page: String(skillHubState.page),
+        page_size: String(skillHubState.pageSize),
+    });
+    fetch('/api/skill-hub?' + params.toString()).then(r => r.json()).then(data => {
         if (data.status !== 'success') throw new Error(data.message || 'Request failed');
         const skills = data.skills || [];
+        const pagination = data.pagination || {};
+        skillHubState.skills = skills;
+        skillHubState.page = Number(pagination.page || 1);
+        skillHubState.total = Number(pagination.total || skills.length);
+        skillHubState.totalPages = Math.max(1, Number(pagination.total_pages || 1));
+        skillHubState.loaded = true;
+        updateSkillHubCategories(data.categories || []);
         listEl.innerHTML = '';
         skills.forEach(skill => listEl.appendChild(renderSkillHubCard(skill)));
-        statusEl.textContent = skills.length
-            ? (currentLang === 'zh' ? `共 ${skills.length} 个技能` : `${skills.length} skills`)
-            : (currentLang === 'zh' ? '没有匹配的技能' : 'No matching skills');
+        loadingEl?.classList.add('hidden');
+        if (skills.length) {
+            listEl.classList.remove('hidden');
+        } else {
+            emptyEl?.classList.remove('hidden');
+        }
+        updateSkillHubPagination();
     }).catch(error => {
+        loadingEl?.classList.add('hidden');
         listEl.innerHTML = '';
-        statusEl.textContent = (currentLang === 'zh' ? '技能中心加载失败：' : 'Failed to load Skill Hub: ') + error.message;
+        errorEl?.classList.remove('hidden');
+        if (errorEl) errorEl.innerHTML = `<div><i class="fas fa-triangle-exclamation text-xl text-amber-500"></i><p class="mt-3 text-sm font-medium text-slate-700 dark:text-slate-200">${currentLang === 'zh' ? '在线技能库加载失败' : 'Failed to load Skill Hub'}</p><p class="mt-1 max-w-md break-words text-xs text-slate-400">${escapeHtml(error.message)}</p><button type="button" class="mt-4 rounded-md bg-primary-500 px-3 py-2 text-xs font-medium text-white hover:bg-primary-600" onclick="loadSkillHub()">${currentLang === 'zh' ? '重新加载' : 'Retry'}</button></div>`;
+        statusEl.textContent = currentLang === 'zh' ? '暂时无法获取在线技能' : 'Online skills unavailable';
+        updateSkillHubPagination();
     });
+}
+
+function updateSkillHubCategories(categories) {
+    const select = document.getElementById('skill-hub-category');
+    if (!select) return;
+    const selected = select.value;
+    if (selected && !categories.includes(selected)) categories = [selected, ...categories];
+    const label = currentLang === 'zh' ? '全部分类' : 'All categories';
+    select.innerHTML = `<option value="">${label}</option>` + categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+    if (categories.includes(selected)) select.value = selected;
+}
+
+function updateSkillHubPagination() {
+    const status = document.getElementById('skill-hub-status');
+    const page = document.getElementById('skill-hub-page');
+    const prev = document.getElementById('skill-hub-prev');
+    const next = document.getElementById('skill-hub-next');
+    if (status && skillHubState.loaded) {
+        const first = skillHubState.total ? (skillHubState.page - 1) * skillHubState.pageSize + 1 : 0;
+        const last = Math.min(skillHubState.total, skillHubState.page * skillHubState.pageSize);
+        status.textContent = currentLang === 'zh'
+            ? `共 ${skillHubState.total} 个技能，当前显示 ${first}-${last}`
+            : `${skillHubState.total} skills, showing ${first}-${last}`;
+    }
+    if (page) page.textContent = `${skillHubState.page} / ${skillHubState.totalPages}`;
+    if (prev) prev.disabled = skillHubState.page <= 1;
+    if (next) next.disabled = skillHubState.page >= skillHubState.totalPages;
 }
 
 function renderSkillHubCard(skill) {
     const card = document.createElement('article');
-    card.className = 'border border-slate-200 dark:border-white/10 rounded-lg p-4 bg-white dark:bg-[#1A1A1A] flex flex-col min-h-[190px]';
+    card.className = 'flex min-h-[220px] min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-primary-300 dark:border-white/10 dark:bg-[#1A1A1A] dark:hover:border-primary-700';
     const risk = skill.lightagent?.risk_level || 'low';
     const riskLabel = { low: currentLang === 'zh' ? '低风险' : 'Low risk', medium: currentLang === 'zh' ? '中风险' : 'Medium risk', high: currentLang === 'zh' ? '高风险' : 'High risk' }[risk];
     const riskClass = risk === 'high' ? 'bg-red-50 text-red-600 dark:bg-red-900/20' : (risk === 'medium' ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20' : 'bg-green-50 text-green-600 dark:bg-green-900/20');
     const action = skill.installed ? (skill.update_available ? 'update' : 'verify') : 'install';
     const actionLabel = action === 'install' ? (currentLang === 'zh' ? '安装' : 'Install') : (action === 'update' ? (currentLang === 'zh' ? '更新' : 'Update') : (currentLang === 'zh' ? '校验' : 'Verify'));
+    const tags = (skill.tags || []).slice(0, 3);
     card.innerHTML = `
         <div class="flex items-start gap-2">
             <div class="min-w-0 flex-1">
-                <h4 class="font-semibold text-sm text-slate-800 dark:text-slate-100 truncate">${escapeHtml(skill.name)}</h4>
-                <p class="text-[11px] text-slate-400 mt-1">v${escapeHtml(skill.version || '--')} · ${escapeHtml(skill.publisher || 'community')}</p>
+                <h4 class="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(skill.name)}</h4>
+                <p class="mt-1 text-[11px] text-slate-400">v${escapeHtml(skill.version || '--')} · ${escapeHtml(skill.publisher || 'community')}</p>
             </div>
-            <span class="px-2 py-1 rounded text-[11px] ${riskClass}">${riskLabel}</span>
+            <span class="shrink-0 rounded px-2 py-1 text-[11px] ${riskClass}">${riskLabel}</span>
         </div>
-        <p class="text-xs leading-5 text-slate-500 dark:text-slate-400 my-3 flex-1 line-clamp-3">${escapeHtml(skill.description || '--')}</p>
-        ${skill.lightagent?.docker_notes ? `<p class="text-[11px] text-slate-400 mb-3"><i class="fas fa-box mr-1"></i>${escapeHtml(skill.lightagent.docker_notes)}</p>` : ''}
-        <div class="flex items-center gap-2">
-            <button type="button" class="px-3 py-1.5 rounded-md text-xs font-medium text-white bg-primary-500 hover:bg-primary-600" onclick="runSkillHubAction('${escapeHtml(action)}','${escapeHtml(skill.name)}','${escapeHtml(skill.version || '')}')">${actionLabel}</button>
-            ${skill.installed ? `<button type="button" title="${currentLang === 'zh' ? '回滚上一版本' : 'Roll back'}" class="w-8 h-8 rounded-md border border-slate-200 dark:border-white/10" onclick="runSkillHubAction('rollback','${escapeHtml(skill.name)}','')"><i class="fas fa-undo text-xs"></i></button><button type="button" title="${currentLang === 'zh' ? '卸载技能' : 'Uninstall'}" class="w-8 h-8 rounded-md border border-red-200 text-red-500 dark:border-red-900/50" onclick="runSkillHubAction('uninstall','${escapeHtml(skill.name)}','')"><i class="fas fa-trash-alt text-xs"></i></button>` : ''}
-            <span class="ml-auto text-[11px] text-slate-400">${skill.installed_version ? `${escapeHtml(skill.installed_version)} ${currentLang === 'zh' ? '已安装' : 'installed'}` : ''}</span>
+        <p class="my-3 line-clamp-3 flex-1 text-xs leading-5 text-slate-500 dark:text-slate-400">${escapeHtml(skill.description || '--')}</p>
+        <div class="mb-3 flex min-h-5 flex-wrap gap-1">${tags.map(tag => `<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/5 dark:text-slate-400">${escapeHtml(tag)}</span>`).join('')}</div>
+        <div class="flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-white/5">
+            <button type="button" data-skill-action class="rounded-md bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60">${actionLabel}</button>
+            <button type="button" data-skill-details class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">${currentLang === 'zh' ? '详情' : 'Details'}</button>
+            <span class="ml-auto truncate text-[11px] text-slate-400">${skill.installed_version ? `${escapeHtml(skill.installed_version)} ${currentLang === 'zh' ? '已安装' : 'installed'}` : escapeHtml(skill.category || '')}</span>
         </div>`;
+    card.querySelector('[data-skill-action]')?.addEventListener('click', event => runSkillHubAction(action, skill.name, skill.version || '', false, event.currentTarget));
+    card.querySelector('[data-skill-details]')?.addEventListener('click', () => openSkillHubDetail(skill));
     return card;
 }
 
-async function runSkillHubAction(action, name, version, approveRisk = false) {
+function openSkillHubDetail(skill) {
+    const modal = document.getElementById('skill-hub-detail-modal');
+    const content = document.getElementById('skill-hub-detail-content');
+    const actions = document.getElementById('skill-hub-detail-actions');
+    if (!modal || !content || !actions) return;
+    const risk = skill.lightagent?.risk_level || 'low';
+    const requirements = skill.requirements || {};
+    const permissionRows = [
+        [currentLang === 'zh' ? '网络域名' : 'Network domains', skill.lightagent?.network_domains || []],
+        [currentLang === 'zh' ? '文件路径' : 'File paths', skill.lightagent?.file_paths || []],
+        [currentLang === 'zh' ? '工具权限' : 'Tools', skill.lightagent?.tools || []],
+    ];
+    document.getElementById('skill-hub-detail-title').textContent = skill.name || '';
+    document.getElementById('skill-hub-detail-meta').textContent = `v${skill.version || '--'} · ${skill.publisher || 'community'} · ${risk}`;
+    content.innerHTML = `
+        <p class="text-sm leading-6 text-slate-600 dark:text-slate-300">${escapeHtml(skill.description || '--')}</p>
+        <div class="mt-5 grid gap-4 sm:grid-cols-2">
+            <section class="min-w-0"><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '兼容与来源' : 'Compatibility'}</h4><dl class="mt-2 space-y-2 text-xs"><div><dt class="text-slate-400">LightAgent</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml(skill.min_lightagent_version || '--')} - ${escapeHtml(skill.max_lightagent_version || 'latest')}</dd></div><div><dt class="text-slate-400">${currentLang === 'zh' ? '平台' : 'Platforms'}</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml((skill.platforms || []).join(', ') || '--')}</dd></div><div><dt class="text-slate-400">${currentLang === 'zh' ? '作者' : 'Author'}</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml(skill.author || '--')}</dd></div></dl></section>
+            <section class="min-w-0"><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '依赖' : 'Dependencies'}</h4><dl class="mt-2 space-y-2 text-xs">${[['Python', requirements.python], ['npm', requirements.npm], [currentLang === 'zh' ? '命令' : 'Binaries', requirements.bins], [currentLang === 'zh' ? '环境变量' : 'Environment', requirements.env]].map(([label, values]) => `<div><dt class="text-slate-400">${label}</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml((values || []).join(', ') || '--')}</dd></div>`).join('')}</dl></section>
+        </div>
+        <section class="mt-5"><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '权限声明' : 'Declared permissions'}</h4><dl class="mt-2 grid gap-3 sm:grid-cols-3">${permissionRows.map(([label, values]) => `<div class="min-w-0 rounded-md bg-slate-50 p-3 dark:bg-white/[0.03]"><dt class="text-[11px] text-slate-400">${label}</dt><dd class="mt-1 break-words text-xs text-slate-600 dark:text-slate-300">${escapeHtml(values.join(', ') || '--')}</dd></div>`).join('')}</dl></section>
+        <section class="mt-5 rounded-md border border-slate-200 p-3 dark:border-white/10"><h4 class="text-xs font-semibold text-slate-600 dark:text-slate-300"><i class="fas fa-box mr-1.5 text-slate-400"></i>Docker</h4><p class="mt-1 break-words text-xs leading-5 text-slate-500 dark:text-slate-400">${escapeHtml(skill.lightagent?.docker_notes || '--')}</p></section>`;
+
+    actions.innerHTML = '';
+    const action = skill.installed ? (skill.update_available ? 'update' : 'verify') : 'install';
+    const labels = {install: currentLang === 'zh' ? '安装技能' : 'Install', update: currentLang === 'zh' ? '更新技能' : 'Update', verify: currentLang === 'zh' ? '校验安装' : 'Verify'};
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5';
+    closeButton.textContent = currentLang === 'zh' ? '关闭' : 'Close';
+    closeButton.addEventListener('click', closeSkillHubDetail);
+    const actionButton = document.createElement('button');
+    actionButton.type = 'button';
+    actionButton.className = 'rounded-md bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-60';
+    actionButton.textContent = labels[action];
+    actionButton.addEventListener('click', event => runSkillHubAction(action, skill.name, skill.version || '', false, event.currentTarget));
+    actions.append(closeButton);
+    if (skill.installed) {
+        if (skill.rollback_available) {
+            const rollbackButton = document.createElement('button');
+            rollbackButton.type = 'button';
+            rollbackButton.className = 'rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5';
+            rollbackButton.textContent = currentLang === 'zh' ? '回滚' : 'Roll back';
+            rollbackButton.addEventListener('click', event => runSkillHubAction('rollback', skill.name, '', false, event.currentTarget));
+            actions.append(rollbackButton);
+        }
+        const uninstallButton = document.createElement('button');
+        uninstallButton.type = 'button';
+        uninstallButton.className = 'rounded-md border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/10';
+        uninstallButton.textContent = currentLang === 'zh' ? '卸载' : 'Uninstall';
+        uninstallButton.addEventListener('click', event => runSkillHubAction('uninstall', skill.name, '', false, event.currentTarget));
+        actions.append(uninstallButton);
+    }
+    actions.append(actionButton);
+    modal.classList.remove('hidden');
+}
+
+function closeSkillHubDetail() {
+    document.getElementById('skill-hub-detail-modal')?.classList.add('hidden');
+}
+
+async function runSkillHubAction(action, name, version, approveRisk = false, button = null) {
     const destructive = action === 'update' || action === 'rollback' || action === 'uninstall';
     if (destructive && !approveRisk && !confirm(currentLang === 'zh' ? `确认对技能 ${name} 执行${{update:'更新',rollback:'回滚',uninstall:'卸载'}[action]}？` : `Confirm ${action} for ${name}?`)) return;
+    const originalButton = button?.innerHTML;
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = `<i class="fas fa-spinner fa-spin mr-1.5"></i>${currentLang === 'zh' ? '处理中' : 'Working'}`;
+    }
     try {
         const response = await fetch('/api/skill-hub', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action,name,version,approve_risk:approveRisk})});
         const data = await response.json();
@@ -5900,22 +6080,39 @@ async function runSkillHubAction(action, name, version, approveRisk = false) {
                 `${currentLang === 'zh' ? '下载' : 'Downloads'}: ${(requirements.downloads || []).map(item => item.url).join(', ') || '--'}`,
                 `${currentLang === 'zh' ? '网络域名' : 'Domains'}: ${(skill.lightagent?.network_domains || []).join(', ') || '--'}`,
             ].join('\n');
-            if (confirm(summary)) return runSkillHubAction(action, name, version, true);
+            if (confirm(summary)) return runSkillHubAction(action, name, version, true, button);
             return;
         }
         if (data.status !== 'success') throw new Error(data.message || 'Request failed');
         alert(currentLang === 'zh' ? '操作完成' : 'Operation completed');
+        closeSkillHubDetail();
         loadSkillHub();
         loadSkillsSection();
     } catch (error) {
         alert((currentLang === 'zh' ? '操作失败：' : 'Operation failed: ') + error.message);
+    } finally {
+        if (button && button.isConnected) {
+            button.disabled = false;
+            button.innerHTML = originalButton;
+        }
     }
 }
 
 document.addEventListener('input', event => {
     if (event.target?.id !== 'skill-hub-search') return;
     clearTimeout(skillHubSearchTimer);
-    skillHubSearchTimer = setTimeout(loadSkillHub, 250);
+    skillHubSearchTimer = setTimeout(resetAndLoadSkillHub, 250);
+});
+
+document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    const detail = document.getElementById('skill-hub-detail-modal');
+    if (detail && !detail.classList.contains('hidden')) {
+        closeSkillHubDetail();
+        return;
+    }
+    const modal = document.getElementById('skill-hub-modal');
+    if (modal && !modal.classList.contains('hidden')) closeSkillHubModal();
 });
 
 function loadToolsSection() {

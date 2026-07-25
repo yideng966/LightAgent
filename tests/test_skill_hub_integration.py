@@ -9,6 +9,7 @@ from agent.protocol.agent_stream import AgentStreamExecutor
 from agent.skills.manager import SkillManager
 from agent.skills.types import Skill, SkillEntry, SkillSnapshot
 from cli.commands.skill import InstallResult, SkillInstallError, _install_hub
+from channel.web.web_channel import _paginate_skill_hub_catalog
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,8 +22,40 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         html = (ROOT / "channel/web/chat.html").read_text(encoding="utf-8")
         self.assertIn("'/api/skill-hub', 'SkillHubHandler'", backend)
         self.assertIn("approval_required", backend)
-        self.assertIn("runSkillHubAction('rollback'", frontend)
+        self.assertIn("function openSkillHubModal()", frontend)
+        self.assertIn("page_size: String(skillHubState.pageSize)", frontend)
+        self.assertIn("id=\"skill-hub-modal\"", html)
+        self.assertIn("id=\"skill-hub-detail-modal\"", html)
         self.assertIn("id=\"skill-hub-search\"", html)
+        self.assertNotIn("loadSkillHub();\n}", frontend.split("function loadSkillsView()", 1)[1].split("let skillHubSearchTimer", 1)[0])
+
+    def test_web_catalog_supports_filtering_and_pagination(self):
+        backend = (ROOT / "channel/web/web_channel.py").read_text(encoding="utf-8")
+        self.assertIn('risk="", category="", page="1", page_size="12"', backend)
+        self.assertIn("_paginate_skill_hub_catalog", backend)
+
+    def test_web_catalog_paginates_and_combines_filters(self):
+        skills = [
+            {
+                "name": f"skill-{index:02d}",
+                "category": "office" if index % 2 else "developer",
+                "lightagent": {"risk_level": "high" if index % 3 == 0 else "low"},
+            }
+            for index in range(25)
+        ]
+        page, categories, pagination = _paginate_skill_hub_catalog(
+            skills, page=2, page_size=12
+        )
+        self.assertEqual(12, len(page))
+        self.assertEqual("skill-12", page[0]["name"])
+        self.assertEqual(["developer", "office"], categories)
+        self.assertEqual({"page": 2, "page_size": 12, "total": 25, "total_pages": 3}, pagination)
+
+        filtered, _, filtered_pagination = _paginate_skill_hub_catalog(
+            skills, risk="high", category="office", page=1, page_size=12
+        )
+        self.assertEqual(["skill-03", "skill-09", "skill-15", "skill-21"], [item["name"] for item in filtered])
+        self.assertEqual(4, filtered_pagination["total"])
 
     def test_chat_mutations_require_admin(self):
         plugin = (ROOT / "plugins/lightagent_cli/lightagent_cli.py").read_text(encoding="utf-8")

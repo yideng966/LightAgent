@@ -728,33 +728,11 @@
                                     <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="skills_title">技能管理</h2>
                                     <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="skills_desc">查看、启用或禁用 Agent 技能</p>
                                 </div>
-                                <a href="https://xiaoguiwucan.github.io/LightAgent-SkillHub/" target="_blank"
-                                   class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
-                                    <i class="fas fa-puzzle-piece text-[10px]"></i>
-                                    <span data-i18n="skills_hub_btn">探索技能广场</span>
-                                </a>
-                            </div>
-
-                            <div class="mb-8 border-b border-slate-200 dark:border-white/10 pb-8">
-                                <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
-                                    <div>
-                                        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">官方技能中心</h3>
-                                        <p class="text-xs text-slate-400 mt-1">安装前检查依赖、权限和 Docker 说明；更新需要明确确认。</p>
-                                    </div>
-                                    <div class="sm:ml-auto flex gap-2">
-                                        <div class="relative flex-1 sm:w-64">
-                                            <i class="fas fa-search absolute left-3 top-2.5 text-xs text-slate-400"></i>
-                                            <input id="skill-hub-search" type="search" placeholder="搜索技能"
-                                                class="w-full h-9 pl-8 pr-3 rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] text-sm focus:outline-none focus:ring-2 focus:ring-primary-400/40">
-                                        </div>
-                                        <button type="button" onclick="loadSkillHub()" title="刷新技能中心"
-                                            class="w-9 h-9 rounded-md border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5">
-                                            <i class="fas fa-sync-alt text-xs"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="skill-hub-status" class="py-5 text-sm text-slate-400">正在加载技能中心...</div>
-                                <div id="skill-hub-list" class="grid gap-3 sm:grid-cols-2"></div>
+                                <button type="button" onclick="openSkillHubModal()"
+                                   class="inline-flex items-center gap-2 whitespace-nowrap px-3.5 py-2 rounded-lg text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:opacity-60 transition-colors">
+                                    <i class="fas fa-cloud-arrow-down text-xs"></i>
+                                    <span data-i18n="skills_hub_btn">获取在线技能</span>
+                                </button>
                             </div>
 
                             <!-- Built-in Tools Section -->
@@ -1164,6 +1142,106 @@
             </div><!-- /content-area -->
         </div><!-- /main-content -->
     </div><!-- /app -->
+
+    <!-- Online Skill Hub -->
+    <div id="skill-hub-modal" class="fixed inset-0 z-[200] hidden flex items-center justify-center bg-black/60 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="skill-hub-modal-title" onclick="handleSkillHubBackdrop(event)">
+        <div class="flex h-[min(860px,calc(100vh-1.5rem))] w-full max-w-6xl min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#151515] sm:h-[min(860px,calc(100vh-3rem))]">
+            <div class="flex items-start gap-4 border-b border-slate-200 px-4 py-4 dark:border-white/10 sm:px-6">
+                <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400">
+                    <i class="fas fa-puzzle-piece"></i>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <h3 id="skill-hub-modal-title" class="text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="skill_hub_title">在线技能库</h3>
+                    <p class="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400" data-i18n="skill_hub_desc">从 LightAgent Skill Hub 获取经过签名校验的技能，安装前可查看依赖与权限。</p>
+                </div>
+                <a href="https://xiaoguiwucan.github.io/LightAgent-SkillHub/" target="_blank" rel="noopener" title="在新窗口打开 Skill Hub"
+                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
+                    <i class="fas fa-arrow-up-right-from-square text-xs"></i>
+                </a>
+                <button type="button" onclick="closeSkillHubModal()" title="关闭在线技能库"
+                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/[0.02] sm:grid-cols-[minmax(220px,1fr)_160px_180px_auto] sm:px-6">
+                <label class="relative block min-w-0">
+                    <span class="sr-only">搜索在线技能</span>
+                    <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
+                    <input id="skill-hub-search" type="search" placeholder="搜索名称、描述、作者或标签" data-i18n-placeholder="skill_hub_search_placeholder" autocomplete="off"
+                        class="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-400/20 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-slate-200">
+                </label>
+                <label class="min-w-0">
+                    <span class="sr-only">风险等级</span>
+                    <select id="skill-hub-risk" onchange="resetAndLoadSkillHub()"
+                        class="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary-400 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-slate-200">
+                        <option value="" data-i18n="skill_hub_all_risks">全部风险等级</option>
+                        <option value="low" data-i18n="skill_hub_risk_low">低风险</option>
+                        <option value="medium" data-i18n="skill_hub_risk_medium">中风险</option>
+                        <option value="high" data-i18n="skill_hub_risk_high">高风险</option>
+                    </select>
+                </label>
+                <label class="min-w-0">
+                    <span class="sr-only">技能分类</span>
+                    <select id="skill-hub-category" onchange="resetAndLoadSkillHub()"
+                        class="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary-400 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-slate-200">
+                        <option value="" data-i18n="skill_hub_all_categories">全部分类</option>
+                    </select>
+                </label>
+                <button type="button" onclick="loadSkillHub()" title="刷新在线技能库"
+                    class="flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-slate-300 dark:hover:bg-white/5">
+                    <i class="fas fa-rotate text-xs"></i><span class="sm:hidden lg:inline" data-i18n="skill_hub_refresh">刷新</span>
+                </button>
+            </div>
+
+            <div id="skill-hub-scroll" class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
+                <div id="skill-hub-loading" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="正在加载在线技能">
+                    <div class="h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-white/5"></div>
+                    <div class="h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-white/5"></div>
+                    <div class="h-48 animate-pulse rounded-lg bg-slate-100 dark:bg-white/5"></div>
+                </div>
+                <div id="skill-hub-empty" class="hidden min-h-72 flex items-center justify-center text-center">
+                    <div>
+                        <i class="fas fa-box-open text-2xl text-slate-300 dark:text-slate-600"></i>
+                        <p class="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300" data-i18n="skill_hub_empty">没有匹配的在线技能</p>
+                        <p class="mt-1 text-xs text-slate-400" data-i18n="skill_hub_empty_hint">尝试调整搜索词或筛选条件。</p>
+                    </div>
+                </div>
+                <div id="skill-hub-list" class="hidden grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
+                <div id="skill-hub-error" class="hidden min-h-72 flex items-center justify-center text-center"></div>
+            </div>
+
+            <div class="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 dark:border-white/10 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                <p id="skill-hub-status" class="text-xs text-slate-500 dark:text-slate-400">准备加载在线技能</p>
+                <div class="flex items-center justify-between gap-2 sm:justify-end">
+                    <button id="skill-hub-prev" type="button" onclick="changeSkillHubPage(-1)" disabled
+                        class="flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">
+                        <i class="fas fa-chevron-left text-[10px]"></i><span data-i18n="skill_hub_prev">上一页</span>
+                    </button>
+                    <span id="skill-hub-page" class="min-w-20 text-center text-xs font-medium text-slate-600 dark:text-slate-300">1 / 1</span>
+                    <button id="skill-hub-next" type="button" onclick="changeSkillHubPage(1)" disabled
+                        class="flex h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">
+                        <span data-i18n="skill_hub_next">下一页</span><i class="fas fa-chevron-right text-[10px]"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Skill Hub Details -->
+    <div id="skill-hub-detail-modal" class="fixed inset-0 z-[210] hidden flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="skill-hub-detail-title" onclick="handleSkillHubDetailBackdrop(event)">
+        <div class="flex max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
+            <div class="flex items-start gap-3 border-b border-slate-200 px-5 py-4 dark:border-white/10">
+                <div class="min-w-0 flex-1">
+                    <h3 id="skill-hub-detail-title" class="break-words text-base font-semibold text-slate-800 dark:text-slate-100"></h3>
+                    <p id="skill-hub-detail-meta" class="mt-1 text-xs text-slate-400"></p>
+                </div>
+                <button type="button" onclick="closeSkillHubDetail()" title="关闭技能详情" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div id="skill-hub-detail-content" class="min-h-0 flex-1 overflow-y-auto px-5 py-4"></div>
+            <div id="skill-hub-detail-actions" class="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10"></div>
+        </div>
+    </div>
 
     <!-- Knowledge Action Dialog -->
     <div id="knowledge-dialog-overlay" class="fixed inset-0 bg-black/50 z-[200] hidden flex items-center justify-center">
