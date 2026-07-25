@@ -40,7 +40,7 @@ LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目，包含�
 - `plugins/`：聊天命令插件与插件管理器。不要把 Agent 工具和插件混为一类。
 - `voice/`、`translate/`：ASR/TTS 与翻译 Provider。
 - `desktop/`：Electron 主进程、React 渲染端和桌面打包配置。桌面后端默认由 `desktop/src/main/python-manager.ts` 管理。
-- `docs/`：英文、中文、日文文档。涉及用户可见能力变更时，优先补充对应文档。
+- `docs/`：英文、中文。涉及用户可见能力变更时，优先补充对应文档。
 - `tests/`：`unittest` 风格回归测试，很多测试通过 stub/mocking 避免真实网络和外部服务。
 
 ## 本地运行与验证
@@ -285,7 +285,7 @@ docker push yideng966/lightagent:latest
 ## 编码与风格
 
 - Python 代码保持现有风格，优先小函数、明确异常处理和 `common.log.logger` 日志。
-- 仓库贡献规范要求 issue、PR 和代码注释尽量使用英文；新增代码注释也应优先英文。Git 提交说明（commit message）必须使用简体中文，清晰概括本次变更。
+- 仓库贡献规范要求 issue、PR 和代码注释尽量使用中文；新增代码注释也应优先中文。Git 提交说明（commit message）必须使用简体中文，清晰概括本次变更。
 - 用户对话可以使用中文，但写入项目代码和面向国际社区的文档时遵循仓库既有语言策略。
 - 避免引入新的全局依赖；确需新增依赖时，同步更新 `requirements.txt`、`requirements-optional.txt` 或 `desktop/package.json`，并说明原因。
 - README 或文档中如出现编码异常，先确认文件实际编码，不要盲目整体重写。
