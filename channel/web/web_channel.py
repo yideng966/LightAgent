@@ -7064,6 +7064,41 @@ class SkillsHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
 
+def _paginate_skill_hub_catalog(skills, risk="", category="", page=1, page_size=12):
+    categories = sorted({
+        str(item.get("category", "")).strip()
+        for item in skills
+        if str(item.get("category", "")).strip()
+    })
+    risk = str(risk or "").strip().lower()
+    category = str(category or "").strip()
+    if risk:
+        skills = [
+            item for item in skills
+            if str(item.get("lightagent", {}).get("risk_level", "low")).lower() == risk
+        ]
+    if category:
+        skills = [item for item in skills if str(item.get("category", "")) == category]
+
+    try:
+        page_size = max(1, min(48, int(page_size)))
+        page = max(1, int(page))
+    except (TypeError, ValueError):
+        raise ValueError("page and page_size must be integers")
+
+    skills = sorted(skills, key=lambda item: str(item.get("name", "")).lower())
+    total = len(skills)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    return skills[start:start + page_size], categories, {
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+    }
+
+
 class SkillHubHandler:
     """Authenticated browse and lifecycle API for the official Skill Hub."""
 
@@ -7079,21 +7114,36 @@ class SkillHubHandler:
     def GET(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
-        params = web.input(q="", action="list")
+        params = web.input(
+            q="", action="list", risk="", category="", page="1", page_size="12"
+        )
         try:
             manager = self._manager()
             if params.action == "outdated":
                 return json.dumps({"status": "success", "skills": manager.outdated()}, ensure_ascii=False)
             skills = manager.search(params.q)
+            skills, categories, pagination = _paginate_skill_hub_catalog(
+                skills,
+                risk=params.risk,
+                category=params.category,
+                page=params.page,
+                page_size=params.page_size,
+            )
             installed = manager.installed()
             for item in skills:
                 local = installed.get(item.get("name"), {})
                 item["installed_version"] = local.get("version")
                 item["installed"] = bool(local)
+                item["rollback_available"] = bool(local.get("previous"))
                 item["update_available"] = bool(
                     local and local.get("version") != item.get("version")
                 )
-            return json.dumps({"status": "success", "skills": skills}, ensure_ascii=False)
+            return json.dumps({
+                "status": "success",
+                "skills": skills,
+                "categories": categories,
+                "pagination": pagination,
+            }, ensure_ascii=False)
         except Exception as exc:
             logger.error(f"[WebChannel] Skill Hub GET error: {exc}")
             return json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False)
