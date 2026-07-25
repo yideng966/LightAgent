@@ -1087,13 +1087,11 @@ class LightAgentCliPlugin(Plugin):
 
         from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
         from cli.commands.skill import install_skill
-        parts = name.split()
-        approve_risk = "--approve-risk" in parts
-        name = next((part for part in parts if not part.startswith("--")), "")
+        name = name.strip()
 
         try:
             with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(install_skill, name, approve_risk)
+                future = pool.submit(install_skill, name)
                 result = future.result(timeout=self._INSTALL_TIMEOUT)
 
             if result.error:
@@ -1189,15 +1187,11 @@ class LightAgentCliPlugin(Plugin):
         denied = self._require_skill_admin(e_context)
         if denied:
             return denied
-        parts = args.split()
-        name = next((part for part in parts if not part.startswith("--")), "")
+        name = args.strip()
         if not name:
             return _t("请指定要更新的技能", "Please specify a skill to update")
-        from agent.skills.lifecycle import SkillApprovalRequired, SkillLifecycleManager
-        try:
-            record = SkillLifecycleManager().update(name, approve_high_risk="--approve-risk" in parts)
-        except SkillApprovalRequired as exc:
-            return _t(f"{exc}。确认后增加 --approve-risk", f"{exc}. Add --approve-risk after review")
+        from agent.skills.lifecycle import SkillLifecycleManager
+        record = SkillLifecycleManager().update(name)
         return _t(f"✅ 已更新 {name} 到 {record.get('version')}", f"✅ Updated {name} to {record.get('version')}")
 
     def _skill_rollback(self, name: str, e_context=None) -> str:

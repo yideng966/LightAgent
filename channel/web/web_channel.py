@@ -7064,19 +7064,13 @@ class SkillsHandler:
             return json.dumps({"status": "error", "message": str(e)})
 
 
-def _paginate_skill_hub_catalog(skills, risk="", category="", page=1, page_size=12):
+def _paginate_skill_hub_catalog(skills, category="", page=1, page_size=12):
     categories = sorted({
         str(item.get("category", "")).strip()
         for item in skills
         if str(item.get("category", "")).strip()
     })
-    risk = str(risk or "").strip().lower()
     category = str(category or "").strip()
-    if risk:
-        skills = [
-            item for item in skills
-            if str(item.get("lightagent", {}).get("risk_level", "low")).lower() == risk
-        ]
     if category:
         skills = [item for item in skills if str(item.get("category", "")) == category]
 
@@ -7115,7 +7109,7 @@ class SkillHubHandler:
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         params = web.input(
-            q="", action="list", risk="", category="", page="1", page_size="12"
+            q="", action="list", category="", page="1", page_size="12"
         )
         try:
             manager = self._manager()
@@ -7124,7 +7118,6 @@ class SkillHubHandler:
             skills = manager.search(params.q)
             skills, categories, pagination = _paginate_skill_hub_catalog(
                 skills,
-                risk=params.risk,
                 category=params.category,
                 page=params.page,
                 page_size=params.page_size,
@@ -7161,11 +7154,10 @@ class SkillHubHandler:
             if action == "install":
                 record = manager.install(
                     name,
-                    approve_high_risk=bool(body.get("approve_risk")),
                     expected_version=body.get("version"),
                 )
             elif action == "update":
-                record = manager.update(name, approve_high_risk=bool(body.get("approve_risk")))
+                record = manager.update(name)
             elif action == "rollback":
                 record = manager.rollback(name)
             elif action == "uninstall":
@@ -7177,14 +7169,6 @@ class SkillHubHandler:
                 raise ValueError(f"unknown action: {action}")
             return json.dumps({"status": "success", "record": record}, ensure_ascii=False)
         except Exception as exc:
-            from agent.skills.lifecycle import SkillApprovalRequired
-            if isinstance(exc, SkillApprovalRequired):
-                web.ctx.status = "409 Conflict"
-                return json.dumps({
-                    "status": "approval_required",
-                    "message": str(exc),
-                    "skill": exc.skill,
-                }, ensure_ascii=False)
             logger.error(f"[WebChannel] Skill Hub POST error: {exc}")
             web.ctx.status = "400 Bad Request"
             return json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False)

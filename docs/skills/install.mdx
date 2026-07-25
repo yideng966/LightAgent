@@ -68,4 +68,4 @@ Supports zip archives and SKILL.md file links:
   All commands above work in the terminal by replacing `/skill` with `lightagent skill`. See [Skill Management Commands](/cli/skill) for full documentation.
 </Tip>
 
-Official Hub packages use a signed registry, SHA-256 verification, staging, and atomic replacement. High-risk dependency manifests require an owner or administrator to confirm with `--approve-risk`. Normal uninstall preserves skill configuration and user data; terminal users can add `--purge-data` to explicitly remove them.
+Official Hub packages use a signed registry, SHA-256 verification, staging, and atomic replacement. Declared dependencies are installed automatically, so a selected skill is ready after installation completes. Normal uninstall preserves skill configuration and user data; terminal users can add `--purge-data` to explicitly remove them.

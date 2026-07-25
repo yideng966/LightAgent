@@ -38,12 +38,6 @@ class SkillLifecycleError(RuntimeError):
     pass
 
 
-class SkillApprovalRequired(SkillLifecycleError):
-    def __init__(self, skill: Dict):
-        self.skill = skill
-        super().__init__(f"技能 {skill.get('name')} 包含高风险依赖，需要管理员明确确认")
-
-
 def _version_tuple(value):
     match = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(value or ""))
     return tuple(int(part) for part in match.groups()) if match else (0, 0, 0)
@@ -65,7 +59,6 @@ def _tree_hash(root):
 def _dependency_fingerprint(skill):
     value = {
         "requirements": skill.get("requirements", {}),
-        "risk_level": skill.get("lightagent", {}).get("risk_level", "low"),
         "network_domains": skill.get("lightagent", {}).get("network_domains", []),
         "file_paths": skill.get("lightagent", {}).get("file_paths", []),
         "tools": skill.get("lightagent", {}).get("tools", []),
@@ -93,16 +86,12 @@ class SkillLifecycleManager:
     def installed(self):
         return self._load_lock().get("skills", {})
 
-    def install(self, name, approve_high_risk=False, expected_version=None):
+    def install(self, name, expected_version=None):
         skill = self.registry.get_skill(name)
         self._validate_entry(skill, expected_version=expected_version)
         fingerprint = _dependency_fingerprint(skill)
-        current = self.installed().get(name, {})
-        already_approved = current.get("approved_dependency_fingerprint") == fingerprint
-        if self._is_high_risk(skill) and not (approve_high_risk or already_approved):
-            raise SkillApprovalRequired(skill)
         with self._skill_lock(name):
-            return self._install_locked(skill, fingerprint, approve_high_risk or already_approved)
+            return self._install_locked(skill, fingerprint)
 
     def outdated(self):
         remote = {item["name"]: item for item in self.registry.list_skills(include_unavailable=True)}
@@ -132,10 +121,10 @@ class SkillLifecycleManager:
                 })
         return result
 
-    def update(self, name, approve_high_risk=False):
+    def update(self, name):
         if name not in self.installed():
             raise SkillLifecycleError(f"技能 {name} 尚未通过官方技能中心安装")
-        return self.install(name, approve_high_risk=approve_high_risk)
+        return self.install(name)
 
     def rollback(self, name):
         with self._skill_lock(name):
@@ -217,7 +206,7 @@ class SkillLifecycleManager:
             raise SkillLifecycleError(f"技能 {name} 不在锁文件中")
         return findings
 
-    def _install_locked(self, skill, fingerprint, approved):
+    def _install_locked(self, skill, fingerprint):
         name = skill["name"]
         target = os.path.join(self.skills_dir, name)
         if os.path.exists(target) and name not in self.installed():
@@ -242,7 +231,7 @@ class SkillLifecycleManager:
             staged_skill = os.path.join(stage, "ready")
             shutil.copytree(source, staged_skill)
             staged_env = os.path.join(stage, "environment")
-            self._install_dependencies(skill, staged_env, approve_high_risk=approved)
+            self._install_dependencies(skill, staged_env)
             env_target = os.path.join(self.envs_dir, name)
             previous = None
             previous_path = None
@@ -286,9 +275,6 @@ class SkillLifecycleManager:
             "tree_sha256": _tree_hash(os.path.join(self.skills_dir, name)),
             "dependency_fingerprint": fingerprint,
             "requirements": skill.get("requirements", {}),
-            "risk_summary": skill.get("lightagent", {}),
-            "approved_dependency_fingerprint": fingerprint if approved else None,
-            "approved_risk_summary": skill.get("lightagent", {}) if approved else None,
             "installed_at": datetime.now(timezone.utc).isoformat(),
             "status": skill.get("status", "active"),
             "previous": previous,
@@ -380,12 +366,7 @@ class SkillLifecycleManager:
         if not re.match(r"^[a-fA-F0-9]{64}$", str(skill.get("sha256", ""))):
             raise RegistrySecurityError("技能缺少有效 SHA-256")
 
-    @staticmethod
-    def _is_high_risk(skill):
-        requirements = skill.get("requirements", {})
-        return skill.get("lightagent", {}).get("risk_level") == "high" or bool(requirements.get("downloads"))
-
-    def _install_dependencies(self, skill, env_dir, approve_high_risk):
+    def _install_dependencies(self, skill, env_dir):
         requirements = skill.get("requirements", {})
         os.makedirs(env_dir, exist_ok=True)
         python_packages = [str(item) for item in requirements.get("python", [])]
@@ -399,8 +380,6 @@ class SkillLifecycleManager:
         if npm_packages:
             subprocess.run(["npm", "install", "--prefix", os.path.join(env_dir, "npm"), *npm_packages], check=True, timeout=300)
         for item in requirements.get("downloads", []):
-            if not approve_high_risk:
-                raise SkillApprovalRequired(skill)
             response = self.session.get(item["url"], timeout=(5, 30), allow_redirects=True)
             response.raise_for_status()
             if len(response.content) > _MAX_DEPENDENCY_DOWNLOAD_BYTES:

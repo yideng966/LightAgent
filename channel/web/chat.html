@@ -1152,7 +1152,7 @@
                 </div>
                 <div class="min-w-0 flex-1">
                     <h3 id="skill-hub-modal-title" class="text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="skill_hub_title">在线技能库</h3>
-                    <p class="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400" data-i18n="skill_hub_desc">从 LightAgent Skill Hub 获取经过签名校验的技能，安装前可查看依赖与权限。</p>
+                    <p class="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400" data-i18n="skill_hub_desc">从 LightAgent Skill Hub 获取经过签名校验的技能，点击安装后即可使用。</p>
                 </div>
                 <a href="https://xiaoguiwucan.github.io/LightAgent-SkillHub/" target="_blank" rel="noopener" title="在新窗口打开 Skill Hub"
                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
@@ -1164,22 +1164,12 @@
                 </button>
             </div>
 
-            <div class="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/[0.02] sm:grid-cols-[minmax(220px,1fr)_160px_180px_auto] sm:px-6">
+            <div class="grid gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-white/10 dark:bg-white/[0.02] sm:grid-cols-[minmax(220px,1fr)_180px_auto] sm:px-6">
                 <label class="relative block min-w-0">
                     <span class="sr-only">搜索在线技能</span>
                     <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
                     <input id="skill-hub-search" type="search" placeholder="搜索名称、描述、作者或标签" data-i18n-placeholder="skill_hub_search_placeholder" autocomplete="off"
                         class="h-10 w-full rounded-md border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-400/20 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-slate-200">
-                </label>
-                <label class="min-w-0">
-                    <span class="sr-only">风险等级</span>
-                    <select id="skill-hub-risk" onchange="resetAndLoadSkillHub()"
-                        class="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary-400 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-slate-200">
-                        <option value="" data-i18n="skill_hub_all_risks">全部风险等级</option>
-                        <option value="low" data-i18n="skill_hub_risk_low">低风险</option>
-                        <option value="medium" data-i18n="skill_hub_risk_medium">中风险</option>
-                        <option value="high" data-i18n="skill_hub_risk_high">高风险</option>
-                    </select>
                 </label>
                 <label class="min-w-0">
                     <span class="sr-only">技能分类</span>

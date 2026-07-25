@@ -9,10 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from agent.skills.lifecycle import (
-    SkillApprovalRequired,
-    SkillLifecycleManager,
-)
+from agent.skills.lifecycle import SkillLifecycleManager
 from agent.skills.registry import RegistrySecurityError
 
 
@@ -92,7 +89,7 @@ description: A test skill package for LightAgent lifecycle tests.
     return stream.getvalue()
 
 
-def _entry(package, name="sample-skill", version="1.0.0", risk="low"):
+def _entry(package, name="sample-skill", version="1.0.0"):
     return {
         "name": name,
         "version": version,
@@ -105,7 +102,7 @@ def _entry(package, name="sample-skill", version="1.0.0", risk="low"):
         "min_lightagent_version": "1.0.0",
         "max_lightagent_version": None,
         "requirements": {"env": [], "bins": [], "python": [], "npm": [], "downloads": []},
-        "lightagent": {"risk_level": risk, "network_domains": [], "file_paths": [], "tools": [], "docker_notes": ""},
+        "lightagent": {"network_domains": [], "file_paths": [], "tools": [], "docker_notes": ""},
     }
 
 
@@ -153,28 +150,33 @@ class SkillLifecycleManagerTest(unittest.TestCase):
         self.assertFalse(Path(self.skills, "sample-skill").exists())
         self.assertEqual("keep", Path(self.workspace, "skill-data", "sample-skill", "keep.txt").read_text())
 
-    def test_high_risk_requires_approval_and_remembers_manifest(self):
+    def test_download_dependency_installs_without_extra_approval(self):
         package = _package()
-        entry = _entry(package, risk="high")
+        entry = _entry(package)
+        entry["requirements"]["downloads"] = [{
+            "url": "https://example.test/dependency.bin",
+            "sha256": hashlib.sha256(package).hexdigest(),
+        }]
         manager = self._manager(package, entry)
-        with self.assertRaises(SkillApprovalRequired):
-            manager.install("sample-skill")
-        manager.install("sample-skill", approve_high_risk=True)
+        manager.install("sample-skill")
+        dependency = Path(
+            self.workspace, ".skill-envs", "sample-skill", "downloads", "dependency.bin"
+        )
+        self.assertEqual(package, dependency.read_bytes())
+
+    def test_changed_dependency_manifest_updates_without_extra_approval(self):
+        first = _package()
+        entry = _entry(first)
+        manager = self._manager(first, entry)
         manager.install("sample-skill")
 
-    def test_changed_high_risk_manifest_requires_fresh_approval(self):
-        first = _package()
-        entry = _entry(first, risk="high")
-        manager = self._manager(first, entry)
-        manager.install("sample-skill", approve_high_risk=True)
-
         second = _package(version="1.1.0", extra="changed manifest")
-        changed = _entry(second, version="1.1.0", risk="high")
+        changed = _entry(second, version="1.1.0")
         changed["lightagent"]["tools"] = ["bash"]
         manager.registry.entry = changed
         manager.session.content = second
-        with self.assertRaises(SkillApprovalRequired):
-            manager.update("sample-skill")
+        updated = manager.update("sample-skill")
+        self.assertEqual("1.1.0", updated["version"])
 
     def test_checksum_mismatch_does_not_replace_existing_skill(self):
         first = _package()
