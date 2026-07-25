@@ -266,6 +266,8 @@ docker push yideng966/lightagent:latest
 - 修改语音路由时，同步检查 `voice/factory.py`、`Bridge`、Web ASR/TTS 能力接口、控制台选择器和语音测试；`custom:<id>` 必须按显式能力复用对应自定义 Provider 的 Key/Base，不能隐式回退到当前聊天 Provider。
 - 确定性生图等需要跨容器重建保留的用户产物必须默认写入 `agent_workspace`；Docker 生图目录固定在 `/home/agent/lightagent/images`（宿主机 `./data/images`），不得回退到随镜像更新且不挂载的 `/app/images`。Web SSE 发送本地生图时必须同时产生可访问的 `image` 事件和结束请求的 `done` 事件。
 - 修改 Agent 工具时，同步检查工具注册、工具 schema、异常返回格式、文档和安全测试。
+- Skill Hub 安装必须以签名索引和 SHA-256 为信任边界；后备源只能安装与已验证索引中来源身份和哈希一致的产物，不得用后备源自身返回的哈希建立信任。
+- Hub 技能不得覆盖内置技能或非 Hub 同名技能；更新、回滚和卸载必须保持配置与用户数据分离，高风险依赖声明变化后必须重新获得管理员确认。
 - 修改桌面后端启动逻辑时，特别注意端口、数据目录、打包后路径和 Windows 行为。
 
 ## 安全边界

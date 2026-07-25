@@ -1326,6 +1326,7 @@ class WebChannel(ChatChannel):
             '/api/feishu/register', 'FeishuRegisterHandler',
             '/api/tools', 'ToolsHandler',
             '/api/skills', 'SkillsHandler',
+            '/api/skill-hub', 'SkillHubHandler',
             '/api/skills/access', 'SkillsAccessHandler',
             '/api/skills/access/bulk', 'SkillsAccessBulkHandler',
             '/api/skills/access/templates', 'SkillsAccessTemplatesHandler',
@@ -7061,6 +7062,82 @@ class SkillsHandler:
         except Exception as e:
             logger.error(f"[WebChannel] Skills POST error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+
+class SkillHubHandler:
+    """Authenticated browse and lifecycle API for the official Skill Hub."""
+
+    @staticmethod
+    def _manager():
+        from agent.skills.lifecycle import SkillLifecycleManager
+        workspace = _get_workspace_root()
+        return SkillLifecycleManager(
+            workspace=workspace,
+            skills_dir=os.path.join(workspace, "skills"),
+        )
+
+    def GET(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        params = web.input(q="", action="list")
+        try:
+            manager = self._manager()
+            if params.action == "outdated":
+                return json.dumps({"status": "success", "skills": manager.outdated()}, ensure_ascii=False)
+            skills = manager.search(params.q)
+            installed = manager.installed()
+            for item in skills:
+                local = installed.get(item.get("name"), {})
+                item["installed_version"] = local.get("version")
+                item["installed"] = bool(local)
+                item["update_available"] = bool(
+                    local and local.get("version") != item.get("version")
+                )
+            return json.dumps({"status": "success", "skills": skills}, ensure_ascii=False)
+        except Exception as exc:
+            logger.error(f"[WebChannel] Skill Hub GET error: {exc}")
+            return json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False)
+
+    def POST(self):
+        _require_auth()
+        web.header('Content-Type', 'application/json; charset=utf-8')
+        try:
+            body = json.loads(web.data() or b"{}")
+            action = str(body.get("action", "")).strip()
+            name = str(body.get("name", "")).strip()
+            if not action or not name:
+                raise ValueError("action and name are required")
+            manager = self._manager()
+            if action == "install":
+                record = manager.install(
+                    name,
+                    approve_high_risk=bool(body.get("approve_risk")),
+                    expected_version=body.get("version"),
+                )
+            elif action == "update":
+                record = manager.update(name, approve_high_risk=bool(body.get("approve_risk")))
+            elif action == "rollback":
+                record = manager.rollback(name)
+            elif action == "uninstall":
+                manager.uninstall(name, purge_data=bool(body.get("purge_data")))
+                record = None
+            elif action == "verify":
+                return json.dumps({"status": "success", "findings": manager.verify(name)}, ensure_ascii=False)
+            else:
+                raise ValueError(f"unknown action: {action}")
+            return json.dumps({"status": "success", "record": record}, ensure_ascii=False)
+        except Exception as exc:
+            from agent.skills.lifecycle import SkillApprovalRequired
+            if isinstance(exc, SkillApprovalRequired):
+                web.ctx.status = "409 Conflict"
+                return json.dumps({
+                    "status": "approval_required",
+                    "message": str(exc),
+                    "skill": exc.skill,
+                }, ensure_ascii=False)
+            logger.error(f"[WebChannel] Skill Hub POST error: {exc}")
+            web.ctx.status = "400 Bad Request"
+            return json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False)
 
 
 def _skill_access_manager():

@@ -374,6 +374,8 @@ MCP 逻辑：
 - 支持技能启停配置。
 - 支持通过 CLI 或聊天命令安装技能。
 - 支持 Skill Hub、GitHub、本地目录等来源。
+- 官方 Skill Hub 使用签名索引、SHA-256、原子安装、锁文件、更新检测和版本回滚。
+- 技能包、依赖环境、配置与用户数据分离；普通卸载保留配置和用户数据。
 - Agent 在执行时可以把技能说明注入上下文，按技能要求调用工具。
 
 常用命令：
@@ -382,7 +384,11 @@ MCP 逻辑：
 /skill list
 /skill search <keyword>
 /skill install <name>
+/skill outdated
+/skill update <name>
+/skill rollback <name>
 lightagent skill install <name>
+lightagent skill verify [name]
 ```
 
 ## 记忆与知识库

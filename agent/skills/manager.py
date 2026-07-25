@@ -4,6 +4,9 @@ Skill manager for managing skill lifecycle and operations.
 
 import os
 import json
+import shutil
+import tempfile
+from dataclasses import replace
 from typing import Dict, List, Optional
 from pathlib import Path
 from common.log import logger
@@ -313,24 +316,51 @@ class SkillManager:
         :return: SkillSnapshot
         """
         entries = self.filter_skills(skill_filter=skill_filter, include_disabled=False)
-        prompt = format_skill_entries_for_prompt(entries)
-        
         skills_info = []
         resolved_skills = []
+        cleanup_dir = None
+        snapshot_parent = os.path.join(self.custom_dir, ".skill-run-snapshots")
         
         for entry in entries:
             skills_info.append({
                 'name': entry.skill.name,
                 'primary_env': entry.metadata.primary_env if entry.metadata else None,
             })
-            resolved_skills.append(entry.skill)
+            skill = entry.skill
+            config = self.skills_config.get(skill.name, {})
+            if config.get("source") == "lightagent-skillhub" and os.path.isdir(skill.base_dir):
+                if cleanup_dir is None:
+                    os.makedirs(snapshot_parent, exist_ok=True)
+                    cleanup_dir = tempfile.mkdtemp(prefix="run-", dir=snapshot_parent)
+                target = os.path.join(cleanup_dir, skill.name)
+                try:
+                    shutil.copytree(skill.base_dir, target, copy_function=os.link)
+                except OSError:
+                    shutil.rmtree(target, ignore_errors=True)
+                    shutil.copytree(skill.base_dir, target, copy_function=shutil.copy2)
+                skill = replace(
+                    skill,
+                    base_dir=target,
+                    file_path=os.path.join(target, "SKILL.md"),
+                )
+            resolved_skills.append(skill)
+
+        prompt = format_skill_entries_for_prompt([
+            SkillEntry(skill=skill) for skill in resolved_skills
+        ])
         
         return SkillSnapshot(
             prompt=prompt,
             skills=skills_info,
             resolved_skills=resolved_skills,
             version=version,
+            cleanup_dir=cleanup_dir,
         )
+
+    @staticmethod
+    def cleanup_skill_snapshot(snapshot: Optional[SkillSnapshot]):
+        if snapshot and snapshot.cleanup_dir:
+            shutil.rmtree(snapshot.cleanup_dir, ignore_errors=True)
     
     def sync_skills_to_workspace(self, target_workspace_dir: str):
         """

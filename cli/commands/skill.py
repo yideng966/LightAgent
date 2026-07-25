@@ -758,16 +758,25 @@ _REMOTE_PAGE_SIZE = 10
 def _list_remote(page: int = 1):
     """List skills from remote Skill Hub with server-side pagination."""
     try:
-        resp = requests.get(
-            f"{SKILL_HUB_API}/skills",
-            params={"page": page, "limit": _REMOTE_PAGE_SIZE},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        click.echo(f"Error: Failed to fetch from Skill Hub: {e}", err=True)
-        sys.exit(1)
+        from agent.skills.registry import SkillRegistryClient
+        all_skills = SkillRegistryClient().list_skills()
+        total = len(all_skills)
+        start = max(0, (page - 1) * _REMOTE_PAGE_SIZE)
+        skills = all_skills[start:start + _REMOTE_PAGE_SIZE]
+        data = {"skills": skills, "total": total}
+    except Exception as official_error:
+        logger.warning("Official Skill Hub unavailable, using legacy registry: %s", official_error)
+        try:
+            resp = requests.get(
+                f"{SKILL_HUB_API}/skills",
+                params={"page": page, "limit": _REMOTE_PAGE_SIZE},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            click.echo(f"Error: Failed to fetch from Skill Hub: {e}", err=True)
+            sys.exit(1)
 
     skills = data.get("skills", [])
     total = data.get("total", len(skills))
@@ -804,7 +813,8 @@ def _list_remote(page: int = 1):
     if nav_parts:
         click.echo(f"  Navigate: {' | '.join(nav_parts)}")
     click.echo(f"  Install:  lightagent skill install <name>")
-    click.echo(f"  Browse:   https://skills.cowagent.ai\n")
+    from cli.utils import SKILL_HUB_WEB
+    click.echo(f"  Browse:   {SKILL_HUB_WEB}\n")
 
 
 # ------------------------------------------------------------------
@@ -815,12 +825,17 @@ def _list_remote(page: int = 1):
 def search(query):
     """Search skills on Skill Hub."""
     try:
-        resp = requests.get(f"{SKILL_HUB_API}/skills/search", params={"q": query}, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        click.echo(f"Error: Failed to search Skill Hub: {e}", err=True)
-        sys.exit(1)
+        from agent.skills.registry import SkillRegistryClient
+        data = {"skills": SkillRegistryClient().list_skills(query=query)}
+    except Exception as official_error:
+        logger.warning("Official Skill Hub unavailable, using legacy search: %s", official_error)
+        try:
+            resp = requests.get(f"{SKILL_HUB_API}/skills/search", params={"q": query}, timeout=10)
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception as e:
+            click.echo(f"Error: Failed to search Skill Hub: {e}", err=True)
+            sys.exit(1)
 
     skills = data.get("skills", [])
     if not skills:
@@ -850,7 +865,7 @@ def search(query):
 # Core install function — reusable from CLI and chat plugin
 # ------------------------------------------------------------------
 
-def install_skill(name: str) -> InstallResult:
+def install_skill(name: str, approve_high_risk: bool = False) -> InstallResult:
     """Core install logic, usable from CLI and chat plugin.
 
     Accepts all formats: Skill Hub name, owner/repo, GitHub/GitLab URL,
@@ -859,7 +874,7 @@ def install_skill(name: str) -> InstallResult:
     """
     result = InstallResult()
     try:
-        _route_install(name, result)
+        _route_install(name, result, approve_high_risk=approve_high_risk)
         if result.installed:
             _sync_wechat_group_skill_catalog()
     except SkillInstallError as e:
@@ -877,7 +892,7 @@ def _sync_wechat_group_skill_catalog():
         logger.warning(f"Failed to sync WeChat group skill ACL catalog: {e}")
 
 
-def _route_install(name: str, result: InstallResult):
+def _route_install(name: str, result: InstallResult, approve_high_risk: bool = False):
     """Dispatch to the appropriate installer based on input format."""
     # --- Local path ---
     if name.startswith(("./", "../", "/", "~/")):
@@ -961,9 +976,30 @@ def _route_install(name: str, result: InstallResult):
         _install_github(spec, result, subpath=subpath)
         return
 
-    # --- Fallback: Skill Hub by name ---
+    # --- Fallback: official signed Skill Hub by name, then the legacy Hub ---
     _check_skill_name(name)
-    _install_hub(name, result)
+    try:
+        from agent.skills.lifecycle import SkillApprovalRequired, SkillLifecycleManager
+        from agent.skills.registry import RegistryError, RegistrySecurityError
+
+        record = SkillLifecycleManager().install(name, approve_high_risk=approve_high_risk)
+        result.installed.append(name)
+        result.messages.append(
+            f"Installed '{name}' {record.get('version')} from the official LightAgent Skill Hub."
+        )
+    except RegistrySecurityError as e:
+        raise SkillInstallError(str(e))
+    except SkillApprovalRequired as e:
+        raise SkillInstallError(f"{e}。CLI 请增加 --approve-risk")
+    except RegistryError as e:
+        raise SkillInstallError(
+            f"Official signed Skill Hub unavailable ({e}). "
+            "Legacy Hub installation requires a matching verified registry entry."
+        )
+    except SkillInstallError:
+        raise
+    except Exception as e:
+        raise SkillInstallError(str(e))
 
 
 # ------------------------------------------------------------------
@@ -971,7 +1007,8 @@ def _route_install(name: str, result: InstallResult):
 # ------------------------------------------------------------------
 @skill.command()
 @click.argument("name")
-def install(name):
+@click.option("--approve-risk", is_flag=True, help="Approve declared high-risk dependencies")
+def install(name, approve_risk):
     """Install skill(s) from Skill Hub, GitHub, GitLab, git URL, or local path.
 
     When given an owner/repo (or full URL), downloads the repo and
@@ -996,7 +1033,7 @@ def install(name):
 
       lightagent skill install https://example.com/path/to/SKILL.md
     """
-    result = install_skill(name)
+    result = install_skill(name, approve_high_risk=approve_risk)
     for msg in result.messages:
         click.echo(msg)
     if result.error:
@@ -1004,8 +1041,12 @@ def install(name):
         sys.exit(1)
 
 
-def _install_hub(name, result: InstallResult, provider=None):
+def _install_hub(name, result: InstallResult, provider=None, require_verified=False):
     """Install a skill from Skill Hub."""
+    if require_verified:
+        raise SkillInstallError(
+            "Legacy Hub cannot establish package trust without a matching signed registry entry."
+        )
     skills_dir = get_skills_dir()
     os.makedirs(skills_dir, exist_ok=True)
 
@@ -1043,8 +1084,15 @@ def _install_hub(name, result: InstallResult, provider=None):
             has_mirror = data.get("has_mirror", False)
             gh_err = None
 
+            if require_verified and not has_mirror:
+                raise SkillInstallError(
+                    "Legacy Hub source does not provide a verifiable package checksum."
+                )
+
             gh_timeout = 15 if has_mirror else 30
             try:
+                if require_verified:
+                    raise SkillInstallError("Verified fallback requires the Hub mirror package.")
                 parsed_url = _parse_github_url(source_url)
                 if parsed_url:
                     owner, repo, branch, subpath = parsed_url
@@ -1081,6 +1129,8 @@ def _install_hub(name, result: InstallResult, provider=None):
                 )
 
             expected_checksum = mirror_resp.headers.get("X-Checksum-Sha256")
+            if require_verified and not expected_checksum:
+                raise SkillInstallError("Legacy Hub mirror is missing SHA-256 verification.")
             _check_checksum(mirror_resp.content, expected_checksum)
             installed_before = len(result.installed)
             _install_zip_bytes(mirror_resp.content, name, skills_dir, result=result, source_label="skill_hub", display_name=hub_display_name)
@@ -1099,6 +1149,8 @@ def _install_hub(name, result: InstallResult, provider=None):
                 src_provider = data.get("source_provider", "registry")
                 has_mirror = data.get("has_mirror", False)
                 expected_checksum = data.get("checksum") or data.get("sha256")
+                if require_verified and not expected_checksum:
+                    raise SkillInstallError("Legacy registry package is missing SHA-256 verification.")
                 result.messages.append(f"Source: {src_provider}")
                 result.messages.append("Downloading skill package...")
                 dl_err = None
@@ -1144,6 +1196,8 @@ def _install_hub(name, result: InstallResult, provider=None):
                         f"Direct download failed ({dl_err}) and mirror returned unexpected content."
                     )
                 expected_checksum = mirror_resp.headers.get("X-Checksum-Sha256")
+                if require_verified and not expected_checksum:
+                    raise SkillInstallError("Legacy Hub mirror is missing SHA-256 verification.")
                 _check_checksum(mirror_resp.content, expected_checksum)
                 installed_before = len(result.installed)
                 _install_zip_bytes(mirror_resp.content, name, skills_dir, result=result, source_label="skill_hub", display_name=hub_display_name)
@@ -1171,6 +1225,8 @@ def _install_hub(name, result: InstallResult, provider=None):
     elif "application/zip" in content_type:
         result.messages.append("Downloading skill package...")
         expected_checksum = resp.headers.get("X-Checksum-Sha256")
+        if require_verified and not expected_checksum:
+            raise SkillInstallError("Legacy Hub package is missing SHA-256 verification.")
         _check_checksum(resp.content, expected_checksum)
         installed_before = len(result.installed)
         _install_zip_bytes(resp.content, name, skills_dir, result=result, source_label="skill_hub")
@@ -1392,9 +1448,25 @@ def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, 
 @skill.command()
 @click.argument("name")
 @click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
-def uninstall(name, yes):
+@click.option("--purge-data", is_flag=True, help="Also delete persistent skill config and user data")
+def uninstall(name, yes, purge_data):
     """Uninstall a skill."""
     _validate_skill_name(name)
+    from agent.skills.lifecycle import SkillLifecycleError, SkillLifecycleManager
+    lifecycle = SkillLifecycleManager()
+    if name in lifecycle.installed():
+        if not yes:
+            message = f"Uninstall skill '{name}'?"
+            if purge_data:
+                message += " This will permanently delete its config and user data."
+            click.confirm(message, abort=True)
+        try:
+            lifecycle.uninstall(name, purge_data=purge_data)
+        except SkillLifecycleError as exc:
+            raise click.ClickException(str(exc))
+        click.echo(click.style(f"✓ Skill '{name}' uninstalled.", fg="green"))
+        return
+
     skills_dir = get_skills_dir()
     skill_dir = os.path.join(skills_dir, name)
 
@@ -1420,6 +1492,77 @@ def uninstall(name, yes):
 
     _sync_wechat_group_skill_catalog()
     click.echo(click.style(f"✓ Skill '{name}' uninstalled.", fg="green"))
+
+
+# ------------------------------------------------------------------
+# Official Hub lifecycle commands
+# ------------------------------------------------------------------
+@skill.command("outdated")
+def outdated_command():
+    """List official Hub skills with updates or security notices."""
+    from agent.skills.lifecycle import SkillLifecycleManager
+    try:
+        entries = SkillLifecycleManager().outdated()
+    except Exception as exc:
+        raise click.ClickException(str(exc))
+    if not entries:
+        click.echo("All official Hub skills are up to date.")
+        return
+    for entry in entries:
+        click.echo(
+            f"{entry['name']}: {entry.get('installed_version')} -> "
+            f"{entry.get('available_version')} [{entry.get('status')}]"
+        )
+
+
+@skill.command("update")
+@click.argument("name")
+@click.option("--approve-risk", is_flag=True, help="Approve changed high-risk dependencies")
+def update_command(name, approve_risk):
+    """Update an official Hub skill after explicit confirmation."""
+    from agent.skills.lifecycle import SkillApprovalRequired, SkillLifecycleManager
+    if not click.confirm(f"Update skill '{name}'?", default=False):
+        return
+    try:
+        record = SkillLifecycleManager().update(name, approve_high_risk=approve_risk)
+    except SkillApprovalRequired as exc:
+        raise click.ClickException(f"{exc}。请检查声明后增加 --approve-risk")
+    except Exception as exc:
+        raise click.ClickException(str(exc))
+    click.echo(click.style(f"✓ Skill '{name}' updated to {record.get('version')}.", fg="green"))
+
+
+@skill.command("rollback")
+@click.argument("name")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+def rollback_command(name, yes):
+    """Roll back to the previous atomically saved version."""
+    from agent.skills.lifecycle import SkillLifecycleManager
+    if not yes:
+        click.confirm(f"Roll back skill '{name}'?", abort=True)
+    try:
+        record = SkillLifecycleManager().rollback(name)
+    except Exception as exc:
+        raise click.ClickException(str(exc))
+    click.echo(click.style(f"✓ Skill '{name}' rolled back to {record.get('version')}.", fg="green"))
+
+
+@skill.command("verify")
+@click.argument("name", required=False)
+def verify_command(name):
+    """Verify installed official Hub skills against the local lock file."""
+    from agent.skills.lifecycle import SkillLifecycleManager
+    try:
+        findings = SkillLifecycleManager().verify(name)
+    except Exception as exc:
+        raise click.ClickException(str(exc))
+    if not findings:
+        click.echo("No official Hub skills are installed.")
+    for finding in findings:
+        icon = "✓" if finding["ok"] else "✗"
+        click.echo(f"{icon} {finding['name']} {finding.get('version')} [{finding.get('status')}]")
+    if any(not finding["ok"] for finding in findings):
+        raise click.ClickException("One or more installed skills failed verification")
 
 
 # ------------------------------------------------------------------
