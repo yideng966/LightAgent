@@ -136,6 +136,8 @@ PERMISSION_LABELS_ZH: Dict[str, str] = {
 }
 
 HIGH_RISK_TOOL_NAMES = {"write", "edit", "bash", "scheduler", "evolution_undo"}
+_REPORT_REQUEST_WORDS = ("群聊报告", "群报告", "日报", "周报", "月报")
+_REPORT_GENERATE_WORDS = ("生成", "发一份", "发送", "出一份", "来一份", "导出", "推送")
 
 
 def _cfg(config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -400,6 +402,36 @@ def build_wechat_group_admin_reject_message(permission_ids: Iterable[str]) -> st
     if labels:
         return "这个操作需要当前群管理员触发：{}。".format("、".join(labels))
     return "这个操作需要当前群管理员触发。"
+
+
+def is_wechat_group_report_generation_request(text: Any) -> bool:
+    content = _clean_text(text)
+    if not content or not any(word in content for word in _REPORT_REQUEST_WORDS):
+        return False
+    return any(word in content for word in _REPORT_GENERATE_WORDS)
+
+
+def can_generate_wechat_group_report(
+    stable_room_id: Any,
+    stable_member_id: Any,
+    config: Optional[Dict[str, Any]] = None,
+) -> tuple[bool, str]:
+    """Enforce the per-room report switch and optional admin-only gate."""
+    room_id = _clean_text(stable_room_id)
+    member_id = _clean_text(stable_member_id)
+    if not room_id:
+        return False, "identity_unconfirmed"
+    try:
+        from channel.wechat_group.wechat_group_report_store import WechatGroupReportStore
+
+        settings = WechatGroupReportStore().get_settings(room_id)
+    except Exception:
+        return False, "report_settings_unavailable"
+    if not settings.get("enabled"):
+        return False, "report_disabled"
+    if settings.get("manual_admin_only", True) and not is_wechat_group_admin(room_id, member_id, config=config):
+        return False, "admin_required"
+    return True, ""
 
 
 def build_wechat_group_admin_policy_block(

@@ -1386,6 +1386,7 @@ class AgentBridge:
             from channel.wechat_group.wechat_group_profile_service import WechatGroupProfileService
             from channel.wechat_group.wechat_group_sticker_service import WechatGroupStickerService
             from channel.wechat_group.wechat_group_sticker_tools import create_wechat_group_sticker_tools
+            from channel.wechat_group.wechat_group_report_tools import create_wechat_group_report_tools
 
             return create_wechat_group_memory_tools(
                 knowledge_service=WechatGroupKnowledgeService(),
@@ -1398,6 +1399,10 @@ class AgentBridge:
             ) + create_wechat_group_sticker_tools(
                 sticker_service=WechatGroupStickerService(),
                 room_id=room_id,
+            ) + create_wechat_group_report_tools(
+                stable_room_id=context.get("wechat_group_stable_room_id") or "",
+                stable_member_id=context.get("wechat_group_stable_member_id") or "",
+                identity_confirmed=context.get("wechat_group_identity_requires_confirmation") is not True,
             )
         except Exception as e:
             logger.warning(f"[AgentBridge] Failed to create WeChat group memory tools: {e}")
@@ -1419,7 +1424,9 @@ class AgentBridge:
             "local stickers; use online candidates only when local stickers are "
             "missing or unsuitable. Do not expose or invent raw sticker URLs.\n"
             "- These tools are bound to the current WeChat group by the server. "
-            "Do not treat them as global memory or cross-group search tools."
+            "Do not treat them as global memory or cross-group search tools.\n"
+            "- `wechat_group_report` can only generate or inspect a report for the current "
+            "stable group scope. Do not invent report job ids or ask it to target another group."
         )
     
     def _schedule_mcp_hot_reload(self, agent):

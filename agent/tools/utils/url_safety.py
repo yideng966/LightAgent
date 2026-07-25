@@ -64,6 +64,22 @@ def assert_public_ip(ip_str: str) -> None:
         )
 
 
+def assert_public_ip_strict(ip_str: str) -> None:
+    """Always reject a non-public concrete address.
+
+    Report link collection must not inherit the optional web-fetch switch:
+    reports are generated from group messages and may therefore contain
+    attacker-controlled URLs even when an administrator has disabled the
+    general browser guard for local development.
+    """
+    ip = ipaddress.ip_address(ip_str)
+    if _is_blocked_ip(ip):
+        raise ValueError(
+            f"URL resolves to a non-public address ({ip_str}), "
+            f"request blocked for security"
+        )
+
+
 def validate_url_safe(url: str) -> None:
     """Reject URLs that target private/loopback/link-local addresses (SSRF guard).
 
@@ -94,3 +110,28 @@ def validate_url_safe(url: str) -> None:
 
     for family, _, _, _, sockaddr in addr_infos:
         assert_public_ip(sockaddr[0])
+
+
+def validate_url_strict(url: str) -> None:
+    """Validate an HTTP(S) URL against public-network SSRF policy unconditionally.
+
+    Callers must invoke this for the initial URL and each redirect target.
+    The function deliberately resolves every DNS answer so a mixed public and
+    private result cannot be used to bypass the guard.
+    """
+    parsed = urlparse(str(url or ""))
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
+    if parsed.username or parsed.password:
+        raise ValueError("URL userinfo is not allowed")
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("URL has no hostname")
+    try:
+        addr_infos = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except socket.gaierror:
+        raise ValueError(f"Cannot resolve hostname: {hostname}")
+    if not addr_infos:
+        raise ValueError(f"Cannot resolve hostname: {hostname}")
+    for _, _, _, _, sockaddr in addr_infos:
+        assert_public_ip_strict(sockaddr[0])

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "type": "wechat_group_report_image_template",
+  "template_id": "cyber_intelligence",
+  "display_name": "赛博智能",
+  "version": "1.1.0",
+  "entry_html": "template.html",
+  "stylesheet": "template.css",
+  "preview": "preview.png",
+  "width": 941,
+  "required_sections": [
+    "header",
+    "core_statistics",
+    "ranking",
+    "topics",
+    "highlights",
+    "links",
+    "footer"
+  ]
+}

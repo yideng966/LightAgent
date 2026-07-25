@@ -1323,6 +1323,7 @@ class WebChannel(ChatChannel):
             '/api/wechat-group/styles/(.*)', 'WechatGroupStylesHandler',
             '/api/wechat-group/emotion/(.*)', 'WechatGroupEmotionHandler',
             '/api/wechat-group/stickers/(.*)', 'WechatGroupStickersHandler',
+            '/api/wechat-group/reports/(.*)', 'WechatGroupReportsHandler',
             '/api/feishu/register', 'FeishuRegisterHandler',
             '/api/tools', 'ToolsHandler',
             '/api/skills', 'SkillsHandler',
@@ -6819,6 +6820,412 @@ class WechatGroupStickersHandler(_WechatGroupWebIdentityMixin):
             return int(text)
         except Exception:
             return None
+
+
+class WechatGroupReportsHandler(_WechatGroupWebIdentityMixin):
+    """Authenticated Web API for room-scoped group report settings and jobs."""
+
+    _store = None
+    _registry = None
+    _preview_service = None
+
+    def GET(self, action=""):
+        _require_auth()
+        try:
+            action = (action or "").strip("/")
+            params = web.input(
+                stable_room_id="", runtime_room_id="", room_id="", job_id="",
+                delivery_id="", preview_id="", part_index="", skill_name="",
+            )
+            if action == "templates":
+                return self._json({"status": "success", "templates": self._serialize_templates()})
+            if action == "template-preview":
+                return self._template_preview(str(getattr(params, "skill_name", "") or ""))
+            room_id = self._selected_stable_room_id(params)
+            if action == "settings":
+                settings = self._get_store().get_settings(room_id)
+                stats = self._statistics_service().get_archive_bounds(room_id)
+                overview = self._get_store().get_room_overview(room_id)
+                return self._json({
+                    "status": "success",
+                    "settings": settings,
+                    "archive": stats,
+                    "overview": self._serialize_overview(overview),
+                    "connection": self._connection_status(),
+                    "templates": self._serialize_templates(),
+                })
+            if action == "status":
+                job_id = str(getattr(params, "job_id", "") or "").strip()
+                delivery_id = str(getattr(params, "delivery_id", "") or "").strip()
+                preview_id = str(getattr(params, "preview_id", "") or "").strip()
+                if job_id:
+                    return self._job_status(room_id, job_id, preview_id)
+                if delivery_id:
+                    return self._delivery_status(room_id, delivery_id)
+                raise ValueError("job_id or delivery_id is required")
+            if action == "asset":
+                return self._asset_response(
+                    room_id,
+                    str(getattr(params, "delivery_id", "") or ""),
+                    str(getattr(params, "preview_id", "") or ""),
+                    getattr(params, "part_index", ""),
+                )
+            return self._json({"status": "error", "message": "unknown action"}, status=404)
+        except Exception as e:
+            logger.error("[WebChannel] WechatGroupReports GET error: %s", e)
+            return self._error_response(e)
+
+    def POST(self, action=""):
+        _require_auth()
+        try:
+            body = json.loads(web.data() or b"{}")
+            if not isinstance(body, dict):
+                raise ValueError("invalid request body")
+            action = (action or "").strip("/")
+            room_id = self._selected_stable_room_id(body)
+            if action == "settings":
+                return self._save_settings(room_id, body)
+            if action == "preview":
+                return self._preview(room_id, body)
+            if action == "send":
+                return self._send(room_id, body)
+            if action == "retry":
+                return self._retry(room_id, body)
+            return self._json({"status": "error", "message": "unknown action"}, status=404)
+        except Exception as e:
+            logger.error("[WebChannel] WechatGroupReports POST error: %s", e)
+            return self._error_response(e)
+
+    def _save_settings(self, room_id, body):
+        from channel.wechat_group.wechat_group_report_store import (
+            ReportVersionConflict,
+            normalize_report_settings,
+        )
+        from channel.wechat_group.wechat_group_report_templates import validate_text_template
+        from agent.tools.scheduler.integration import reconcile_wechat_group_report_tasks
+
+        raw_settings = body.get("settings") if isinstance(body.get("settings"), dict) else body
+        settings = normalize_report_settings(raw_settings)
+        output = settings.get("output") or {}
+        if output.get("text_template_source") == "custom":
+            validate_text_template(output.get("custom_text_template"))
+        try:
+            saved = self._get_store().save_settings(
+                room_id,
+                settings,
+                body.get("expected_version", raw_settings.get("version")),
+                actor="web",
+                schedule_sync_status="pending",
+            )
+        except ReportVersionConflict:
+            return self._json({"status": "error", "message": "version_conflict"}, status=409)
+        reconciliation = reconcile_wechat_group_report_tasks(room_id)
+        saved = self._get_store().get_settings(room_id)
+        return self._json({
+            "status": "success",
+            "settings": saved,
+            "schedule_reconciliation": reconciliation,
+        })
+
+    def _preview(self, room_id, body):
+        from channel.wechat_group.wechat_group_report_store import normalize_report_settings
+        from channel.wechat_group.wechat_group_report_templates import validate_text_template
+        from agent.tools.scheduler.integration import get_wechat_group_report_runtime
+
+        report_type = str(body.get("report_type") or "daily").strip().lower()
+        if report_type not in {"daily", "weekly", "monthly", "custom"}:
+            raise ValueError("invalid_period")
+        draft = body.get("draft_settings")
+        settings = normalize_report_settings(draft) if isinstance(draft, dict) else self._get_store().get_settings(room_id)
+        if (settings.get("output") or {}).get("text_template_source") == "custom":
+            validate_text_template((settings.get("output") or {}).get("custom_text_template"))
+        runner, _ = get_wechat_group_report_runtime()
+        preview_id = uuid.uuid4().hex
+
+        def queue_preview(report, job):
+            self._get_preview_service().submit(
+                preview_id,
+                str((job or {}).get("job_id") or ""),
+                room_id,
+                report,
+                settings,
+            )
+
+        job = runner.submit_generation(
+            stable_room_id=room_id,
+            report_type=report_type,
+            actor="web_preview",
+            draft_settings=settings,
+            custom_start=body.get("custom_start"),
+            custom_end=body.get("custom_end"),
+            force_regenerate=bool(body.get("force_regenerate")),
+            ready_callback=queue_preview,
+        )
+        response = {
+            "status": "accepted",
+            "job_id": job.get("job_id") or "",
+            "preview_id": preview_id,
+            "state": job.get("state") or "queued",
+        }
+        if job.get("report_id"):
+            response["report_id"] = job.get("report_id")
+        return self._json(response, status=202)
+
+    def _send(self, room_id, body):
+        from agent.tools.scheduler.integration import get_wechat_group_report_runtime
+
+        report_id = str(body.get("report_id") or "").strip()
+        confirmation_token = str(body.get("confirmation_token") or "").strip()
+        preview_id = str(body.get("preview_id") or "").strip()
+        if not report_id or not confirmation_token:
+            raise ValueError("confirmation_token is required")
+        if not preview_id:
+            raise ValueError("preview_id is required")
+        preview = self._get_preview_service().get_status(preview_id, room_id)
+        if (
+            not preview
+            or str(preview.get("report_id") or "") != report_id
+            or str(preview.get("state") or "") not in {"ready", "text_ready"}
+            or str(preview.get("actual_output") or "") not in {"image", "text"}
+        ):
+            return self._json({"status": "error", "message": "stale_preview"}, status=409)
+        connection = self._connection_status()
+        if not connection.get("ready"):
+            return self._json(
+                {"status": "error", "message": "channel_not_ready", "connection": connection},
+                status=503,
+            )
+        if not self._get_store().consume_send_confirmation(confirmation_token, report_id, room_id):
+            return self._json({"status": "error", "message": "stale_preview"}, status=409)
+        output_settings = dict(preview.get("output_settings") or {})
+        # A completed image-preferred preview may have selected its text fallback.
+        # Deliver the same approved form rather than attempting a new image render.
+        if preview.get("actual_output") == "text":
+            output_settings["mode"] = "text"
+        output_settings["_source_preview_id"] = preview_id
+        _, delivery_service = get_wechat_group_report_runtime()
+        delivery = delivery_service.create_delivery(
+            report_id, room_id, actor="web", output_settings=output_settings,
+            confirmation_token=confirmation_token,
+        )
+        delivery_service.submit_delivery(delivery["delivery_id"], room_id)
+        return self._json({"status": "accepted", "delivery_id": delivery["delivery_id"]}, status=202)
+
+    def _retry(self, room_id, body):
+        from agent.tools.scheduler.integration import get_wechat_group_report_runtime
+
+        delivery_id = str(body.get("delivery_id") or "").strip()
+        if not delivery_id:
+            raise ValueError("delivery_id is required")
+        _, delivery_service = get_wechat_group_report_runtime()
+        delivery = delivery_service.retry_incomplete(delivery_id, room_id)
+        return self._json({"status": "accepted", "delivery_id": delivery.get("delivery_id") or delivery_id}, status=202)
+
+    def _job_status(self, room_id, job_id, preview_id=""):
+        from agent.tools.scheduler.integration import get_wechat_group_report_runtime
+        from channel.wechat_group.wechat_group_report_service import serialize_public_report
+
+        runner, _ = get_wechat_group_report_runtime()
+        job = runner.get_status(job_id, room_id)
+        if not job:
+            return self._json({"status": "error", "message": "not_found"}, status=404)
+        payload = self._public_job(job)
+        report_id = str(job.get("report_id") or "")
+        if report_id:
+            report = self._get_store().get_report(report_id, room_id)
+            if report:
+                payload["report"] = serialize_public_report(report)
+                preview = self._get_preview_service().get_status(preview_id, room_id) if preview_id else None
+                if preview:
+                    payload["preview"] = self._public_preview(preview)
+                    if preview.get("state") in {"ready", "text_ready"}:
+                        payload["send_confirmation_token"] = self._get_store().issue_send_confirmation(report_id, room_id)
+                elif not preview_id:
+                    payload["send_confirmation_token"] = self._get_store().issue_send_confirmation(report_id, room_id)
+        return self._json({"status": "success", "job": payload, "connection": self._connection_status()})
+
+    def _delivery_status(self, room_id, delivery_id):
+        from agent.tools.scheduler.integration import get_wechat_group_report_runtime
+
+        _, delivery_service = get_wechat_group_report_runtime()
+        delivery = delivery_service.get_status(delivery_id, room_id)
+        if not delivery:
+            return self._json({"status": "error", "message": "not_found"}, status=404)
+        response = self._public_delivery(delivery)
+        return self._json({"status": "success", "delivery": response, "connection": self._connection_status()})
+
+    def _asset_response(self, room_id, delivery_id, preview_id, part_index):
+        from agent.tools.scheduler.integration import get_wechat_group_report_runtime
+
+        try:
+            index = int(part_index)
+        except (TypeError, ValueError):
+            raise ValueError("invalid part_index")
+        if delivery_id:
+            _, delivery_service = get_wechat_group_report_runtime()
+            relative = self._get_store().get_delivery_asset_path(delivery_id, room_id, index)
+        elif preview_id:
+            delivery_service = self._get_preview_service()
+            relative = self._get_store().get_preview_asset_path(preview_id, room_id, index)
+        else:
+            raise ValueError("delivery_id or preview_id is required")
+        if not relative:
+            return self._json({"status": "error", "message": "not_found"}, status=404)
+        absolute = delivery_service.renderer.asset_absolute_path(relative)
+        if not os.path.isfile(absolute) or not absolute.lower().endswith(".png"):
+            return self._json({"status": "error", "message": "not_found"}, status=404)
+        web.header("Content-Type", "image/png")
+        web.header("Cache-Control", "private, max-age=60")
+        with open(absolute, "rb") as handle:
+            return handle.read()
+
+    def _template_preview(self, skill_name):
+        template = self._get_registry().resolve_template(skill_name)
+        preview = os.path.realpath(os.path.join(str(template["base_dir"]), "assets", str(template["preview"])))
+        root = os.path.realpath(os.path.join(str(template["base_dir"]), "assets"))
+        if os.path.commonpath([root, preview]) != root or not os.path.isfile(preview):
+            return self._json({"status": "error", "message": "not_found"}, status=404)
+        web.header("Content-Type", "image/png")
+        web.header("Cache-Control", "private, max-age=300")
+        with open(preview, "rb") as handle:
+            return handle.read()
+
+    def _selected_stable_room_id(self, source):
+        room_identity = self._resolve_room_identity(source, require=True)
+        stable_room_id = self._require_stable_room_identity(room_identity)
+        selected = {
+            str(value or "").strip()
+            for value in (conf().get("wechat_group_stable_room_ids", []) or [])
+            if str(value or "").strip()
+        }
+        if stable_room_id not in selected:
+            raise ValueError("room_not_selected")
+        return stable_room_id
+
+    def _serialize_templates(self):
+        from urllib.parse import quote
+
+        rows = []
+        for item in self._get_registry().list_templates(include_invalid=True):
+            row = {
+                key: value for key, value in item.items()
+                if key not in {"base_dir", "entry_html", "stylesheet", "preview"}
+            }
+            if item.get("valid"):
+                row["preview_url"] = "/api/wechat-group/reports/template-preview?skill_name={}".format(
+                    quote(str(item.get("skill_name") or ""))
+                )
+            rows.append(row)
+        return rows
+
+    def _serialize_overview(self, overview):
+        from channel.wechat_group.wechat_group_report_service import serialize_public_report
+
+        result = {"latest_report": None, "latest_delivery": None}
+        if isinstance(overview, dict) and overview.get("latest_report"):
+            result["latest_report"] = serialize_public_report(overview["latest_report"])
+        if isinstance(overview, dict) and overview.get("latest_delivery"):
+            result["latest_delivery"] = self._public_delivery(overview["latest_delivery"])
+        return result
+
+    def _public_job(self, job):
+        return {
+            key: value for key, value in dict(job or {}).items()
+            if key in {"job_id", "report_type", "period_start", "period_end", "report_id", "state", "stage", "completed_items", "total_items", "error_code", "created_at", "started_at", "finished_at"}
+        }
+
+    def _public_delivery(self, delivery):
+        result = {
+            key: value for key, value in dict(delivery or {}).items()
+            if key in {"delivery_id", "report_id", "output_mode", "actual_output", "template_id", "template_version", "fallback_reason", "state", "error_code", "created_at", "sent_at"}
+        }
+        parts = []
+        for part in (delivery or {}).get("parts", []) or []:
+            row = {
+                key: value for key, value in dict(part or {}).items()
+                if key in {"part_index", "part_type", "state", "attempt_count", "error_code"}
+            }
+            if row.get("part_type") == "image":
+                row["asset_url"] = "/api/wechat-group/reports/asset?stable_room_id={}&delivery_id={}&part_index={}".format(
+                    delivery.get("stable_room_id", ""), result.get("delivery_id", ""), row.get("part_index", 0),
+                )
+            parts.append(row)
+        result["parts"] = parts
+        return result
+
+    def _public_preview(self, preview):
+        from urllib.parse import urlencode
+
+        result = {
+            key: value for key, value in dict(preview or {}).items()
+            if key in {"preview_id", "job_id", "report_id", "output_mode", "actual_output", "state", "fallback_reason", "error_code", "text_parts"}
+        }
+        parts = []
+        for part in (preview or {}).get("parts", []) or []:
+            row = {
+                key: value for key, value in dict(part or {}).items()
+                if key in {"part_index", "width", "height"}
+            }
+            query = urlencode({
+                "stable_room_id": str((preview or {}).get("stable_room_id") or ""),
+                "preview_id": str((preview or {}).get("preview_id") or ""),
+                "part_index": row.get("part_index", 0),
+            })
+            row["asset_url"] = "/api/wechat-group/reports/asset?" + query
+            parts.append(row)
+        result["parts"] = parts
+        return result
+
+    def _connection_status(self):
+        channel = WechatGroupQrHandler._get_running_channel()
+        status = "idle"
+        if channel and callable(getattr(channel, "get_login_status", None)):
+            status = str(channel.get_login_status() or "idle")
+        return {"ready": status in {"logged_in", "connected"}, "status": status}
+
+    def _is_channel_ready(self):
+        return bool(self._connection_status().get("ready"))
+
+    @classmethod
+    def _get_store(cls):
+        if cls._store is None:
+            from channel.wechat_group.wechat_group_report_store import WechatGroupReportStore
+            cls._store = WechatGroupReportStore()
+        return cls._store
+
+    @classmethod
+    def _get_registry(cls):
+        if cls._registry is None:
+            from channel.wechat_group.wechat_group_report_templates_registry import WechatGroupReportTemplateRegistry
+            cls._registry = WechatGroupReportTemplateRegistry()
+        return cls._registry
+
+    @classmethod
+    def _get_preview_service(cls):
+        if cls._preview_service is None:
+            from channel.wechat_group.wechat_group_report_preview_service import WechatGroupReportPreviewService
+            cls._preview_service = WechatGroupReportPreviewService(store=cls._get_store())
+        return cls._preview_service
+
+    @classmethod
+    def _statistics_service(cls):
+        from channel.wechat_group.wechat_group_statistics_service import WechatGroupStatisticsService
+        return WechatGroupStatisticsService(identity_service=cls._get_identity_service())
+
+    @staticmethod
+    def _json(payload, status=200):
+        if int(status) != 200:
+            web.ctx.status = "{} {}".format(int(status), {202: "Accepted", 404: "Not Found", 409: "Conflict", 503: "Service Unavailable"}.get(int(status), "Error"))
+        web.header("Content-Type", "application/json; charset=utf-8")
+        return json.dumps(payload, ensure_ascii=False)
+
+    def _error_response(self, error):
+        message = str(error or "")
+        if message == "room_not_selected":
+            return self._json({"status": "error", "message": "room_not_selected"}, status=404)
+        if "stable_room_id" in message or "invalid" in message or "required" in message:
+            return self._json({"status": "error", "message": message[:160]}, status=400)
+        return self._json({"status": "error", "message": "request_failed"}, status=400)
 
 
 class FeishuRegisterHandler:

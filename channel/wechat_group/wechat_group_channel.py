@@ -36,6 +36,8 @@ from channel.wechat_group.wechat_group_permissions import (
     build_wechat_group_admin_policy_block,
     build_wechat_group_admin_reject_message,
     get_blocked_admin_permissions_for_text,
+    can_generate_wechat_group_report,
+    is_wechat_group_report_generation_request,
     is_wechat_group_blacklisted,
     is_wechat_group_admin,
 )
@@ -411,6 +413,11 @@ class WechatGroupChannel(ChatChannel):
             return True
         if event.type == SidecarEventType.ROOM_MEMBERS:
             return self._consume_room_members(event)
+        if event.type == SidecarEventType.SEND_RESULT:
+            consume_result = getattr(self.client, "consume_send_result", None)
+            if callable(consume_result):
+                consume_result(event)
+            return True
         if event.type == SidecarEventType.ERROR:
             error = str(event.get("message") or event.get("error") or event.payload or "")
             if self.status in (self.STATUS_LOGGED_IN, self.STATUS_CONNECTED) or self.rooms:
@@ -979,6 +986,15 @@ class WechatGroupChannel(ChatChannel):
         if context.get("wechat_group_identity_requires_confirmation") is True:
             sender_id = ""
         guard_text = context.get("wechat_group_user_content", context.content)
+        if is_wechat_group_report_generation_request(guard_text):
+            allowed, reason = can_generate_wechat_group_report(room_id, sender_id)
+            if not allowed:
+                messages = {
+                    "identity_unconfirmed": "当前群身份尚未确认，不能生成群聊报告。",
+                    "report_disabled": "当前群的群聊报告尚未启用。",
+                    "admin_required": "生成群聊报告需要当前群管理员触发。",
+                }
+                return Reply(ReplyType.ERROR, messages.get(reason, "当前无法生成群聊报告。"))
         blocked = get_blocked_admin_permissions_for_text(guard_text, room_id, sender_id)
         if not blocked:
             return None

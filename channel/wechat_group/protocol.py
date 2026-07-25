@@ -69,6 +69,7 @@ def build_send_text_command(
     text: str,
     mention_ids: Optional[List[str]] = None,
     alias_sync_cooldown_minutes: Optional[int] = None,
+    request_id: str = "",
 ) -> SidecarCommand:
     payload = {
         "room_id": room_id,
@@ -77,7 +78,27 @@ def build_send_text_command(
     }
     if alias_sync_cooldown_minutes is not None:
         payload["alias_sync_cooldown_minutes"] = alias_sync_cooldown_minutes
+    if request_id:
+        payload["request_id"] = str(request_id)
     return SidecarCommand(
         SidecarCommandType.SEND_TEXT,
         payload,
     )
+
+
+def build_send_media_command(
+    command_type: str,
+    room_id: str,
+    path: str,
+    request_id: str = "",
+) -> SidecarCommand:
+    if command_type not in {
+        SidecarCommandType.SEND_FILE,
+        SidecarCommandType.SEND_IMAGE,
+        SidecarCommandType.SEND_AUDIO,
+    }:
+        raise ValueError("unsupported sidecar media command type")
+    payload = {"room_id": room_id, "path": path}
+    if request_id:
+        payload["request_id"] = str(request_id)
+    return SidecarCommand(command_type, payload)

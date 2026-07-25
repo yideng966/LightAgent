@@ -265,7 +265,12 @@ async function sendFile(command) {
   const room = await findRoom(command.room_id)
   if (!room) throw new Error(`room not found: ${command.room_id}`)
   await room.say(FileBox.fromFile(command.path || command.file_path))
-  emit('send_result', { ok: true, command: 'send_file', room_id: command.room_id })
+  const sendResult = { ok: true, command: command.type, room_id: command.room_id }
+  if (command.request_id) {
+    sendResult.command_type = command.type
+    sendResult.request_id = command.request_id
+  }
+  emit('send_result', sendResult)
 }
 
 async function handleCommand(command) {
@@ -307,9 +312,27 @@ const shutdown = createSessionPreservingShutdown({
 registerSessionPreservingSignalHandlers({ processRef: process, shutdown })
 
 rl.on('line', line => {
+  let command = null
   Promise.resolve()
-    .then(() => handleCommand(JSON.parse(line)))
-    .catch(error => emit('error', { message: error.message || String(error) }))
+    .then(() => {
+      command = JSON.parse(line)
+      return handleCommand(command)
+    })
+    .catch(error => {
+      const isSend = ['send_text', 'send_file', 'send_image', 'send_audio'].includes(command?.type)
+      if (isSend) {
+        emit('send_result', {
+          ok: false,
+          command: command.type,
+          command_type: command.type,
+          request_id: command.request_id || '',
+          room_id: command.room_id || '',
+          error_code: 'send_failed',
+        })
+        return
+      }
+      emit('error', { message: error.message || String(error) })
+    })
 })
 
 start().catch(error => emit('error', { message: error.message || String(error) }))

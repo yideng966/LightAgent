@@ -6,6 +6,7 @@ import time
 import threading
 from datetime import datetime, timedelta
 from typing import Callable, Optional
+from zoneinfo import ZoneInfo
 from croniter import croniter
 from common.log import logger
 
@@ -21,6 +22,35 @@ def _parse_naive_local(iso_str: str) -> datetime:
     if dt.tzinfo is not None:
         dt = dt.astimezone().replace(tzinfo=None)
     return dt
+
+
+def _task_timezone(task: dict):
+    schedule = (task or {}).get("schedule", {}) or {}
+    timezone_name = str(schedule.get("timezone") or "").strip()
+    if not timezone_name:
+        return None
+    try:
+        return ZoneInfo(timezone_name)
+    except Exception:
+        logger.warning("[Scheduler] Invalid task timezone '%s'; using legacy local time", timezone_name)
+        return None
+
+
+def _task_now(task: dict, value: datetime) -> datetime:
+    zone = _task_timezone(task)
+    if zone is None:
+        return value.astimezone().replace(tzinfo=None) if value.tzinfo is not None else value
+    if value.tzinfo is None:
+        return value.replace(tzinfo=zone)
+    return value.astimezone(zone)
+
+
+def _parse_task_datetime(task: dict, iso_str: str) -> datetime:
+    zone = _task_timezone(task)
+    if zone is None:
+        return _parse_naive_local(iso_str)
+    value = datetime.fromisoformat(iso_str)
+    return value.astimezone(zone) if value.tzinfo is not None else value.replace(tzinfo=zone)
 
 
 class SchedulerService:
@@ -95,11 +125,12 @@ class SchedulerService:
                         )
                         continue
 
-                    next_run = self._calculate_next_run(task, now)
+                    task_now = _task_now(task, now)
+                    next_run = self._calculate_next_run(task, task_now)
                     if next_run:
                         self.task_store.update_task(task['id'], {
                             "next_run_at": next_run.isoformat(),
-                            "last_run_at": now.isoformat()
+                            "last_run_at": task_now.isoformat()
                         })
                     else:
                         self.task_store.delete_task(task['id'])
@@ -130,10 +161,11 @@ class SchedulerService:
             return False
         
         try:
-            next_run = _parse_naive_local(next_run_str)
+            current = _task_now(task, now)
+            next_run = _parse_task_datetime(task, next_run_str)
 
-            if next_run < now:
-                time_diff = (now - next_run).total_seconds()
+            if next_run < current:
+                time_diff = (current - next_run).total_seconds()
                 schedule = task.get("schedule", {})
                 schedule_type = schedule.get("type")
 
@@ -159,7 +191,7 @@ class SchedulerService:
                     logger.info(f"[Scheduler] One-time task {task['id']} expired, removed")
                     return False
 
-                next_next_run = self._calculate_next_run(task, now)
+                next_next_run = self._calculate_next_run(task, current)
                 if next_next_run:
                     self.task_store.update_task(task['id'], {
                         "next_run_at": next_next_run.isoformat()
@@ -167,7 +199,7 @@ class SchedulerService:
                     logger.info(f"[Scheduler] Rescheduled task {task['id']} to {next_next_run}")
                 return False
 
-            return now >= next_run
+            return current >= next_run
         except Exception as e:
             logger.error(
                 f"[Scheduler] Failed to evaluate due-state for task "
@@ -188,6 +220,7 @@ class SchedulerService:
         """
         schedule = task.get("schedule", {})
         schedule_type = schedule.get("type")
+        from_time = _task_now(task, from_time)
         
         if schedule_type == "cron":
             # Cron expression
@@ -216,7 +249,7 @@ class SchedulerService:
                 return None
             
             try:
-                run_at = _parse_naive_local(run_at_str)
+                run_at = _parse_task_datetime(task, run_at_str)
                 if run_at > from_time:
                     return run_at
             except Exception as e:

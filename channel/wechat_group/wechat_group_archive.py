@@ -8,7 +8,7 @@ import sqlite3
 import threading
 import time
 from contextlib import closing
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 from uuid import uuid4
 
 from config import get_appdata_dir
@@ -363,6 +363,161 @@ class WechatGroupArchive:
             ).fetchone()
         return int(row[0] or 0) if row else 0
 
+    def get_report_messages_page(
+        self,
+        stable_room_id: str,
+        start_at: int,
+        end_at: int,
+        after_id: int = 0,
+        limit: int = 200,
+        legacy_room_ids: Optional[Iterable[str]] = None,
+        message_types: Optional[Iterable[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return one strictly scoped, half-open report evidence page.
+
+        ``stable_room_id`` is always the primary scope. Historical rows that
+        predate stable identity support are included only when the caller has
+        supplied an explicitly confirmed runtime-room alias. This avoids the
+        broad ``stable_room_id OR room_id`` pattern that can mix reports from
+        unrelated accounts after a runtime id is reused.
+        """
+        room_id = str(stable_room_id or "").strip()
+        if not room_id:
+            return []
+        max_limit = min(max(int(limit or 200), 1), 500)
+        try:
+            cursor_id = max(int(after_id or 0), 0)
+        except (TypeError, ValueError):
+            cursor_id = 0
+        try:
+            start = int(start_at)
+            end = int(end_at)
+        except (TypeError, ValueError):
+            raise ValueError("start_at and end_at must be timestamps")
+        if end <= start:
+            return []
+
+        aliases = []
+        for value in legacy_room_ids or []:
+            alias = str(value or "").strip()
+            if alias and alias != room_id and alias not in aliases:
+                aliases.append(alias)
+        scope_clause = "stable_room_id = ?"
+        scope_params: List[Any] = [room_id]
+        if aliases:
+            placeholders = ", ".join("?" for _ in aliases)
+            scope_clause = (
+                "(stable_room_id = ? OR "
+                "(COALESCE(stable_room_id, '') = '' AND room_id IN ({placeholders})))"
+            ).format(placeholders=placeholders)
+            scope_params.extend(aliases)
+
+        type_values = []
+        for value in message_types or []:
+            normalized = str(value or "").strip().lower()
+            if normalized and normalized not in type_values:
+                type_values.append(normalized)
+        type_clause = ""
+        if type_values:
+            type_clause = " AND LOWER(message_type) IN ({})".format(
+                ", ".join("?" for _ in type_values)
+            )
+
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT id, message_id, room_id, room_name, sender_id, sender_nickname,
+                       message_type, text, media_path, is_at, metadata, created_at,
+                       stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
+                FROM wechat_group_messages
+                WHERE {scope_clause}
+                  AND created_at >= ? AND created_at < ?
+                  AND id > ?
+                  {type_clause}
+                ORDER BY id ASC
+                LIMIT ?
+                """.format(scope_clause=scope_clause, type_clause=type_clause),
+                [*scope_params, start, end, cursor_id, *type_values, max_limit],
+            ).fetchall()
+        return [self._message_row_to_dict(row) for row in rows]
+
+    def get_report_source_watermark(
+        self,
+        stable_room_id: str,
+        start_at: int,
+        end_at: int,
+        legacy_room_ids: Optional[Iterable[str]] = None,
+    ) -> int:
+        """Return the highest archive row id contributing to a report range."""
+        # Keep the query separate from evidence pagination while sharing the
+        # same strict stable-room scope rule.
+        room_id = str(stable_room_id or "").strip()
+        if not room_id:
+            return 0
+        aliases = []
+        for value in legacy_room_ids or []:
+            alias = str(value or "").strip()
+            if alias and alias != room_id and alias not in aliases:
+                aliases.append(alias)
+        scope_clause = "stable_room_id = ?"
+        params: List[Any] = [room_id]
+        if aliases:
+            placeholders = ", ".join("?" for _ in aliases)
+            scope_clause = (
+                "(stable_room_id = ? OR "
+                "(COALESCE(stable_room_id, '') = '' AND room_id IN ({placeholders})))"
+            ).format(placeholders=placeholders)
+            params.extend(aliases)
+        with self._lock, closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT COALESCE(MAX(id), 0)
+                FROM wechat_group_messages
+                WHERE {scope_clause} AND created_at >= ? AND created_at < ?
+                """.format(scope_clause=scope_clause),
+                [*params, int(start_at), int(end_at)],
+            ).fetchone()
+        return int(row[0] or 0) if row else 0
+
+    def get_report_archive_bounds(
+        self,
+        stable_room_id: str,
+        legacy_room_ids: Optional[Iterable[str]] = None,
+    ) -> Dict[str, int]:
+        """Return the earliest and latest timestamp available in report scope."""
+        room_id = str(stable_room_id or "").strip()
+        if not room_id:
+            return {"first_created_at": 0, "last_created_at": 0, "message_count": 0}
+        aliases = []
+        for value in legacy_room_ids or []:
+            alias = str(value or "").strip()
+            if alias and alias != room_id and alias not in aliases:
+                aliases.append(alias)
+        scope_clause = "stable_room_id = ?"
+        params: List[Any] = [room_id]
+        if aliases:
+            placeholders = ", ".join("?" for _ in aliases)
+            scope_clause = (
+                "(stable_room_id = ? OR "
+                "(COALESCE(stable_room_id, '') = '' AND room_id IN ({placeholders})))"
+            ).format(placeholders=placeholders)
+            params.extend(aliases)
+        with self._lock, closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT COALESCE(MIN(created_at), 0), COALESCE(MAX(created_at), 0), COUNT(*)
+                FROM wechat_group_messages
+                WHERE {scope_clause}
+                """.format(scope_clause=scope_clause),
+                params,
+            ).fetchone()
+        return {
+            "first_created_at": int(row[0] or 0) if row else 0,
+            "last_created_at": int(row[1] or 0) if row else 0,
+            "message_count": int(row[2] or 0) if row else 0,
+        }
+
     def list_members(
         self,
         room_id: str,
@@ -699,6 +854,12 @@ class WechatGroupArchive:
                     """
                     CREATE INDEX IF NOT EXISTS idx_wechat_group_messages_stable_room_time
                     ON wechat_group_messages(stable_room_id, created_at, id)
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_wechat_group_messages_stable_room_member_time
+                    ON wechat_group_messages(stable_room_id, stable_member_id, created_at, id)
                     """
                 )
                 conn.execute(

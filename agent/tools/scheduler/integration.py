@@ -19,6 +19,10 @@ _task_store = None
 _init_lock = threading.Lock()
 _task_store_lock = threading.Lock()
 _enqueue_lock = threading.Lock()
+_report_runtime_lock = threading.Lock()
+_report_store = None
+_report_job_runner = None
+_report_delivery_service = None
 
 
 def _get_or_create_task_store():
@@ -77,6 +81,9 @@ def init_scheduler(agent_bridge) -> bool:
                     channel_type = action.get("channel_type", "unknown")
                     receiver = action.get("receiver", "")
 
+                    if action_type == "wechat_group_report":
+                        return _execute_wechat_group_report(task)
+
                     if not _is_channel_ready(channel_type, receiver):
                         logger.warning(
                             f"[Scheduler] Task {task.get('id')}: channel "
@@ -103,6 +110,11 @@ def init_scheduler(agent_bridge) -> bool:
             # Create scheduler service
             _scheduler_service = SchedulerService(_task_store, execute_task_callback)
             _scheduler_service.start()
+
+            try:
+                reconcile_wechat_group_report_tasks()
+            except Exception as reconcile_error:
+                logger.warning("[Scheduler] Report task reconciliation skipped: %s", reconcile_error)
 
             logger.info("[Scheduler] Service initialized and started")
             return True
@@ -286,12 +298,98 @@ def _scheduler_execution_session_id(action: dict, task_id: str, receiver: str) -
 
 def get_task_store():
     """Get the global task store instance"""
-    return _task_store
+    return _task_store or _get_or_create_task_store()
 
 
 def get_scheduler_service():
     """Get the global scheduler service instance"""
     return _scheduler_service
+
+
+def get_wechat_group_report_runtime():
+    """Return process-wide report runner and delivery service for all triggers."""
+    global _report_store, _report_job_runner, _report_delivery_service
+    if _report_job_runner is not None and _report_delivery_service is not None:
+        return _report_job_runner, _report_delivery_service
+    with _report_runtime_lock:
+        if _report_job_runner is None or _report_delivery_service is None:
+            from channel.wechat_group.wechat_group_report_delivery_service import WechatGroupReportDeliveryService
+            from channel.wechat_group.wechat_group_report_job_runner import WechatGroupReportJobRunner
+            from channel.wechat_group.wechat_group_report_service import WechatGroupReportService
+            from channel.wechat_group.wechat_group_report_store import WechatGroupReportStore
+
+            _report_store = WechatGroupReportStore()
+            service = WechatGroupReportService(store=_report_store)
+            _report_delivery_service = WechatGroupReportDeliveryService(store=_report_store)
+            _report_job_runner = WechatGroupReportJobRunner(
+                report_service=service,
+                store=_report_store,
+            )
+            _report_job_runner.resume_pending_jobs()
+    return _report_job_runner, _report_delivery_service
+
+
+def reconcile_wechat_group_report_tasks(stable_room_id: str = "") -> dict:
+    """Reconcile deterministic report tasks after settings save and startup."""
+    from channel.wechat_group.wechat_group_report_scheduler import WechatGroupReportScheduler
+    from channel.wechat_group.wechat_group_report_store import WechatGroupReportStore
+
+    store = _report_store or WechatGroupReportStore()
+    scheduler = WechatGroupReportScheduler(store=store, task_store=get_task_store())
+    room_ids = [str(stable_room_id or "").strip()] if stable_room_id else store.list_settings_room_ids()
+    results = []
+    for room_id in room_ids:
+        if not room_id:
+            continue
+        try:
+            result = scheduler.reconcile(room_id)
+            store.update_schedule_sync_status(room_id, "synced")
+            results.append({"stable_room_id": room_id, **result})
+        except Exception as exc:
+            store.update_schedule_sync_status(room_id, "failed", str(exc))
+            results.append({"stable_room_id": room_id, "status": "failed", "error": str(exc)[:160]})
+    return {"results": results}
+
+
+def _execute_wechat_group_report(task: dict) -> bool:
+    """Submit a due report job; generation and delivery stay off the scheduler thread."""
+    action = dict(task.get("action", {}) or {})
+    stable_room_id = str(action.get("stable_receiver") or "").strip()
+    report_type = str(action.get("report_type") or "daily").strip()
+    if not stable_room_id or report_type not in {"daily", "weekly", "monthly"}:
+        logger.error("[Scheduler] malformed WeChat group report task %s", task.get("id"))
+        return True
+    channel = _get_running_channel("wechat_group")
+    if channel is None:
+        return False
+    status_getter = getattr(channel, "get_login_status", None)
+    if callable(status_getter) and str(status_getter() or "") not in {"logged_in", "connected"}:
+        return False
+    runner, delivery_service = get_wechat_group_report_runtime()
+    settings = runner.store.get_settings(stable_room_id)
+    if not settings.get("enabled"):
+        return True
+
+    def deliver_when_ready(report, job):
+        current_settings = runner.store.get_settings(stable_room_id)
+        if not current_settings.get("enabled"):
+            return
+        delivery = delivery_service.create_delivery(
+            report_id=str(report.get("report_id") or ""),
+            stable_room_id=stable_room_id,
+            actor="scheduler",
+            output_settings=current_settings,
+        )
+        delivery_service.submit_delivery(delivery["delivery_id"], stable_room_id)
+
+    runner.submit_generation(
+        stable_room_id=stable_room_id,
+        report_type=report_type,
+        actor="scheduler",
+        draft_settings=settings,
+        ready_callback=deliver_when_ready,
+    )
+    return True
 
 
 def enqueue_wechat_group_message(

@@ -236,6 +236,45 @@ const I18N = {
         groups_nav_humanization_hint: '上下文与语气',
         groups_nav_rooms: '群与管理员',
         groups_nav_rooms_hint: '目标群与管理员',
+        groups_nav_report: '群聊报告',
+        groups_nav_report_hint: '统计、模板与定时发送',
+        groups_report_title: '群聊报告',
+        groups_report_desc: '按稳定群隔离配置统计范围、报告模板和定时发送。',
+        groups_report_no_rooms: '请先在“群与管理员”中选择并确认至少一个目标群。',
+        groups_report_room: '目标群',
+        groups_report_enabled: '启用当前群报告',
+        groups_report_enabled_hint: '关闭后保留历史快照，但暂停群内请求、定时发送和日报话题记忆。',
+        groups_report_save: '保存报告设置',
+        groups_report_saved: '报告设置已保存',
+        groups_report_unsaved: '有未保存修改',
+        groups_report_archive: '归档覆盖',
+        groups_report_latest: '最近报告',
+        groups_report_delivery: '最近投递',
+        groups_report_scheduler: '调度同步',
+        groups_report_schedules: '定时报告',
+        groups_report_daily: '日报', groups_report_weekly: '周报', groups_report_monthly: '月报',
+        groups_report_schedule_enabled: '启用定时发送',
+        groups_report_send_time: '发送时间',
+        groups_report_timezone: '报告时区',
+        groups_report_manual_admin: '仅管理员可在群内手动生成',
+        groups_report_daily_memory: '日报话题写入当前群记忆',
+        groups_report_output: '报告输出形式',
+        groups_report_mode_text: '纯文本', groups_report_mode_image: '图片', groups_report_mode_preferred: '图片优先，失败转纯文本',
+        groups_report_text_template: '文字模板', groups_report_custom_template: '自定义模板', groups_report_builtin_template: '内置模板',
+        groups_report_text_template_standard: '标准完整', groups_report_text_template_compact: '精简快报',
+        groups_report_template_fields: '可用字段', groups_report_restore: '恢复内置模板',
+        groups_report_image_template: '图片模板', groups_report_template_unavailable: '不可用',
+        groups_report_preview: '生成预览', groups_report_send: '立即发送', groups_report_period: '统计周期',
+        groups_report_period_daily: '上一自然日', groups_report_period_weekly: '上一自然周', groups_report_period_monthly: '上一自然月', groups_report_period_custom: '自定义范围',
+        groups_report_custom_start: '开始时间', groups_report_custom_end: '结束时间',
+        groups_report_generating: '报告生成中', groups_report_ready: '预览已就绪', groups_report_send_confirm: '确认向当前群发送该报告？',
+        groups_report_channel_offline: '当前连接状态未就绪，发送时会再次实时校验。',
+        groups_report_preview_required: '请先完成预览；发送将复用当前预览的正式输出。',
+        groups_report_status_unknown: '发送结果未知，请勿直接重发。', groups_report_status_partial: '部分分片已发送，可重试未完成分片。',
+        groups_report_retry: '重试未完成分片', groups_report_text_preview: '文字预览', groups_report_image_preview: '图片预览',
+        groups_report_rendered_preview: '正式输出预览', groups_report_preview_rendering: '正在渲染正式预览…', groups_report_preview_failed: '预览渲染失败，当前输出形式不可发送。', groups_report_preview_fallback: '图片预览不可用，已展示纯文本兜底。',
+        groups_report_discard_warning: '切换将放弃当前草稿。', groups_report_template_empty: '自定义模板不能为空。', groups_report_template_missing: '自定义模板缺少必需字段。', groups_report_invalid_range: '请填写有效的自定义时间范围。',
+        groups_report_ranking: '发言排行榜', groups_report_topics: '重点话题', groups_report_highlights: '精彩发言', groups_report_links: '群聊链接收集',
         groups_nav_free_reply: '自由回复',
         groups_nav_free_reply_hint: '普通群聊接话',
         groups_nav_voice_interaction: '语音交互',
@@ -1093,6 +1132,45 @@ const I18N = {
         groups_nav_humanization_hint: 'Context and tone',
         groups_nav_rooms: 'Groups & admins',
         groups_nav_rooms_hint: 'Target groups and admins',
+        groups_nav_report: 'Group reports',
+        groups_nav_report_hint: 'Statistics, templates, and schedules',
+        groups_report_title: 'Group reports',
+        groups_report_desc: 'Configure scoped statistics, report templates, and scheduled delivery.',
+        groups_report_no_rooms: 'Select and confirm at least one target group in Groups & admins first.',
+        groups_report_room: 'Target group',
+        groups_report_enabled: 'Enable reports for this group',
+        groups_report_enabled_hint: 'Keeps snapshots but pauses group requests, schedules, and daily topic memory.',
+        groups_report_save: 'Save report settings',
+        groups_report_saved: 'Report settings saved',
+        groups_report_unsaved: 'Unsaved changes',
+        groups_report_archive: 'Archive coverage',
+        groups_report_latest: 'Latest report',
+        groups_report_delivery: 'Latest delivery',
+        groups_report_scheduler: 'Schedule sync',
+        groups_report_schedules: 'Scheduled reports',
+        groups_report_daily: 'Daily', groups_report_weekly: 'Weekly', groups_report_monthly: 'Monthly',
+        groups_report_schedule_enabled: 'Enable scheduled delivery',
+        groups_report_send_time: 'Send time',
+        groups_report_timezone: 'Report timezone',
+        groups_report_manual_admin: 'Only admins can generate from the group',
+        groups_report_daily_memory: 'Save daily topics to current-group memory',
+        groups_report_output: 'Report output',
+        groups_report_mode_text: 'Text', groups_report_mode_image: 'Image', groups_report_mode_preferred: 'Image, fallback to text',
+        groups_report_text_template: 'Text template', groups_report_custom_template: 'Custom template', groups_report_builtin_template: 'Built-in template',
+        groups_report_text_template_standard: 'Standard full', groups_report_text_template_compact: 'Compact digest',
+        groups_report_template_fields: 'Available fields', groups_report_restore: 'Restore built-in template',
+        groups_report_image_template: 'Image template', groups_report_template_unavailable: 'Unavailable',
+        groups_report_preview: 'Generate preview', groups_report_send: 'Send now', groups_report_period: 'Period',
+        groups_report_period_daily: 'Previous day', groups_report_period_weekly: 'Previous week', groups_report_period_monthly: 'Previous month', groups_report_period_custom: 'Custom range',
+        groups_report_custom_start: 'Start time', groups_report_custom_end: 'End time',
+        groups_report_generating: 'Generating report', groups_report_ready: 'Preview ready', groups_report_send_confirm: 'Send this report to the current group?',
+        groups_report_channel_offline: 'The last connection status is not ready. Sending checks the live status again.',
+        groups_report_preview_required: 'Finish a preview first. Sending reuses that preview’s final output.',
+        groups_report_status_unknown: 'Delivery outcome is unknown. Do not resend blindly.', groups_report_status_partial: 'Some parts were sent. Retry incomplete parts only.',
+        groups_report_retry: 'Retry incomplete parts', groups_report_text_preview: 'Text preview', groups_report_image_preview: 'Image preview',
+        groups_report_rendered_preview: 'Final output preview', groups_report_preview_rendering: 'Rendering final preview...', groups_report_preview_failed: 'Preview rendering failed. The current output mode cannot be sent.', groups_report_preview_fallback: 'Image preview is unavailable. The text fallback is shown.',
+        groups_report_discard_warning: 'Switching discards the current draft.', groups_report_template_empty: 'Custom template cannot be empty.', groups_report_template_missing: 'Custom template misses required fields.', groups_report_invalid_range: 'Enter a valid custom range.',
+        groups_report_ranking: 'Speaker ranking', groups_report_topics: 'Topics', groups_report_highlights: 'Highlights', groups_report_links: 'Collected links',
         groups_nav_free_reply: 'Free reply',
         groups_nav_free_reply_hint: 'Ambient group replies',
         groups_nav_voice_interaction: 'Voice interaction',
@@ -8806,6 +8884,27 @@ let groupsStickerState = {
     editError: '',
 };
 let groupsStickerDescriptionPollTimer = null;
+let groupsReportState = {
+    selectedRoomId: '',
+    loadedRoomId: '',
+    loading: false,
+    saving: false,
+    generating: false,
+    settings: null,
+    draft: null,
+    templates: [],
+    archive: null,
+    overview: null,
+    connection: null,
+    job: null,
+    report: null,
+    preview: null,
+    previewId: '',
+    confirmationToken: '',
+    delivery: null,
+    error: '',
+    pollTimer: null,
+};
 let groupsAdminState = {
     roomId: '',
     query: '',
@@ -8937,6 +9036,7 @@ function buildGroupsMobileSectionSelect() {
     const sections = [
         ['basic', 'groups_nav_basic'],
         ['rooms', 'groups_nav_rooms'],
+        ['report', 'groups_nav_report'],
         ['humanization', 'groups_nav_humanization'],
         ['free_reply', 'groups_nav_free_reply'],
         ['voice_interaction', 'groups_nav_voice_interaction'],
@@ -8960,9 +9060,11 @@ function buildGroupsMobileSectionSelect() {
     </div>`;
 }
 
-function renderGroupsView() {
+function renderGroupsView(options = {}) {
     const container = document.getElementById('groups-content');
     if (!container) return;
+    const previousMain = container.querySelector('main');
+    const savedScrollTop = options.preserveScroll && previousMain ? previousMain.scrollTop : null;
     captureGroupsStickerConfigDraft();
     const ch = getWechatGroupChannel();
     const extra = ch?.extra || {};
@@ -8971,6 +9073,7 @@ function renderGroupsView() {
         <aside class="hidden md:block w-56 flex-shrink-0 border-r border-slate-200 dark:border-white/10 p-3 space-y-1 overflow-y-auto">
             ${buildGroupsSectionButton('basic', 'fa-sliders', 'groups_nav_basic', 'groups_nav_basic_hint')}
             ${buildGroupsSectionButton('rooms', 'fa-comments', 'groups_nav_rooms', 'groups_nav_rooms_hint')}
+            ${buildGroupsSectionButton('report', 'fa-chart-column', 'groups_nav_report', 'groups_nav_report_hint')}
             ${buildGroupsSectionButton('humanization', 'fa-user-check', 'groups_nav_humanization', 'groups_nav_humanization_hint')}
             ${buildGroupsSectionButton('free_reply', 'fa-comment-dots', 'groups_nav_free_reply', 'groups_nav_free_reply_hint')}
             ${buildGroupsSectionButton('voice_interaction', 'fa-microphone-lines', 'groups_nav_voice_interaction', 'groups_nav_voice_interaction_hint')}
@@ -8995,6 +9098,7 @@ function renderGroupsView() {
         <main class="flex-1 min-w-0 min-h-0 overflow-y-auto p-3 md:p-5">
             ${groupsActiveSection === 'basic' ? buildGroupsBasicPanel(extra) : ''}
             ${groupsActiveSection === 'rooms' ? buildGroupsRoomsPanel(extra) : ''}
+            ${groupsActiveSection === 'report' ? buildGroupsReportPanel(extra) : ''}
             ${groupsActiveSection === 'humanization' ? buildGroupsHumanizationPanel(extra) : ''}
             ${groupsActiveSection === 'free_reply' ? renderWechatGroupFreeReplySettings(extra) : ''}
             ${groupsActiveSection === 'voice_interaction' ? buildGroupsVoiceInteractionPanel(extra) : ''}
@@ -9029,6 +9133,26 @@ function renderGroupsView() {
     if (groupsActiveSection === 'sticker') {
         ensureGroupsStickerLoaded(extra);
     }
+    if (groupsActiveSection === 'report') {
+        ensureGroupsReportLoaded(extra);
+    }
+    syncGroupsPrimarySaveButton();
+    if (savedScrollTop !== null) {
+        requestAnimationFrame(() => {
+            const currentMain = container.querySelector('main');
+            if (currentMain) currentMain.scrollTop = savedScrollTop;
+        });
+    }
+}
+
+function renderGroupsReportView() {
+    renderGroupsView({ preserveScroll: true });
+}
+
+function syncGroupsPrimarySaveButton() {
+    const saveButton = document.getElementById('groups-save-btn');
+    if (!saveButton) return;
+    saveButton.classList.toggle('hidden', groupsActiveSection === 'report');
 }
 
 function buildGroupsSectionButton(section, icon, labelKey, hintKey) {
@@ -9041,6 +9165,7 @@ function buildGroupsSectionButton(section, icon, labelKey, hintKey) {
 }
 
 function switchGroupsSection(section) {
+    if (groupsActiveSection === 'report' && section !== 'report') captureGroupsReportDraft();
     if (section !== 'sticker') {
         groupsStickerState.configDraft = null;
     }
@@ -9477,6 +9602,511 @@ function getGroupsManagedRooms(extra) {
         id: String(room.id || ''),
         name: String(room.name || room.id || ''),
     })).filter(item => item.id);
+}
+
+function getGroupsReportRooms(extra = {}) {
+    const rooms = Array.isArray(extra.rooms) ? extra.rooms : [];
+    const selectedIds = Array.isArray(extra.selected_room_ids) ? extra.selected_room_ids : [];
+    const selectedNames = Array.isArray(extra.selected_room_names) ? extra.selected_room_names : [];
+    const byAnyId = new Map();
+    rooms.forEach(room => {
+        const stableId = String(room.stable_room_id || '').trim();
+        if (!stableId) return;
+        const item = { id: stableId, name: String(room.name || room.topic || stableId), connected: true };
+        [room.stable_room_id, room.id, room.runtime_room_id].forEach(value => {
+            const key = String(value || '').trim();
+            if (key) byAnyId.set(key, item);
+        });
+    });
+    const result = [];
+    selectedIds.forEach((value, index) => {
+        const selected = String(value || '').trim();
+        const resolved = byAnyId.get(selected);
+        if (resolved && !result.some(item => item.id === resolved.id)) result.push(resolved);
+        else if (selected.startsWith('wgr_')) result.push({ id: selected, name: selectedNames[index] || t('groups_room_saved').replace('{n}', String(index + 1)), connected: false });
+    });
+    return result;
+}
+
+function defaultGroupsReportSettings() {
+    return {
+        version: 0,
+        enabled: false,
+        timezone: 'Asia/Shanghai',
+        manual_admin_only: true,
+        save_daily_topics_to_group_memory: false,
+        schedules: {
+            daily: { enabled: false, send_time: '09:00' },
+            weekly: { enabled: false, send_time: '09:00' },
+            monthly: { enabled: false, send_time: '09:00' },
+        },
+        output: {
+            mode: 'image_preferred', text_template_source: 'builtin', builtin_text_template_id: 'standard_text',
+            custom_text_template: '', image_template_source: 'skill', builtin_image_template_id: '',
+            skill_image_template_name: 'wechat-group-report-cyber-intelligence',
+        },
+    };
+}
+
+function ensureGroupsReportLoaded(extra = {}) {
+    const rooms = getGroupsReportRooms(extra);
+    if (!rooms.length) return;
+    if (!groupsReportState.selectedRoomId || !rooms.some(item => item.id === groupsReportState.selectedRoomId)) {
+        groupsReportState.selectedRoomId = rooms[0].id;
+        groupsReportState.loadedRoomId = '';
+        groupsReportState.settings = null;
+        groupsReportState.draft = null;
+        groupsReportState.job = null;
+        groupsReportState.report = null;
+        groupsReportState.preview = null;
+        groupsReportState.previewId = '';
+        groupsReportState.confirmationToken = '';
+        groupsReportState.delivery = null;
+    }
+    if (!groupsReportState.loading && groupsReportState.loadedRoomId !== groupsReportState.selectedRoomId) {
+        loadGroupsReportSettings(groupsReportState.selectedRoomId);
+    }
+}
+
+function loadGroupsReportSettings(roomId) {
+    const targetRoomId = String(roomId || '').trim();
+    if (!targetRoomId) return;
+    groupsReportState.loading = true;
+    groupsReportState.error = '';
+    renderGroupsReportView();
+    fetch(`/api/wechat-group/reports/settings?stable_room_id=${encodeURIComponent(targetRoomId)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'groups_load_failed');
+            if (groupsReportState.selectedRoomId !== targetRoomId) return;
+            groupsReportState.settings = data.settings || defaultGroupsReportSettings();
+            groupsReportState.draft = null;
+            groupsReportState.templates = Array.isArray(data.templates) ? data.templates : [];
+            groupsReportState.archive = data.archive || null;
+            groupsReportState.overview = data.overview || null;
+            groupsReportState.connection = data.connection || null;
+            groupsReportState.loadedRoomId = targetRoomId;
+        })
+        .catch(error => {
+            if (groupsReportState.selectedRoomId === targetRoomId) groupsReportState.error = error.message || 'groups_load_failed';
+        })
+        .finally(() => {
+            if (groupsReportState.selectedRoomId === targetRoomId) groupsReportState.loading = false;
+            renderGroupsReportView();
+        });
+}
+
+function captureGroupsReportDraft() {
+    if (groupsActiveSection !== 'report' || !document.getElementById('groups-report-enabled')) return;
+    groupsReportState.draft = readGroupsReportSettings(groupsReportState.settings || defaultGroupsReportSettings());
+}
+
+function readGroupsReportSettings(saved = {}) {
+    const output = saved.output || {};
+    const scheduleValue = (type, key, fallback) => {
+        const element = document.getElementById(`groups-report-${type}-${key}`);
+        return element ? (key === 'enabled' ? !!element.checked : String(element.value || fallback)) : fallback;
+    };
+    const checked = selector => !!document.querySelector(selector)?.checked;
+    const value = (id, fallback = '') => document.getElementById(id) ? String(document.getElementById(id).value || '') : String(fallback || '');
+    const mode = document.querySelector('input[name="groups-report-output-mode"]:checked')?.value || output.mode || 'image_preferred';
+    const textSource = document.querySelector('input[name="groups-report-text-source"]:checked')?.value || output.text_template_source || 'builtin';
+    return {
+        version: Number(saved.version || 0),
+        enabled: !!document.getElementById('groups-report-enabled')?.checked,
+        timezone: value('groups-report-timezone', saved.timezone || 'Asia/Shanghai').trim() || 'Asia/Shanghai',
+        manual_admin_only: !!document.getElementById('groups-report-manual-admin')?.checked,
+        save_daily_topics_to_group_memory: !!document.getElementById('groups-report-daily-memory')?.checked,
+        schedules: {
+            daily: { enabled: scheduleValue('daily', 'enabled', !!saved.schedules?.daily?.enabled), send_time: scheduleValue('daily', 'time', saved.schedules?.daily?.send_time || '09:00') },
+            weekly: { enabled: scheduleValue('weekly', 'enabled', !!saved.schedules?.weekly?.enabled), send_time: scheduleValue('weekly', 'time', saved.schedules?.weekly?.send_time || '09:00') },
+            monthly: { enabled: scheduleValue('monthly', 'enabled', !!saved.schedules?.monthly?.enabled), send_time: scheduleValue('monthly', 'time', saved.schedules?.monthly?.send_time || '09:00') },
+        },
+        output: {
+            mode,
+            text_template_source: textSource,
+            builtin_text_template_id: value('groups-report-builtin-text-template', output.builtin_text_template_id || 'standard_text').trim() || 'standard_text',
+            custom_text_template: value('groups-report-custom-template', output.custom_text_template || ''),
+            image_template_source: 'skill',
+            builtin_image_template_id: '',
+            skill_image_template_name: value('groups-report-image-template', output.skill_image_template_name || 'wechat-group-report-cyber-intelligence'),
+        },
+    };
+}
+
+function isGroupsReportDirty() {
+    if (!groupsReportState.settings || !groupsReportState.draft) return false;
+    const comparable = settings => ({
+        version: Number(settings?.version || 0),
+        enabled: !!settings?.enabled,
+        timezone: String(settings?.timezone || 'Asia/Shanghai'),
+        manual_admin_only: settings?.manual_admin_only !== false,
+        save_daily_topics_to_group_memory: !!settings?.save_daily_topics_to_group_memory,
+        schedules: settings?.schedules || {},
+        output: settings?.output || {},
+    });
+    return JSON.stringify(comparable(groupsReportState.settings)) !== JSON.stringify(comparable(groupsReportState.draft));
+}
+
+function markGroupsReportDirty() {
+    captureGroupsReportDraft();
+    const status = document.getElementById('groups-report-unsaved');
+    if (status) status.classList.toggle('hidden', !isGroupsReportDirty());
+}
+
+function selectGroupsReportRoom(roomId) {
+    const nextRoomId = String(roomId || '').trim();
+    if (!nextRoomId || nextRoomId === groupsReportState.selectedRoomId) return;
+    captureGroupsReportDraft();
+    if (isGroupsReportDirty() && !window.confirm(`${t('groups_report_unsaved')}\n${t('groups_report_discard_warning')}`)) {
+        renderGroupsView();
+        return;
+    }
+    groupsReportState.selectedRoomId = nextRoomId;
+    groupsReportState.loadedRoomId = '';
+    groupsReportState.settings = null;
+    groupsReportState.draft = null;
+    groupsReportState.job = null;
+    groupsReportState.report = null;
+    groupsReportState.preview = null;
+    groupsReportState.previewId = '';
+    groupsReportState.confirmationToken = '';
+    groupsReportState.delivery = null;
+    renderGroupsView();
+    loadGroupsReportSettings(nextRoomId);
+}
+
+function saveGroupsReportSettings() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    if (!roomId || groupsReportState.saving) return;
+    const settings = readGroupsReportSettings(groupsReportState.settings || defaultGroupsReportSettings());
+    if (settings.output.text_template_source === 'custom' && !validateGroupsReportTemplate(settings.output.custom_text_template)) {
+        return;
+    }
+    groupsReportState.saving = true;
+    renderGroupsReportView();
+    fetch('/api/wechat-group/reports/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, expected_version: settings.version, settings }),
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'success') throw new Error(data.message || 'save failed');
+        groupsReportState.settings = data.settings || settings;
+        groupsReportState.draft = null;
+        showGroupsStatus('groups_report_saved', false);
+    }).catch(error => {
+        showGroupsStatus(error.message || 'groups_load_failed', true);
+    }).finally(() => {
+        groupsReportState.saving = false;
+        renderGroupsReportView();
+    });
+}
+
+function validateGroupsReportTemplate(template) {
+    const required = ['{room_name}', '{period_start}', '{period_end}', '{active_speaker_count}', '{total_messages}', '{top_speaker_name}', '{topic_count}', '{ranking_block}', '{topics_block}', '{highlights_block}', '{links_block}', '{archive_message_count}', '{unresolved_message_count}', '{generated_at}'];
+    const error = !String(template || '').trim() ? t('groups_report_template_empty')
+        : required.find(field => !String(template).includes(field)) ? t('groups_report_template_missing') : '';
+    const target = document.getElementById('groups-report-template-error');
+    if (target) {
+        target.textContent = error;
+        target.classList.toggle('hidden', !error);
+    }
+    return !error;
+}
+
+function changeGroupsReportLayout() {
+    captureGroupsReportDraft();
+    renderGroupsReportView();
+}
+
+function restoreGroupsReportTemplate() {
+    const textarea = document.getElementById('groups-report-custom-template');
+    if (textarea) textarea.value = '';
+    const builtin = document.querySelector('input[name="groups-report-text-source"][value="builtin"]');
+    if (builtin) builtin.checked = true;
+    const builtinSelect = document.getElementById('groups-report-builtin-text-template');
+    if (builtinSelect) builtinSelect.value = 'standard_text';
+    changeGroupsReportLayout();
+}
+
+function insertGroupsReportTemplateField(field) {
+    const textarea = document.getElementById('groups-report-custom-template');
+    if (!textarea || !field) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || start;
+    textarea.value = `${textarea.value.slice(0, start)}${field}${textarea.value.slice(end)}`;
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = start + field.length;
+    markGroupsReportDirty();
+}
+
+function startGroupsReportPreview() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    if (!roomId || groupsReportState.generating) return;
+    const settings = readGroupsReportSettings(groupsReportState.settings || defaultGroupsReportSettings());
+    const reportType = document.getElementById('groups-report-period')?.value || 'daily';
+    const customStart = document.getElementById('groups-report-custom-start')?.value || '';
+    const customEnd = document.getElementById('groups-report-custom-end')?.value || '';
+    if (reportType === 'custom' && (!customStart || !customEnd || customEnd <= customStart)) {
+        showGroupsStatus(t('groups_report_invalid_range'), true);
+        return;
+    }
+    groupsReportState.generating = true;
+    groupsReportState.report = null;
+    groupsReportState.preview = null;
+    groupsReportState.previewId = '';
+    groupsReportState.confirmationToken = '';
+    renderGroupsReportView();
+    fetch('/api/wechat-group/reports/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, report_type: reportType, custom_start: customStart, custom_end: customEnd, draft_settings: settings }),
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'accepted') throw new Error(data.message || 'preview failed');
+        groupsReportState.job = { job_id: data.job_id, state: data.state };
+        groupsReportState.previewId = String(data.preview_id || '');
+        pollGroupsReportJob();
+    }).catch(error => {
+        groupsReportState.generating = false;
+        showGroupsStatus(error.message || 'groups_load_failed', true);
+        renderGroupsReportView();
+    });
+}
+
+function pollGroupsReportJob() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const jobId = String(groupsReportState.job?.job_id || '').trim();
+    if (!roomId || !jobId) return;
+    clearTimeout(groupsReportState.pollTimer);
+    const previewId = String(groupsReportState.previewId || '').trim();
+    const previewQuery = previewId ? `&preview_id=${encodeURIComponent(previewId)}` : '';
+    fetch(`/api/wechat-group/reports/status?stable_room_id=${encodeURIComponent(roomId)}&job_id=${encodeURIComponent(jobId)}${previewQuery}`)
+        .then(response => response.json()).then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'status failed');
+            if (data.connection) groupsReportState.connection = data.connection;
+            groupsReportState.job = data.job || groupsReportState.job;
+            if (data.job?.preview) groupsReportState.preview = data.job.preview;
+            if (data.job?.state === 'ready' && data.job.report) {
+                groupsReportState.report = data.job.report;
+                const previewState = String(groupsReportState.preview?.state || 'pending');
+                if (['ready', 'text_ready'].includes(previewState)) {
+                    groupsReportState.confirmationToken = data.job.send_confirmation_token || '';
+                    groupsReportState.generating = false;
+                    showGroupsStatus('groups_report_ready', false);
+                    renderGroupsReportView();
+                    return;
+                }
+                if (previewState === 'failed') {
+                    groupsReportState.confirmationToken = '';
+                    groupsReportState.generating = false;
+                    showGroupsStatus(groupsReportState.preview?.error_code || 'groups_report_preview_failed', true);
+                    renderGroupsReportView();
+                    return;
+                }
+                renderGroupsReportView();
+                groupsReportState.pollTimer = setTimeout(pollGroupsReportJob, 1000);
+                return;
+            }
+            if (data.job?.state === 'failed') {
+                groupsReportState.generating = false;
+                showGroupsStatus(data.job.error_code || 'groups_load_failed', true);
+                renderGroupsReportView();
+                return;
+            }
+            renderGroupsReportView();
+            groupsReportState.pollTimer = setTimeout(pollGroupsReportJob, 1000);
+        }).catch(error => {
+            groupsReportState.generating = false;
+            showGroupsStatus(error.message || 'groups_load_failed', true);
+            renderGroupsReportView();
+        });
+}
+
+function sendGroupsReport() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const reportId = String(groupsReportState.job?.report_id || groupsReportState.report?.report_id || '').trim();
+    const previewId = String(groupsReportState.previewId || '').trim();
+    if (!roomId || !reportId || !groupsReportState.confirmationToken || !previewId) {
+        showGroupsStatus('groups_report_preview_required', true);
+        return;
+    }
+    if (!window.confirm(t('groups_report_send_confirm'))) return;
+    fetch('/api/wechat-group/reports/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, report_id: reportId, preview_id: previewId, confirmation_token: groupsReportState.confirmationToken }),
+    }).then(response => response.json()).then(data => {
+        if (data.connection) groupsReportState.connection = data.connection;
+        if (data.status !== 'accepted') throw new Error(data.message || 'send failed');
+        groupsReportState.delivery = { delivery_id: data.delivery_id, state: 'pending' };
+        groupsReportState.confirmationToken = '';
+        pollGroupsReportDelivery();
+        renderGroupsReportView();
+    }).catch(error => {
+        showGroupsStatus(error.message || 'groups_load_failed', true);
+        renderGroupsReportView();
+    });
+}
+
+function pollGroupsReportDelivery() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const deliveryId = String(groupsReportState.delivery?.delivery_id || '').trim();
+    if (!roomId || !deliveryId) return;
+    fetch(`/api/wechat-group/reports/status?stable_room_id=${encodeURIComponent(roomId)}&delivery_id=${encodeURIComponent(deliveryId)}`)
+        .then(response => response.json()).then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'delivery status failed');
+            if (data.connection) groupsReportState.connection = data.connection;
+            groupsReportState.delivery = data.delivery || groupsReportState.delivery;
+            renderGroupsReportView();
+            if (['pending', 'rendering', 'sending', 'fallback_sending'].includes(String(groupsReportState.delivery?.state || ''))) {
+                groupsReportState.pollTimer = setTimeout(pollGroupsReportDelivery, 1000);
+            }
+        }).catch(error => showGroupsStatus(error.message || 'groups_load_failed', true));
+}
+
+function retryGroupsReportDelivery() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const deliveryId = String(groupsReportState.delivery?.delivery_id || '').trim();
+    if (!roomId || !deliveryId) return;
+    fetch('/api/wechat-group/reports/retry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, delivery_id: deliveryId }),
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'accepted') throw new Error(data.message || 'retry failed');
+        pollGroupsReportDelivery();
+    }).catch(error => showGroupsStatus(error.message || 'groups_load_failed', true));
+}
+
+function buildGroupsReportPanel(extra = {}) {
+    const rooms = getGroupsReportRooms(extra);
+    if (!rooms.length) {
+        return `<div class="h-full w-full">${buildGroupsPanelTitle('fa-chart-column', 'groups_report_title', 'groups_report_desc')}<p class="text-sm text-slate-500 dark:text-slate-400">${t('groups_report_no_rooms')}</p></div>`;
+    }
+    const settings = groupsReportState.draft || groupsReportState.settings || defaultGroupsReportSettings();
+    const output = settings.output || {};
+    const loading = groupsReportState.loading || !groupsReportState.settings;
+    if (loading) {
+        return `<div class="h-full w-full">${buildGroupsPanelTitle('fa-chart-column', 'groups_report_title', 'groups_report_desc')}<div class="min-h-40 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400" aria-live="polite"><i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>${t('groups_loading')}</div></div>`;
+    }
+    const roomOptions = rooms.map(room => `<option value="${escapeHtml(room.id)}" ${room.id === groupsReportState.selectedRoomId ? 'selected' : ''}>${escapeHtml(room.name)}</option>`).join('');
+    const archive = groupsReportState.archive || {};
+    const overview = groupsReportState.overview || {};
+    const syncStatus = settings.schedule_sync_status || 'not_saved';
+    const imageTemplates = (groupsReportState.templates || []).map(template => `<option value="${escapeHtml(template.skill_name || '')}" ${template.skill_name === output.skill_image_template_name ? 'selected' : ''} ${template.valid ? '' : 'disabled'}>${escapeHtml(template.display_name || template.skill_name || '')}${template.valid ? '' : ` (${t('groups_report_template_unavailable')})`}</option>`).join('');
+    const builtinTextTemplateId = String(output.builtin_text_template_id || 'standard_text');
+    const builtinTextTemplates = [
+        ['standard_text', 'groups_report_text_template_standard'],
+        ['compact_text', 'groups_report_text_template_compact'],
+    ];
+    const builtinTextTemplateOptions = builtinTextTemplates.map(([id, labelKey]) => (
+        `<option value="${id}" ${id === builtinTextTemplateId ? 'selected' : ''}>${escapeHtml(t(labelKey))}</option>`
+    )).join('');
+    const mode = output.mode || 'image_preferred';
+    const showText = mode !== 'image';
+    const showImage = mode !== 'text';
+    const scheduleRows = ['daily', 'weekly', 'monthly'].map(type => {
+        const schedule = settings.schedules?.[type] || { enabled: false, send_time: '09:00' };
+        return `<div class="grid grid-cols-1 sm:grid-cols-[minmax(130px,1fr)_auto_auto] gap-3 items-center border-t border-slate-200 dark:border-white/10 py-3 first:border-t-0 first:pt-0">
+            <div><h4 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(`groups_report_${type}`)}</h4><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${type === 'daily' ? t('groups_report_period_daily') : type === 'weekly' ? t('groups_report_period_weekly') : t('groups_report_period_monthly')}</p></div>
+            <label class="inline-flex min-h-11 items-center gap-2 text-xs text-slate-700 dark:text-slate-200"><input id="groups-report-${type}-enabled" type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="markGroupsReportDirty()">${t('groups_report_schedule_enabled')}</label>
+            <label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_send_time')}<input id="groups-report-${type}-time" type="time" value="${escapeHtml(schedule.send_time || '09:00')}" onchange="markGroupsReportDirty()" class="block mt-1 min-h-11 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label>
+        </div>`;
+    }).join('');
+    return `<div class="h-full w-full space-y-5 pb-8">
+        <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+            ${buildGroupsPanelTitle('fa-chart-column', 'groups_report_title', 'groups_report_desc')}
+            <div class="flex flex-wrap items-center gap-2">
+                <span id="groups-report-unsaved" class="${isGroupsReportDirty() ? '' : 'hidden'} text-xs text-amber-700 dark:text-amber-300">${t('groups_report_unsaved')}</span>
+                <button type="button" onclick="saveGroupsReportSettings()" ${groupsReportState.saving ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas ${groupsReportState.saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-1.5" aria-hidden="true"></i>${t('groups_report_save')}</button>
+            </div>
+        </div>
+        <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+            <div class="grid grid-cols-1 lg:grid-cols-[minmax(220px,1fr)_auto] gap-4 items-end">
+                <label class="block"><span class="block text-sm font-medium text-slate-800 dark:text-slate-100 mb-1.5">${t('groups_report_room')}</span><select onchange="selectGroupsReportRoom(this.value)" class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">${roomOptions}</select></label>
+                <label class="inline-flex min-h-11 items-center gap-3 text-sm text-slate-800 dark:text-slate-100"><input id="groups-report-enabled" type="checkbox" ${settings.enabled ? 'checked' : ''} onchange="markGroupsReportDirty()" class="h-5 w-5 accent-primary-500"><span>${t('groups_report_enabled')}</span></label>
+            </div><p class="text-xs text-slate-500 dark:text-slate-400 mt-3">${t('groups_report_enabled_hint')}</p>
+        </section>
+        <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" aria-live="polite">
+            ${buildGroupsReportMetric(t('groups_report_archive'), `${Number(archive.message_count || 0)} 条`, archive.first_created_at ? `${formatGroupsEmotionTimestamp(Number(archive.first_created_at || 0))}` : '-')}
+            ${buildGroupsReportMetric(t('groups_report_latest'), overview.latest_report?.report_type || '-', overview.latest_report?.generated_at || '-')}
+            ${buildGroupsReportMetric(t('groups_report_delivery'), overview.latest_delivery?.state || '-', overview.latest_delivery?.sent_at || '-')}
+            ${buildGroupsReportMetric(t('groups_report_scheduler'), syncStatus, settings.schedule_sync_error || '-')}
+        </section>
+        <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3"><div><h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_schedules')}</h4><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_report_timezone')}：${escapeHtml(settings.timezone || 'Asia/Shanghai')}</p></div><label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_timezone')}<input id="groups-report-timezone" value="${escapeHtml(settings.timezone || 'Asia/Shanghai')}" onchange="markGroupsReportDirty()" class="block mt-1 min-h-11 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label></div>${scheduleRows}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-200 dark:border-white/10"><label class="inline-flex min-h-11 items-center gap-3 text-sm text-slate-700 dark:text-slate-200"><input id="groups-report-manual-admin" type="checkbox" ${settings.manual_admin_only !== false ? 'checked' : ''} onchange="markGroupsReportDirty()" class="h-5 w-5 accent-primary-500">${t('groups_report_manual_admin')}</label><label class="inline-flex min-h-11 items-center gap-3 text-sm text-slate-700 dark:text-slate-200"><input id="groups-report-daily-memory" type="checkbox" ${settings.save_daily_topics_to_group_memory ? 'checked' : ''} onchange="markGroupsReportDirty()" class="h-5 w-5 accent-primary-500">${t('groups_report_daily_memory')}</label></div>
+        </section>
+        <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_output')}</h4>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2" role="radiogroup" aria-label="${escapeHtml(t('groups_report_output'))}">
+                ${buildGroupsReportMode('text', 'groups_report_mode_text', mode)}${buildGroupsReportMode('image', 'groups_report_mode_image', mode)}${buildGroupsReportMode('image_preferred', 'groups_report_mode_preferred', mode)}
+            </div>
+            ${showText ? `<div class="mt-5 pt-5 border-t border-slate-200 dark:border-white/10"><div class="flex flex-wrap items-center justify-between gap-3"><h5 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_report_text_template')}</h5><div class="flex gap-3 text-xs"><label><input type="radio" name="groups-report-text-source" value="builtin" ${output.text_template_source !== 'custom' ? 'checked' : ''} onchange="changeGroupsReportLayout()">${t('groups_report_builtin_template')}</label><label><input type="radio" name="groups-report-text-source" value="custom" ${output.text_template_source === 'custom' ? 'checked' : ''} onchange="changeGroupsReportLayout()">${t('groups_report_custom_template')}</label></div></div>
+                ${output.text_template_source !== 'custom' ? `<label class="mt-3 block text-xs text-slate-600 dark:text-slate-300">${t('groups_report_builtin_template')}<select id="groups-report-builtin-text-template" onchange="markGroupsReportDirty()" class="mt-1 block w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100">${builtinTextTemplateOptions}</select></label>` : ''}
+                ${output.text_template_source === 'custom' ? `<div class="mt-3"><div class="flex flex-wrap gap-2 mb-2"><select onchange="insertGroupsReportTemplateField(this.value); this.value=''" class="min-h-11 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-xs text-slate-700 dark:text-slate-200"><option value="">${t('groups_report_template_fields')}</option><option value="{room_name}">{room_name}</option><option value="{report_type}">{report_type}</option><option value="{period_start}">{period_start}</option><option value="{period_end}">{period_end}</option><option value="{timezone}">{timezone}</option><option value="{active_speaker_count}">{active_speaker_count}</option><option value="{total_messages}">{total_messages}</option><option value="{top_speaker_name}">{top_speaker_name}</option><option value="{top_speaker_message_count}">{top_speaker_message_count}</option><option value="{topic_count}">{topic_count}</option><option value="{ranking_block}">{ranking_block}</option><option value="{topics_block}">{topics_block}</option><option value="{highlights_block}">{highlights_block}</option><option value="{links_block}">{links_block}</option><option value="{archive_message_count}">{archive_message_count}</option><option value="{unresolved_message_count}">{unresolved_message_count}</option><option value="{generated_at}">{generated_at}</option></select><button type="button" onclick="restoreGroupsReportTemplate()" class="min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">${t('groups_report_restore')}</button></div><textarea id="groups-report-custom-template" rows="9" oninput="markGroupsReportDirty(); validateGroupsReportTemplate(this.value)" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 resize-y">${escapeHtml(output.custom_text_template || '')}</textarea><p id="groups-report-template-error" class="hidden mt-1 text-xs text-red-600 dark:text-red-400" role="alert"></p></div>` : ''}
+            </div>` : ''}
+            ${showImage ? `<div class="mt-5 pt-5 border-t border-slate-200 dark:border-white/10"><h5 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_report_image_template')}</h5><select id="groups-report-image-template" onchange="markGroupsReportDirty()" class="mt-3 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100">${imageTemplates}</select>${renderGroupsReportTemplatePreview(output.skill_image_template_name)}</div>` : ''}
+        </section>
+        ${buildGroupsReportManualPanel(settings)}
+        ${renderGroupsReportPreview()}
+    </div>`;
+}
+
+function buildGroupsReportMetric(label, value, detail) {
+    return `<article class="min-h-24 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4"><p class="text-xs text-slate-500 dark:text-slate-400">${escapeHtml(label)}</p><p class="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100 break-words">${escapeHtml(String(value || '-'))}</p><p class="mt-1 text-[11px] text-slate-400 dark:text-slate-500 break-words">${escapeHtml(String(detail || '-'))}</p></article>`;
+}
+
+function buildGroupsReportMode(value, key, current) {
+    const selected = value === current;
+    return `<label class="min-h-11 rounded-lg border ${selected ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-slate-200 dark:border-white/10'} px-3 py-3 cursor-pointer text-sm text-slate-700 dark:text-slate-200"><input type="radio" name="groups-report-output-mode" value="${value}" ${selected ? 'checked' : ''} onchange="changeGroupsReportLayout()" class="mr-2 accent-primary-500">${t(key)}</label>`;
+}
+
+function renderGroupsReportTemplatePreview(skillName) {
+    const template = (groupsReportState.templates || []).find(item => item.skill_name === skillName && item.valid);
+    if (!template?.preview_url) return '';
+    return `<img src="${escapeHtml(template.preview_url)}" alt="${escapeHtml(template.display_name || t('groups_report_image_template'))}" loading="lazy" class="mt-3 w-full max-w-xs aspect-[941/1600] object-cover object-top rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5">`;
+}
+
+function buildGroupsReportManualPanel(settings) {
+    const offline = groupsReportState.connection?.ready === false;
+    const generating = groupsReportState.generating;
+    const previewReady = !!groupsReportState.confirmationToken && !!groupsReportState.previewId;
+    const sendHint = !previewReady ? t('groups_report_preview_required') : offline ? t('groups_report_channel_offline') : '';
+    return `<section class="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 p-4"><div class="flex flex-col lg:flex-row lg:items-end gap-3"><label class="block flex-1"><span class="block text-sm font-medium text-slate-800 dark:text-slate-100 mb-1.5">${t('groups_report_period')}</span><select id="groups-report-period" onchange="changeGroupsReportPeriod()" class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"><option value="daily">${t('groups_report_period_daily')}</option><option value="weekly">${t('groups_report_period_weekly')}</option><option value="monthly">${t('groups_report_period_monthly')}</option><option value="custom">${t('groups_report_period_custom')}</option></select></label><button type="button" onclick="startGroupsReportPreview()" ${generating ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg border border-primary-200 dark:border-primary-900/40 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-sm font-medium disabled:opacity-50"><i class="fas ${generating ? 'fa-spinner fa-spin' : 'fa-eye'} mr-1.5" aria-hidden="true"></i>${t('groups_report_preview')}</button><button type="button" onclick="sendGroupsReport()" ${previewReady ? '' : 'disabled'} aria-describedby="groups-report-send-hint" class="min-h-11 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas fa-paper-plane mr-1.5" aria-hidden="true"></i>${t('groups_report_send')}</button></div><div id="groups-report-custom-range" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_custom_start')}<input id="groups-report-custom-start" type="datetime-local" class="block mt-1 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label><label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_custom_end')}<input id="groups-report-custom-end" type="datetime-local" class="block mt-1 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label></div>${sendHint ? `<p id="groups-report-send-hint" class="mt-3 text-xs ${offline ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}">${escapeHtml(sendHint)}</p>` : ''}${renderGroupsReportDeliveryStatus()}</section>`;
+}
+
+function changeGroupsReportPeriod() {
+    const custom = document.getElementById('groups-report-period')?.value === 'custom';
+    document.getElementById('groups-report-custom-range')?.classList.toggle('hidden', !custom);
+}
+
+function renderGroupsReportDeliveryStatus() {
+    const delivery = groupsReportState.delivery;
+    if (!delivery) return '';
+    const state = String(delivery.state || 'pending');
+    const notice = state === 'delivery_unknown' ? t('groups_report_status_unknown') : state === 'partial_failed' ? t('groups_report_status_partial') : '';
+    const retry = ['failed', 'partial_failed'].includes(state) ? `<button type="button" onclick="retryGroupsReportDelivery()" class="mt-2 min-h-11 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-900/40 text-xs text-amber-700 dark:text-amber-300">${t('groups_report_retry')}</button>` : '';
+    return `<div class="mt-3 text-xs ${state === 'sent' || state === 'fallback_sent' ? 'text-emerald-700 dark:text-emerald-300' : state.includes('failed') || state === 'delivery_unknown' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}" aria-live="polite">${escapeHtml(state)}${notice ? `：${escapeHtml(notice)}` : ''}${retry}</div>`;
+}
+
+function renderGroupsReportPreview() {
+    const report = groupsReportState.report;
+    if (!report) return '';
+    const preview = groupsReportState.preview;
+    const ranking = (report.ranking || []).map(item => `<li>${escapeHtml(item.display_name || '')}：${Number(item.message_count || 0)}</li>`).join('') || '<li>-</li>';
+    const topics = (report.topics || []).map(item => `<li><strong>${escapeHtml(item.title || '')}</strong> ${escapeHtml(item.summary || '')}</li>`).join('') || `<li>${t('groups_report_period_daily')}</li>`;
+    const highlights = (report.highlights || []).map(item => `<li>${escapeHtml(item.speaker_display_name || '')}：${escapeHtml(item.quote || '')}</li>`).join('') || '<li>-</li>';
+    const links = (report.links || []).map(item => `<li class="break-all">${escapeHtml(item.url || '')}<span class="text-slate-500 dark:text-slate-400"> ${escapeHtml(item.summary || '')}</span></li>`).join('') || '<li>-</li>';
+    const imageParts = (preview?.parts || []).map((part, index) => {
+        const width = Math.max(Number(part.width || 941), 1);
+        const height = Math.max(Number(part.height || 0), 0);
+        const size = height ? ` width="${width}" height="${height}"` : ` width="${width}"`;
+        return `<img src="${escapeHtml(part.asset_url || '')}" alt="${escapeHtml(`${t('groups_report_rendered_preview')} ${index + 1}`)}"${size} loading="lazy" class="w-full max-w-[941px] h-auto rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5">`;
+    }).join('');
+    const textParts = (preview?.text_parts || []).map(part => `<pre class="whitespace-pre-wrap break-words rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/10 p-3 text-xs leading-6 text-slate-700 dark:text-slate-200 font-sans">${escapeHtml(part)}</pre>`).join('');
+    const rendered = !preview ? `<p class="mt-3 text-xs text-slate-500 dark:text-slate-400">${t('groups_report_preview_rendering')}</p>`
+        : preview.state === 'ready' ? `<div class="mt-3 space-y-3">${imageParts}</div>`
+        : preview.state === 'text_ready' ? `<div class="mt-3 space-y-3">${preview.fallback_reason ? `<p class="text-xs text-amber-700 dark:text-amber-300">${t('groups_report_preview_fallback')}</p>` : ''}${textParts}</div>`
+        : preview.state === 'failed' ? `<p class="mt-3 text-xs text-red-700 dark:text-red-300">${t('groups_report_preview_failed')}</p>`
+        : `<p class="mt-3 text-xs text-slate-500 dark:text-slate-400">${t('groups_report_preview_rendering')}</p>`;
+    return `<section class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4" aria-live="polite"><h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_text_preview')}</h4><p class="mt-1 text-xs text-slate-500 dark:text-slate-400">${escapeHtml(report.room_name || '')} · ${escapeHtml(report.period_start || '')} - ${escapeHtml(report.period_end || '')}</p><div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm text-slate-700 dark:text-slate-200"><div><h5 class="font-medium">${t('groups_report_archive')}</h5><p>${Number(report.active_speaker_count || 0)} / ${Number(report.total_messages || 0)}</p><h5 class="mt-3 font-medium">${t('groups_report_ranking')}</h5><ol class="list-decimal pl-5">${ranking}</ol></div><div><h5 class="font-medium">${t('groups_report_topics')}</h5><ol class="list-decimal pl-5 space-y-2">${topics}</ol></div><div><h5 class="font-medium">${t('groups_report_highlights')}</h5><ol class="list-decimal pl-5 space-y-2">${highlights}</ol></div><div><h5 class="font-medium">${t('groups_report_links')}</h5><ol class="list-decimal pl-5 space-y-2">${links}</ol></div></div><div class="mt-5 pt-5 border-t border-slate-200 dark:border-white/10"><h5 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_rendered_preview')}</h5>${rendered}</div></section>`;
 }
 
 function ensureGroupsFocusLoaded(extra) {

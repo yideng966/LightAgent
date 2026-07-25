@@ -745,5 +745,10 @@ export async function sendText(command, deps) {
   } else {
     await room.say(command.text)
   }
-  deps.emit('send_result', { ok: true, command: 'send_text', room_id: command.room_id })
+  const sendResult = { ok: true, command: 'send_text', room_id: command.room_id }
+  if (command.request_id) {
+    sendResult.command_type = 'send_text'
+    sendResult.request_id = command.request_id
+  }
+  deps.emit('send_result', sendResult)
 }

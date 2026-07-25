@@ -32,6 +32,37 @@
 - 全量 Python 回归共运行 908 项，结果为 1 项失败、8 项错误、3 项跳过；在最新 `origin/master` 上结果完全一致，均为缺少可选测试依赖和既有 WebUI 缓存参数断言，与本次 Skill Hub 页面调整无关。
 - Python/JavaScript 语法检查与 `git diff --check` 通过。
 
+### 群聊统计与群聊报告
+
+- 新增以稳定群/成员身份隔离的群聊统计、报告快照与 SQLite 存储，覆盖日、周、月和自定义时间范围，以及活跃排行、话题、精彩发言和安全链接概括。
+- 新增异步报告生成、预览、文字/图片三档输出、图片分片、发送确认、失败重试和 scheduler 调度适配；群总开关关闭后会同步阻断报告 Tool、调度任务和日报记忆写入。
+- 新增仓库随附的 `wechat-group-report-cyber-intelligence` 图片模板 Skill，并将其接入模板发现、真实 PNG 预览和 90 天渲染产物保留链路。
+- 扩展个人微信群 Web 控制台：支持按群配置、版本冲突保护、模板选择、异步预览、发送确认、状态轮询和受鉴权的预览图片读取；不改动桌面端。
+- 补齐群内报告 Tool、sidecar `request_id` 回执关联、严格 SSRF 链接抓取，以及文字分段、图片渲染失败回退和无效报告配置拒绝等边界处理。
+- 增加第二个内置纯文本模板 `compact_text`；预览完成后投递复用已确认的文字分段或 PNG 快照，避免草稿变更、重复渲染或图片回退造成预览与实际发送不一致；已确认图片发送失败会明确失败并可重试，不再切换为未预览的文字。
+- 修复报告状态轮询导致的滚动回顶；报告页重绘会恢复原滚动位置。发送按钮仅等待完成预览，后端投递前实时检查微信群连接，已连接群可在确认后立即发送。
+- 固定默认 `wechat-group-report-cyber-intelligence` 使用仓库随附的确认版 `1.1.0` 模板，避免工作区同名旧 Skill 覆盖六模块赛博长图效果。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_statistics_service.py`
+- `channel/wechat_group/wechat_group_report_*.py`
+- `channel/wechat_group/report_templates/`
+- `skills/wechat-group-report-cyber-intelligence/`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `tests/test_wechat_group_report_*.py`
+
+验证记录：
+
+- 报告定向回归 23 项、微信群/安全/调度组合回归、sidecar Node 回归 37 项通过。
+- 全量 Python 回归 `python -m unittest discover -s tests`：920 项通过；Python 编译、JavaScript 语法、`git diff --check` 和文档配置解析通过。
+- 默认图片模板已实际渲染为非空中文 PNG；Playwright 在 375/768/1024/1440px 下验证无横向溢出，375px 与 1440px 的正式预览图片均可加载。
+- 本机直接执行 `python app.py` 后，Web 健康检查、认证、群报告设置、模板发现和控制台报告脚本绑定均返回正常结果。
+- 本轮报告定向回归 17 项通过；Python 编译、`node --check` 与 `git diff --check` 通过。实际六模块样例渲染为 `941 × 1952` PNG，浏览器连续两次模拟报告轮询后滚动位置均保持在 `260px`。
+- 变基后的复验：群聊报告 7 个测试模块 29 项、消息/Web/权限/调度/SSRF 组合 157 项、群聊记忆 UI 5 项以及 sidecar Node 37 项均通过。
+- 按用户最新指示，Docker 镜像构建与远端容器部署已暂停，真实微信群日/周/月/自定义报告投递验收待用户执行。
+
 ## 2026-07-24
 
 ### 群聊总结归档按群隔离修复

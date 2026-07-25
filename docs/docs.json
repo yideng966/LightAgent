@@ -434,6 +434,7 @@
                 "pages": [
                   "zh/channels/index",
                   "zh/channels/weixin",
+                  "zh/channels/wechat-group",
                   "zh/channels/web",
                   "zh/channels/feishu",
                   "zh/channels/dingtalk",

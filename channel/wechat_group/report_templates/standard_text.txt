@@ -1,0 +1,29 @@
+群聊{report_type}
+
+【报告抬头】
+群名：{room_name}
+统计周期：{period_start} 至 {period_end}（{timezone}）
+发言人数：{active_speaker_count}
+消息数量：{total_messages}
+
+【核心统计】
+总发言数：{total_messages}
+榜一成员：{top_speaker_name}（{top_speaker_message_count} 条）
+重点话题数量：{topic_count}
+
+【发言排行榜】
+{ranking_block}
+
+【重点话题】
+{topics_block}
+
+【精彩发言】
+{highlights_block}
+
+【群聊链接收集】
+{links_block}
+
+【报告页脚】
+生成时间：{generated_at}
+归档覆盖数量：{archive_message_count}
+无法稳定归属的消息数量：{unresolved_message_count}
