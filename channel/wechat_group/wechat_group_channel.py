@@ -50,8 +50,10 @@ from channel.wechat_group.wechat_group_free_reply import (
     evaluate_wechat_group_free_reply,
     get_wechat_group_free_reply_config,
     get_wechat_group_free_reply_rules,
+    is_contextual_short_question,
 )
 from channel.wechat_group.wechat_group_free_reply_judge import WechatGroupFreeReplyJudge
+from channel.wechat_group.wechat_group_free_reply_scorer import WechatGroupFreeReplyScorer
 from channel.wechat_group.wechat_group_free_reply_worker import WechatGroupFreeReplyWorkerPool
 from channel.wechat_group.wechat_group_reply_cleanup import cleanup_wechat_group_reply_text
 from channel.wechat_group.wechat_group_reply_policy import (
@@ -67,6 +69,7 @@ from agent.protocol.agent_stream import looks_like_scheduler_request
 
 
 WECHAT_GROUP_FREE_REPLY_DEBOUNCE_SECONDS = 1.5
+WECHAT_GROUP_SHORT_QUESTION_BOT_FOLLOWUP_SECONDS = 60
 WECHAT_GROUP_FREE_REPLY_MUTE_COMMAND = "闭嘴"
 WECHAT_GROUP_VOICE_INTERACTION_FORCE_REPLY = "force_reply"
 WECHAT_GROUP_VOICE_INTERACTION_FREE_REPLY = "free_reply"
@@ -257,11 +260,14 @@ class WechatGroupChannel(ChatChannel):
         self.room_members = {}
         self._room_members_lock = threading.Lock()
         self._room_members_waiters = {}
+        self._room_member_refresh_requested_at = {}
+        self._room_member_updated_at = {}
         self._login_session_room_ids_by_name = {}
         self._login_session_room_ids_lock = threading.RLock()
         self._received_msgs = ExpiredDict(60 * 60 * 8)
         self.free_reply_state = WechatGroupFreeReplyStateStore()
-        self.free_reply_judge = WechatGroupFreeReplyJudge()
+        self._free_reply_scorer = WechatGroupFreeReplyScorer()
+        self.free_reply_judge = WechatGroupFreeReplyJudge(scorer=self._free_reply_scorer)
         self.free_reply_worker = self._create_free_reply_worker()
         self._free_reply_worker_started = False
         if get_wechat_group_free_reply_config()["enabled"]:
@@ -302,6 +308,8 @@ class WechatGroupChannel(ChatChannel):
         self.name = ""
         with self._room_members_lock:
             self.room_members.clear()
+            self._room_member_refresh_requested_at.clear()
+            self._room_member_updated_at.clear()
         self._startup_error = None
         self._startup_event.clear()
         try:
@@ -408,6 +416,7 @@ class WechatGroupChannel(ChatChannel):
             ):
                 self.status = self.STATUS_CONNECTED
                 self.last_error = ""
+            self._warm_free_reply_room_member_counts()
             return True
         if event.type == SidecarEventType.ROOM_MEMBERS:
             return self._consume_room_members(event)
@@ -539,10 +548,81 @@ class WechatGroupChannel(ChatChannel):
         request_id = str(event.get("request_id") or "").strip()
         with self._room_members_lock:
             self.room_members[room_id] = members
+            self._room_member_updated_at[room_id] = time.time()
             waiter = self._room_members_waiters.get(request_id)
             if waiter:
                 waiter.set()
         return True
+
+    def _request_room_members_for_free_reply(self, runtime_room_id: str, now=None) -> None:
+        room_id = str(runtime_room_id or "").strip()
+        if not room_id:
+            return
+        current_time = float(now if now is not None else time.time())
+        with self._room_members_lock:
+            members = self.room_members.get(room_id)
+            updated_at = float(self._room_member_updated_at.get(room_id) or 0)
+            if members and current_time - updated_at < 1800:
+                return
+            last_requested_at = float(
+                self._room_member_refresh_requested_at.get(room_id) or 0
+            )
+            if current_time - last_requested_at < 600:
+                return
+            self._room_member_refresh_requested_at[room_id] = current_time
+        try:
+            self.client.list_room_members(room_id, request_id="", query="")
+        except Exception as e:
+            with self._room_members_lock:
+                self._room_member_refresh_requested_at.pop(room_id, None)
+            logger.debug(
+                "[wechat_group] free reply member-count refresh skipped: {}".format(e)
+            )
+
+    def _warm_free_reply_room_member_counts(self) -> None:
+        config = get_wechat_group_free_reply_config()
+        if not config.get("enabled"):
+            return
+        selected_ids = {
+            str(value or "").strip()
+            for value in (config.get("room_ids") or [])
+            if str(value or "").strip()
+        }
+        selected_names = {
+            str(value or "").strip()
+            for value in (config.get("names") or [])
+            if str(value or "").strip()
+        }
+        if not selected_ids and not selected_names:
+            return
+        for room in self.rooms or []:
+            runtime_room_id = str(
+                room.get("runtime_room_id") or room.get("room_id") or room.get("id") or ""
+            ).strip()
+            stable_room_id = str(room.get("stable_room_id") or "").strip()
+            room_name = str(
+                room.get("name") or room.get("room_name") or room.get("topic") or ""
+            ).strip()
+            if (
+                runtime_room_id in selected_ids
+                or stable_room_id in selected_ids
+                or room_name in selected_names
+            ):
+                self._request_room_members_for_free_reply(runtime_room_id)
+
+    def _free_reply_group_size(self, runtime_room_id: str) -> tuple:
+        room_id = str(runtime_room_id or "").strip()
+        if not room_id:
+            return 0, "unknown"
+        with self._room_members_lock:
+            members = list(self.room_members.get(room_id) or [])
+            updated_at = float(self._room_member_updated_at.get(room_id) or 0)
+        if members:
+            if time.time() - updated_at >= 1800:
+                self._request_room_members_for_free_reply(room_id)
+            return len(members), "room_member_cache"
+        self._request_room_members_for_free_reply(room_id)
+        return 0, "refresh_pending"
 
     @staticmethod
     def _normalize_room_members(value):
@@ -730,7 +810,7 @@ class WechatGroupChannel(ChatChannel):
                 if not conf().get("wechat_group_free_reply_image_understanding_enabled", False):
                     return
                 image_text = self._build_free_reply_image_text(msg)
-                should_enqueue, decision = self._should_enqueue_free_reply_message(
+                should_enqueue, decision, recent_messages = self._should_enqueue_free_reply_message(
                     msg,
                     allow_media_payload=True,
                     text_override=image_text,
@@ -739,7 +819,12 @@ class WechatGroupChannel(ChatChannel):
                     return
                 self._ensure_free_reply_worker_started()
                 submitted = self.free_reply_worker.submit(
-                    self._build_free_reply_task(msg, decision, text=image_text)
+                    self._build_free_reply_task(
+                        msg,
+                        decision,
+                        text=image_text,
+                        recent_messages=recent_messages,
+                    )
                 )
                 if submitted:
                     self._log_free_reply_decision(decision, "queued")
@@ -779,11 +864,13 @@ class WechatGroupChannel(ChatChannel):
                     self.produce(context)
                 return
         if msg.ctype == ContextType.TEXT and not direct_reply:
-            should_enqueue, decision = self._should_enqueue_free_reply_message(msg)
+            should_enqueue, decision, recent_messages = self._should_enqueue_free_reply_message(msg)
             if not should_enqueue:
                 return
             self._ensure_free_reply_worker_started()
-            submitted = self.free_reply_worker.submit(self._build_free_reply_task(msg, decision))
+            submitted = self.free_reply_worker.submit(
+                self._build_free_reply_task(msg, decision, recent_messages=recent_messages)
+            )
             if submitted:
                 self._log_free_reply_decision(decision, "queued")
             else:
@@ -942,14 +1029,19 @@ class WechatGroupChannel(ChatChannel):
         msg = context.get("msg")
         if not msg:
             return None
-        should_enqueue, decision = self._should_enqueue_free_reply_message(
+        should_enqueue, decision, recent_messages = self._should_enqueue_free_reply_message(
             msg,
             text_override=transcription,
             message_type_override="text",
         )
         if not should_enqueue:
             return None
-        task = self._build_free_reply_task(msg, decision, text=transcription)
+        task = self._build_free_reply_task(
+            msg,
+            decision,
+            text=transcription,
+            recent_messages=recent_messages,
+        )
         task["voice_transcription"] = transcription
         task["desire_rtype"] = context.get("desire_rtype")
         self._ensure_free_reply_worker_started()
@@ -1076,6 +1168,13 @@ class WechatGroupChannel(ChatChannel):
         msg = context.get("msg")
         if not msg or not getattr(msg, "is_group", False):
             return context
+        reply_mode = str(
+            context.get("wechat_group_free_reply_mode")
+            or kwargs.get("wechat_group_free_reply_mode")
+            or ""
+        )
+        if reply_mode:
+            context["wechat_group_free_reply_mode"] = reply_mode
         context["wechat_group_room_id"] = getattr(msg, "runtime_room_id", msg.other_user_id)
         context["wechat_group_sender_id"] = getattr(msg, "runtime_sender_id", msg.actual_user_id)
         context["wechat_group_bot_sender_id"] = getattr(msg, "runtime_self_id", msg.to_user_id)
@@ -1106,6 +1205,7 @@ class WechatGroupChannel(ChatChannel):
                     user_content=context.content,
                     trigger_source=trigger_source,
                     include_quote=not context.get("wechat_group_skip_multimodal_quote", False),
+                    reply_mode=reply_mode,
                 )
                 for key, value in result.metadata.items():
                     context[key] = value
@@ -1131,7 +1231,12 @@ class WechatGroupChannel(ChatChannel):
         if conf().get("wechat_group_reply_policy_enabled", True):
             blocks.append(build_wechat_group_mention_verification_block(msg, trigger_source))
             blocks.append(build_wechat_group_addressee_policy_block(msg, trigger_source))
-            blocks.append(build_wechat_group_reply_policy_block(trigger_source))
+            blocks.append(
+                build_wechat_group_reply_policy_block(
+                    trigger_source,
+                    reply_mode=reply_mode,
+                )
+            )
         if should_skip_persona_for_message(msg):
             context["wechat_group_persona_skipped"] = True
         else:
@@ -1775,6 +1880,8 @@ class WechatGroupChannel(ChatChannel):
         text_override=None,
         message_type_override=None,
     ):
+        recent_messages = []
+        scorer_recent_messages = []
         cfg = get_wechat_group_free_reply_config()
         text = text_override if text_override is not None else (getattr(msg, "text", None) or msg.content)
         room_scope = _wechat_group_stable_room_scope(msg)
@@ -1796,7 +1903,6 @@ class WechatGroupChannel(ChatChannel):
             }
         else:
             state = self.free_reply_state.get(room_scope or msg.other_user_id)
-            recent_messages = []
             try:
                 recent_messages = self.archive.get_recent_messages(
                     room_scope or msg.other_user_id,
@@ -1804,6 +1910,21 @@ class WechatGroupChannel(ChatChannel):
                     minutes=120,
                     now=getattr(msg, "create_time", None),
                 )
+                scorer_recent_messages = recent_messages
+                conversation_getter = getattr(
+                    self.archive,
+                    "get_recent_conversation_messages",
+                    None,
+                )
+                if cfg.get("scorer_enabled") and callable(conversation_getter):
+                    merged = conversation_getter(
+                        room_scope or msg.other_user_id,
+                        limit=cfg.get("scorer_context_limit", 12),
+                        minutes=120,
+                        now=getattr(msg, "create_time", None),
+                    )
+                    if isinstance(merged, list):
+                        scorer_recent_messages = merged
             except Exception as e:
                 logger.debug("[wechat_group] failed to load free reply recent messages: {}".format(e))
             runtime_sender_id = _wechat_group_log_value(getattr(msg, "actual_user_id", "")).strip()
@@ -1854,12 +1975,60 @@ class WechatGroupChannel(ChatChannel):
                     )
                 except Exception as e:
                     logger.warning("[wechat_group] failed to adjust free reply by emotion: {}".format(e))
+        suppressions = list(decision.get("suppressions") or [])
+        if (
+            cfg.get("scorer_enabled")
+            and "low_information" in suppressions
+            and is_contextual_short_question(text)
+            and self._is_immediate_recent_bot_followup(
+                scorer_recent_messages,
+                current_message_id=getattr(msg, "msg_id", ""),
+                now=getattr(msg, "create_time", None) or time.time(),
+            )
+        ):
+            decision["suppressions"] = [
+                item for item in suppressions if item != "low_information"
+            ]
+            decision["triggered"] = not decision["suppressions"]
+            decision["contextual_short_question"] = True
+        hard_suppressions = set(decision.get("suppressions") or []) - {"below_threshold"}
+        if cfg.get("scorer_enabled") and not hard_suppressions:
+            decision["triggered"] = True
         self.free_reply_state.remember_decision(decision)
         if not decision.get("triggered"):
             self._log_free_reply_decision(decision, "skipped")
             self.free_reply_state.mark_observed(room_scope or getattr(msg, "other_user_id", ""))
-            return False, decision
-        return True, decision
+            return False, decision, scorer_recent_messages or recent_messages
+        return True, decision, scorer_recent_messages or recent_messages
+
+    @staticmethod
+    def _is_immediate_recent_bot_followup(
+        recent_messages,
+        current_message_id="",
+        now=None,
+        max_age_seconds=WECHAT_GROUP_SHORT_QUESTION_BOT_FOLLOWUP_SECONDS,
+    ) -> bool:
+        current_id = str(current_message_id or "")
+        current_time = float(now or time.time())
+        for item in reversed(list(recent_messages or [])):
+            if not isinstance(item, dict):
+                continue
+            if current_id and str(item.get("message_id") or "") == current_id:
+                continue
+            if not str(item.get("text") or "").strip():
+                continue
+            try:
+                created_at = float(item.get("created_at") or item.get("timestamp") or 0)
+            except (TypeError, ValueError):
+                return False
+            if created_at <= 0 or created_at > current_time + 1:
+                continue
+            age = current_time - created_at
+            return bool(
+                item.get("is_bot") is True
+                and 0 <= age <= max(float(max_age_seconds or 0), 0)
+            )
+        return False
 
     @staticmethod
     def _free_reply_image_context_unavailable(text, recent_messages) -> bool:
@@ -1872,8 +2041,15 @@ class WechatGroupChannel(ChatChannel):
             return False
         return any(_is_archived_image_message(item) for item in (recent_messages or []))
 
-    def _build_free_reply_task(self, msg: WechatGroupMessage, decision: dict, text=None) -> dict:
+    def _build_free_reply_task(
+        self,
+        msg: WechatGroupMessage,
+        decision: dict,
+        text=None,
+        recent_messages=None,
+    ) -> dict:
         task_text = text if text is not None else (getattr(msg, "text", None) or msg.content)
+        group_size, group_size_source = self._free_reply_group_size(msg.other_user_id)
         return {
             "room_id": _wechat_group_stable_room_scope(msg) or msg.other_user_id,
             "runtime_room_id": msg.other_user_id,
@@ -1884,6 +2060,9 @@ class WechatGroupChannel(ChatChannel):
             "text": task_text,
             "msg": msg,
             "local_decision": decision,
+            "recent_messages": list(recent_messages or []),
+            "group_size": group_size,
+            "group_size_source": group_size_source,
             "queued_at": time.time(),
             "config": get_wechat_group_free_reply_config(),
         }
@@ -1913,12 +2092,14 @@ class WechatGroupChannel(ChatChannel):
             context_type = ContextType.TEXT
             image_understanding_triggered = True
         trigger_source = "image_message" if msg.ctype == ContextType.IMAGE else "free_reply"
+        reply_mode = str((llm_decision or {}).get("reply_mode") or "")
         context_kwargs = {
             "isgroup": True,
             "msg": msg,
             "wechat_group_force_reply": True,
             "wechat_group_is_free_reply": True,
             "wechat_group_trigger_source": trigger_source,
+            "wechat_group_free_reply_mode": reply_mode,
         }
         if voice_transcription is not None:
             context_kwargs["origin_ctype"] = ContextType.VOICE
@@ -1929,6 +2110,7 @@ class WechatGroupChannel(ChatChannel):
         if not context:
             return
         context["wechat_group_free_reply_triggered"] = True
+        context["wechat_group_free_reply_mode"] = reply_mode
         context["wechat_group_free_reply_decision"] = task.get("local_decision") or {}
         context["wechat_group_free_reply_llm_decision"] = llm_decision or {}
         if image_understanding_triggered or context.get("wechat_group_multimodal_matched_images"):
@@ -1954,4 +2136,5 @@ class WechatGroupChannel(ChatChannel):
             "rules": get_wechat_group_free_reply_rules(),
             "last_decision": self.free_reply_state.last_decision(),
             "worker": self.free_reply_worker.status(),
+            "scorer": self._free_reply_scorer.status(),
         }

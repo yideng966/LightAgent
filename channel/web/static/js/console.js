@@ -412,6 +412,25 @@ const I18N = {
         wechat_group_free_reply_llm_enabled: '启用大模型二次判定',
         wechat_group_free_reply_llm_timeout: '判定超时（秒）',
         wechat_group_free_reply_llm_confidence: '最低置信度',
+        wechat_group_free_reply_scorer_title: '独立 LLM Scorer',
+        wechat_group_free_reply_scorer_hint: '使用独立模型判断普通群消息是否在追问机器人；关闭时保持原有规则。',
+        wechat_group_free_reply_scorer_enabled: '启用独立 Scorer',
+        wechat_group_free_reply_scorer_provider: 'Provider（openai_compatible 或 custom:<id>）',
+        wechat_group_free_reply_scorer_model: '模型',
+        wechat_group_free_reply_scorer_api_base: 'API Base',
+        wechat_group_free_reply_scorer_api_key: 'API Key',
+        wechat_group_free_reply_scorer_api_key_placeholder: '输入新的 API Key；留空保留现有配置',
+        wechat_group_free_reply_scorer_api_key_environment: '由 WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY 环境变量接管。',
+        wechat_group_free_reply_scorer_api_key_config: '已保存到本地配置，真实值不会回显。',
+        wechat_group_free_reply_scorer_api_key_empty: '尚未配置 API Key。',
+        wechat_group_free_reply_scorer_timeout: 'Scorer 超时（秒）',
+        wechat_group_free_reply_scorer_context_limit: '上下文消息数',
+        wechat_group_free_reply_scorer_reply_threshold: '直接回复阈值',
+        wechat_group_free_reply_scorer_soft_threshold: '低打扰回复阈值',
+        wechat_group_free_reply_scorer_temperature: 'Temperature',
+        wechat_group_free_reply_scorer_max_tokens: '最大输出 Token',
+        wechat_group_free_reply_scorer_fallback: '失败时回落到原有 LLM 判定',
+        wechat_group_free_reply_scorer_stats: 'Scorer 统计',
         wechat_group_free_reply_rules: '评分规则',
         wechat_group_free_reply_last_decision: '最近判定',
         wechat_group_free_reply_no_decision: '还没有自由回复判定。开启后，普通群消息会先经过本地评分和大模型二次判定。',
@@ -1269,6 +1288,25 @@ const I18N = {
         wechat_group_free_reply_llm_enabled: 'Enable LLM decision',
         wechat_group_free_reply_llm_timeout: 'Decision timeout (seconds)',
         wechat_group_free_reply_llm_confidence: 'Minimum confidence',
+        wechat_group_free_reply_scorer_title: 'Independent LLM scorer',
+        wechat_group_free_reply_scorer_hint: 'Use a separate model to decide whether an ordinary group message follows the bot. Disabled preserves legacy rules.',
+        wechat_group_free_reply_scorer_enabled: 'Enable independent scorer',
+        wechat_group_free_reply_scorer_provider: 'Provider (openai_compatible or custom:<id>)',
+        wechat_group_free_reply_scorer_model: 'Model',
+        wechat_group_free_reply_scorer_api_base: 'API base',
+        wechat_group_free_reply_scorer_api_key: 'API key',
+        wechat_group_free_reply_scorer_api_key_placeholder: 'Enter a new API key; leave blank to keep the saved value',
+        wechat_group_free_reply_scorer_api_key_environment: 'Managed by the WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY environment variable.',
+        wechat_group_free_reply_scorer_api_key_config: 'Saved in local configuration. The actual value is never returned.',
+        wechat_group_free_reply_scorer_api_key_empty: 'No API key is configured.',
+        wechat_group_free_reply_scorer_timeout: 'Scorer timeout (seconds)',
+        wechat_group_free_reply_scorer_context_limit: 'Context messages',
+        wechat_group_free_reply_scorer_reply_threshold: 'Direct reply threshold',
+        wechat_group_free_reply_scorer_soft_threshold: 'Soft reply threshold',
+        wechat_group_free_reply_scorer_temperature: 'Temperature',
+        wechat_group_free_reply_scorer_max_tokens: 'Maximum output tokens',
+        wechat_group_free_reply_scorer_fallback: 'Fall back to the legacy LLM decision on failure',
+        wechat_group_free_reply_scorer_stats: 'Scorer statistics',
         wechat_group_free_reply_rules: 'Scoring rules',
         wechat_group_free_reply_last_decision: 'Latest decision',
         wechat_group_free_reply_no_decision: 'No free reply decision yet. After enabling, ordinary group messages go through local scoring and LLM decision.',
@@ -12865,8 +12903,15 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
     const profile = profiles[level] || {};
     const forceKeywords = Array.isArray(free.force_keywords) ? free.force_keywords : [];
     const worker = free.worker || {};
+    const scorer = free.scorer || {};
     const last = free.last_decision || {};
     const rules = free.rules || {};
+    const scorerKeyEnvironmentManaged = free.scorer_api_key_source === 'environment';
+    const scorerKeyStatus = scorerKeyEnvironmentManaged
+        ? t('wechat_group_free_reply_scorer_api_key_environment')
+        : free.scorer_api_key_configured
+            ? t('wechat_group_free_reply_scorer_api_key_config')
+            : t('wechat_group_free_reply_scorer_api_key_empty');
     const roomRows = rooms.length ? rooms.map((room, index) => {
         const id = String(room.id || '');
         const name = String(room.name || id || t('groups_room_unnamed'));
@@ -12991,6 +13036,58 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 ${buildFreeReplyNumberField('free-reply-llm-timeout', 'wechat_group_free_reply_llm_timeout', free.llm_judge_timeout_seconds ?? 8, 1, 30, 1)}
                 ${buildFreeReplyNumberField('free-reply-llm-confidence', 'wechat_group_free_reply_llm_confidence', free.llm_judge_min_confidence ?? 0.6, 0, 1, 0.05)}
+            </div>
+        </div>
+        <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 space-y-3">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('wechat_group_free_reply_scorer_title')}</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('wechat_group_free_reply_scorer_hint')}</p>
+                </div>
+                <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer flex-shrink-0">
+                    <input id="free-reply-scorer-enabled" type="checkbox" class="accent-primary-500" ${free.scorer_enabled === true ? 'checked' : ''}>
+                    ${t('wechat_group_free_reply_scorer_enabled')}
+                </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <label class="block">
+                    <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('wechat_group_free_reply_scorer_provider')}</span>
+                    <input id="free-reply-scorer-provider" type="text" value="${escapeHtml(free.scorer_provider || '')}"
+                        class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500">
+                </label>
+                <label class="block">
+                    <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('wechat_group_free_reply_scorer_model')}</span>
+                    <input id="free-reply-scorer-model" type="text" value="${escapeHtml(free.scorer_model || '')}"
+                        class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500">
+                </label>
+                <label class="block md:col-span-2">
+                    <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('wechat_group_free_reply_scorer_api_base')}</span>
+                    <input id="free-reply-scorer-api-base" type="text" value="${escapeHtml(free.scorer_api_base || '')}"
+                        class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 font-mono">
+                </label>
+                <label class="block md:col-span-2">
+                    <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('wechat_group_free_reply_scorer_api_key')}</span>
+                    <input id="free-reply-scorer-api-key" type="password" value=""
+                        placeholder="${escapeHtml(t('wechat_group_free_reply_scorer_api_key_placeholder'))}"
+                        autocomplete="new-password" spellcheck="false" ${scorerKeyEnvironmentManaged ? 'disabled' : ''}
+                        class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 font-mono disabled:opacity-60">
+                    <span class="block text-xs ${free.scorer_api_key_configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'} mt-1.5">${escapeHtml(scorerKeyStatus)}</span>
+                </label>
+                ${buildFreeReplyNumberField('free-reply-scorer-timeout', 'wechat_group_free_reply_scorer_timeout', free.scorer_timeout_seconds ?? 8, 1, 60, 1)}
+                ${buildFreeReplyNumberField('free-reply-scorer-context-limit', 'wechat_group_free_reply_scorer_context_limit', free.scorer_context_limit ?? 12, 1, 50, 1)}
+                ${buildFreeReplyNumberField('free-reply-scorer-reply-threshold', 'wechat_group_free_reply_scorer_reply_threshold', free.scorer_reply_threshold ?? 0.82, 0, 1, 0.01)}
+                ${buildFreeReplyNumberField('free-reply-scorer-soft-threshold', 'wechat_group_free_reply_scorer_soft_threshold', free.scorer_soft_reply_threshold ?? 0.60, 0, 1, 0.01)}
+                ${buildFreeReplyNumberField('free-reply-scorer-temperature', 'wechat_group_free_reply_scorer_temperature', free.scorer_temperature ?? 0.0, 0, 2, 0.01)}
+                ${buildFreeReplyNumberField('free-reply-scorer-max-tokens', 'wechat_group_free_reply_scorer_max_tokens', free.scorer_max_tokens ?? 256, 16, 2048, 1)}
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                <input id="free-reply-scorer-fallback" type="checkbox" class="accent-primary-500" ${free.scorer_fallback_to_rules !== false ? 'checked' : ''}>
+                ${t('wechat_group_free_reply_scorer_fallback')}
+            </label>
+            <div class="text-xs text-slate-500 dark:text-slate-400">
+                ${t('wechat_group_free_reply_scorer_stats')}: scored=${Number(scorer.scored || 0)},
+                approved=${Number(scorer.approved || 0)}, ignored=${Number(scorer.ignored || 0)},
+                timeout=${Number(scorer.timeout || 0)}, fallback=${Number(scorer.fallback || 0)}
             </div>
         </div>
         <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
@@ -13326,6 +13423,20 @@ function saveWechatGroupSettings() {
                 wechat_group_free_reply_llm_judge_enabled: freeReply.llm_judge_enabled,
                 wechat_group_free_reply_llm_judge_timeout_seconds: freeReply.llm_judge_timeout_seconds,
                 wechat_group_free_reply_llm_judge_min_confidence: freeReply.llm_judge_min_confidence,
+                wechat_group_free_reply_scorer_enabled: freeReply.scorer_enabled,
+                wechat_group_free_reply_scorer_provider: freeReply.scorer_provider,
+                wechat_group_free_reply_scorer_model: freeReply.scorer_model,
+                wechat_group_free_reply_scorer_api_base: freeReply.scorer_api_base,
+                ...(Object.prototype.hasOwnProperty.call(freeReply, 'scorer_api_key')
+                    ? { wechat_group_free_reply_scorer_api_key: freeReply.scorer_api_key }
+                    : {}),
+                wechat_group_free_reply_scorer_timeout_seconds: freeReply.scorer_timeout_seconds,
+                wechat_group_free_reply_scorer_context_limit: freeReply.scorer_context_limit,
+                wechat_group_free_reply_scorer_reply_threshold: freeReply.scorer_reply_threshold,
+                wechat_group_free_reply_scorer_soft_reply_threshold: freeReply.scorer_soft_reply_threshold,
+                wechat_group_free_reply_scorer_temperature: freeReply.scorer_temperature,
+                wechat_group_free_reply_scorer_max_tokens: freeReply.scorer_max_tokens,
+                wechat_group_free_reply_scorer_fallback_to_rules: freeReply.scorer_fallback_to_rules,
                 wechat_group_free_reply_force_keywords: freeReply.force_keywords,
                 wechat_group_free_reply_profiles: freeReply.profiles,
                 wechat_group_free_reply_rule_scores: freeReply.rule_scores,
@@ -13566,7 +13677,7 @@ function readWechatGroupFreeReplySettings(saved = {}) {
         hourly_limit: clampNumber(document.getElementById('free-reply-hourly-limit')?.value, 0, 999, profiles[level]?.hourly_limit ?? 0),
         consecutive_limit: clampNumber(document.getElementById('free-reply-consecutive-limit')?.value, 0, 99, profiles[level]?.consecutive_limit ?? 0),
     };
-    return {
+    const result = {
         enabled: document.getElementById('free-reply-enabled') ? !!document.getElementById('free-reply-enabled').checked : !!saved.enabled,
         room_ids: roomControlsPresent
             ? selectedRoomIds
@@ -13589,10 +13700,33 @@ function readWechatGroupFreeReplySettings(saved = {}) {
         llm_judge_enabled: document.getElementById('free-reply-llm-enabled') ? !!document.getElementById('free-reply-llm-enabled').checked : saved.llm_judge_enabled !== false,
         llm_judge_timeout_seconds: clampNumber(document.getElementById('free-reply-llm-timeout')?.value, 1, 30, saved.llm_judge_timeout_seconds ?? 8),
         llm_judge_min_confidence: clampNumber(document.getElementById('free-reply-llm-confidence')?.value, 0, 1, saved.llm_judge_min_confidence ?? 0.6),
+        scorer_enabled: document.getElementById('free-reply-scorer-enabled')
+            ? !!document.getElementById('free-reply-scorer-enabled').checked
+            : saved.scorer_enabled === true,
+        scorer_provider: String(document.getElementById('free-reply-scorer-provider')?.value ?? saved.scorer_provider ?? '').trim(),
+        scorer_model: String(document.getElementById('free-reply-scorer-model')?.value ?? saved.scorer_model ?? '').trim(),
+        scorer_api_base: String(document.getElementById('free-reply-scorer-api-base')?.value ?? saved.scorer_api_base ?? '').trim(),
+        scorer_timeout_seconds: clampNumber(document.getElementById('free-reply-scorer-timeout')?.value, 1, 60, saved.scorer_timeout_seconds ?? 8),
+        scorer_context_limit: clampNumber(document.getElementById('free-reply-scorer-context-limit')?.value, 1, 50, saved.scorer_context_limit ?? 12),
+        scorer_reply_threshold: clampNumber(document.getElementById('free-reply-scorer-reply-threshold')?.value, 0, 1, saved.scorer_reply_threshold ?? 0.82),
+        scorer_soft_reply_threshold: clampNumber(document.getElementById('free-reply-scorer-soft-threshold')?.value, 0, 1, saved.scorer_soft_reply_threshold ?? 0.60),
+        scorer_temperature: clampNumber(document.getElementById('free-reply-scorer-temperature')?.value, 0, 2, saved.scorer_temperature ?? 0.0),
+        scorer_max_tokens: clampNumber(document.getElementById('free-reply-scorer-max-tokens')?.value, 16, 2048, saved.scorer_max_tokens ?? 256),
+        scorer_fallback_to_rules: document.getElementById('free-reply-scorer-fallback')
+            ? !!document.getElementById('free-reply-scorer-fallback').checked
+            : saved.scorer_fallback_to_rules !== false,
         profiles,
         rule_scores: readWechatGroupFreeReplyRuleScores(saved),
         rule_enabled: readWechatGroupFreeReplyRuleEnabled(saved),
     };
+    const scorerKeyInput = document.getElementById('free-reply-scorer-api-key');
+    const scorerApiKey = scorerKeyInput && !scorerKeyInput.disabled
+        ? String(scorerKeyInput.value || '').trim()
+        : '';
+    if (scorerApiKey) {
+        result.scorer_api_key = scorerApiKey;
+    }
+    return result;
 }
 
 function buildChannelFieldsHtml(chName, fields) {

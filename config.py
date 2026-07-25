@@ -225,6 +225,18 @@ available_setting = {
     },
     "wechat_group_free_reply_rule_scores": {},
     "wechat_group_free_reply_rule_enabled": {},
+    "wechat_group_free_reply_scorer_enabled": False,
+    "wechat_group_free_reply_scorer_provider": "",
+    "wechat_group_free_reply_scorer_model": "",
+    "wechat_group_free_reply_scorer_api_base": "",
+    "wechat_group_free_reply_scorer_api_key": "",
+    "wechat_group_free_reply_scorer_timeout_seconds": 8,
+    "wechat_group_free_reply_scorer_context_limit": 12,
+    "wechat_group_free_reply_scorer_reply_threshold": 0.82,
+    "wechat_group_free_reply_scorer_soft_reply_threshold": 0.60,
+    "wechat_group_free_reply_scorer_temperature": 0.0,
+    "wechat_group_free_reply_scorer_max_tokens": 256,
+    "wechat_group_free_reply_scorer_fallback_to_rules": True,
     # chatgpt session params
     "expires_in_seconds": 3600,  # idle session expiry time
     # persona description (only used in chat mode)

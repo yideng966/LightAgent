@@ -71,14 +71,20 @@ def build_wechat_group_mention_verification_block(msg, trigger_source: str) -> s
     ).format(source=source, is_at=is_at, is_quote_self=is_quote_self)
 
 
-def build_wechat_group_reply_policy_block(trigger_source: str) -> str:
+def build_wechat_group_reply_policy_block(trigger_source: str, reply_mode: str = "") -> str:
     source = str(trigger_source or "direct_reply").strip() or "direct_reply"
+    reply_mode = str(reply_mode or "").strip()
     if source == "free_reply":
         policy = (
             "This is an approved ambient group reply. Reply briefly and naturally. "
             "Do not explicitly @ or call out the sender unless the content requires it. "
             "中文群聊里可以自然接梗、轻松吐槽或顺着笑点接一句，但不要抢话、刷屏或解释内部判断。"
         )
+        if reply_mode == "soft":
+            policy += (
+                " 这是低打扰的条件式接话：可用“如果你是在问我刚才提到的……”自然回应；"
+                "不要声称确定自己就是被提问对象，也不要复述 scorer JSON、证据或内部判定。"
+            )
     elif source == "image_message":
         policy = "Reply to the current image context directly and avoid long prefaces."
     elif source == "quote_self":

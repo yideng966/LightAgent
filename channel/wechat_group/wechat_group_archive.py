@@ -206,6 +206,101 @@ class WechatGroupArchive:
             ).fetchall()
         return [self._message_row_to_dict(row) for row in reversed(rows)]
 
+    def get_recent_conversation_messages(
+        self,
+        room_id: str,
+        limit: int = 20,
+        minutes: int = 60,
+        now: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return a chronological inbound/outbound timeline for LLM routing."""
+        if not room_id:
+            return []
+        max_limit = min(max(int(limit or 20), 1), 300)
+        window_minutes = max(int(minutes or 60), 1)
+        until = _coerce_timestamp(now)
+        cutoff = until - window_minutes * 60
+        scope = str(room_id)
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            inbound_rows = conn.execute(
+                """
+                SELECT id, message_id, room_id, room_name, sender_id, sender_nickname,
+                       message_type, text, media_path, is_at, metadata, created_at,
+                       stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
+                FROM wechat_group_messages
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
+                  AND created_at >= ?
+                  AND created_at <= ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (scope, scope, cutoff, until, max_limit),
+            ).fetchall()
+            assistant_rows = conn.execute(
+                """
+                SELECT id, room_id, room_name, reply_type, content, created_at,
+                       stable_room_id, runtime_room_id
+                FROM wechat_group_assistant_replies
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
+                  AND created_at >= ?
+                  AND created_at <= ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+                """,
+                (scope, scope, cutoff, until, max_limit),
+            ).fetchall()
+
+        timeline = []
+        for row in inbound_rows:
+            item = self._message_row_to_dict(row)
+            item["is_bot"] = False
+            item["_timeline_source_order"] = 0
+            timeline.append(item)
+        for row in assistant_rows:
+            data = dict(row)
+            reply_id = int(data.get("id") or 0)
+            timeline.append(
+                {
+                    "id": reply_id,
+                    "message_id": "assistant-reply:{}".format(reply_id),
+                    "room_id": str(data.get("room_id") or ""),
+                    "room_name": str(data.get("room_name") or ""),
+                    "sender_id": "__lightagent_bot__",
+                    "sender_nickname": "LightAgent",
+                    "message_type": str(data.get("reply_type") or "text"),
+                    "text": str(data.get("content") or ""),
+                    "media_path": "",
+                    "is_at": False,
+                    "metadata": {"source": "assistant_reply"},
+                    "at_list": [],
+                    "created_at": int(data.get("created_at") or 0),
+                    "stable_room_id": str(data.get("stable_room_id") or ""),
+                    "runtime_room_id": str(data.get("runtime_room_id") or ""),
+                    "stable_member_id": "",
+                    "runtime_sender_id": "",
+                    "is_bot": True,
+                    "_timeline_source_order": 1,
+                }
+            )
+        timeline.sort(
+            key=lambda item: (
+                int(item.get("created_at") or 0),
+                int(item.get("_timeline_source_order") or 0),
+                int(item.get("id") or 0),
+            )
+        )
+        timeline = timeline[-max_limit:]
+        for item in timeline:
+            item.pop("_timeline_source_order", None)
+        return timeline
+
     def search_messages(
         self,
         room_id: str,

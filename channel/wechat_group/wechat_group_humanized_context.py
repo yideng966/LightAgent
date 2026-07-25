@@ -66,6 +66,7 @@ class WechatGroupHumanizedContextBuilder:
         user_content: str,
         trigger_source: str = "",
         include_quote: bool = True,
+        reply_mode: str = "",
     ) -> WechatGroupHumanizedContextResult:
         text = str(user_content or "").strip()
         source = trigger_source or self.channel._infer_multimodal_trigger_source(msg)
@@ -91,7 +92,7 @@ class WechatGroupHumanizedContextBuilder:
         if conf().get("wechat_group_reply_policy_enabled", True):
             blocks.append(build_wechat_group_mention_verification_block(msg, source))
             blocks.append(build_wechat_group_addressee_policy_block(msg, source))
-            blocks.append(build_wechat_group_reply_policy_block(source))
+            blocks.append(build_wechat_group_reply_policy_block(source, reply_mode=reply_mode))
 
         if should_skip_persona_for_message(msg):
             metadata["wechat_group_persona_skipped"] = True

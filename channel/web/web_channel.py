@@ -4319,6 +4319,10 @@ class ChannelsHandler:
         free_reply["rules"] = free_reply_status.get("rules") or get_wechat_group_free_reply_rules()
         free_reply["last_decision"] = free_reply_status.get("last_decision") or {}
         free_reply["worker"] = free_reply_status.get("worker") or {}
+        free_reply["scorer"] = free_reply_status.get("scorer") or {}
+        free_reply["scorer_api_key_masked"] = (
+            "********" if free_reply.get("scorer_api_key_configured") else ""
+        )
         tools_cfg = conf().get("tools") or conf().get("tool") or {}
         if not isinstance(tools_cfg, dict):
             tools_cfg = {}
@@ -4670,6 +4674,18 @@ class ChannelsHandler:
             "wechat_group_free_reply_profiles",
             "wechat_group_free_reply_rule_scores",
             "wechat_group_free_reply_rule_enabled",
+            "wechat_group_free_reply_scorer_enabled",
+            "wechat_group_free_reply_scorer_provider",
+            "wechat_group_free_reply_scorer_model",
+            "wechat_group_free_reply_scorer_api_base",
+            "wechat_group_free_reply_scorer_api_key",
+            "wechat_group_free_reply_scorer_timeout_seconds",
+            "wechat_group_free_reply_scorer_context_limit",
+            "wechat_group_free_reply_scorer_reply_threshold",
+            "wechat_group_free_reply_scorer_soft_reply_threshold",
+            "wechat_group_free_reply_scorer_temperature",
+            "wechat_group_free_reply_scorer_max_tokens",
+            "wechat_group_free_reply_scorer_fallback_to_rules",
             "github_commit_notify_enabled",
             "github_commit_notify_repository",
             "github_commit_notify_branches",
@@ -4714,6 +4730,10 @@ class ChannelsHandler:
                 value = str(value or "").strip()[:255]
             elif key == "github_commit_notify_webhook_secret":
                 value = str(value or "")
+            elif key == "wechat_group_free_reply_scorer_api_key":
+                value = str(value or "")
+                if not value or value == "********" or "****" in value:
+                    continue
             elif key == "wechat_group_admin_members":
                 value = normalize_wechat_group_admin_members(value)
             elif key == "wechat_group_blacklist_members":
@@ -4805,6 +4825,8 @@ class ChannelsHandler:
                 "wechat_group_free_reply_enabled",
                 "wechat_group_free_reply_mute_mentions_enabled",
                 "wechat_group_free_reply_llm_judge_enabled",
+                "wechat_group_free_reply_scorer_enabled",
+                "wechat_group_free_reply_scorer_fallback_to_rules",
                 "github_commit_notify_enabled",
             ):
                 value = cls._normalize_bool(value)
@@ -4932,6 +4954,26 @@ class ChannelsHandler:
                 value = cls._clamp_int(value, 1, 30, 8)
             elif key == "wechat_group_free_reply_llm_judge_min_confidence":
                 value = cls._clamp_float(value, 0.0, 1.0, 0.6)
+            elif key == "wechat_group_free_reply_scorer_provider":
+                value = str(value or "").strip()[:255]
+                if value not in ("", "openai_compatible") and not value.startswith("custom:"):
+                    value = ""
+            elif key == "wechat_group_free_reply_scorer_model":
+                value = str(value or "").strip()[:255]
+            elif key == "wechat_group_free_reply_scorer_api_base":
+                value = str(value or "").strip()[:2048]
+            elif key == "wechat_group_free_reply_scorer_timeout_seconds":
+                value = cls._clamp_int(value, 1, 60, 8)
+            elif key == "wechat_group_free_reply_scorer_context_limit":
+                value = cls._clamp_int(value, 1, 50, 12)
+            elif key == "wechat_group_free_reply_scorer_reply_threshold":
+                value = cls._clamp_float(value, 0.0, 1.0, 0.82)
+            elif key == "wechat_group_free_reply_scorer_soft_reply_threshold":
+                value = cls._clamp_float(value, 0.0, 1.0, 0.60)
+            elif key == "wechat_group_free_reply_scorer_temperature":
+                value = cls._clamp_float(value, 0.0, 2.0, 0.0)
+            elif key == "wechat_group_free_reply_scorer_max_tokens":
+                value = cls._clamp_int(value, 16, 2048, 256)
             elif key == "wechat_group_free_reply_profiles":
                 value = normalize_wechat_group_free_reply_profiles(value)
             elif key == "wechat_group_free_reply_rule_scores":

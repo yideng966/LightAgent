@@ -131,6 +131,67 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         self.assertEqual("room@@a", rows[0]["room_id"])
         self.assertEqual("A 群消息", rows[0]["text"])
 
+    def test_archive_merges_assistant_replies_for_scorer_timeline(self):
+        archive = WechatGroupArchive(self.db_path)
+        archive.record_message(
+            message_id="room-a-user-1",
+            room_id="room@@a",
+            room_name="A群",
+            sender_id="wxid_alice",
+            sender_nickname="Alice",
+            text="你在怕什么",
+            created_at=1000,
+            stable_room_id="wgr_a",
+            runtime_room_id="room@@a",
+            stable_member_id="wgm_alice",
+            runtime_sender_id="wxid_alice",
+        )
+        archive.record_assistant_reply(
+            room_id="wgr_a",
+            room_name="A群",
+            content="怕你让我把论文发出来呀",
+            created_at=1005,
+            stable_room_id="wgr_a",
+            runtime_room_id="room@@a",
+        )
+        archive.record_assistant_reply(
+            room_id="wgr_a",
+            room_name="B群",
+            content="其他群的碰撞回复",
+            created_at=1006,
+            stable_room_id="wgr_b",
+            runtime_room_id="room@@b",
+        )
+        archive.record_message(
+            message_id="room-a-user-2",
+            room_id="room@@a",
+            room_name="A群",
+            sender_id="wxid_alice",
+            sender_nickname="Alice",
+            text="到底什么论文这么纠结",
+            created_at=1010,
+            stable_room_id="wgr_a",
+            runtime_room_id="room@@a",
+            stable_member_id="wgm_alice",
+            runtime_sender_id="wxid_alice",
+        )
+
+        rows = archive.get_recent_conversation_messages(
+            "wgr_a",
+            limit=10,
+            minutes=60,
+            now=1010,
+        )
+
+        self.assertEqual(
+            ["你在怕什么", "怕你让我把论文发出来呀", "到底什么论文这么纠结"],
+            [item["text"] for item in rows],
+        )
+        self.assertEqual([False, True, False], [item["is_bot"] for item in rows])
+        self.assertTrue(rows[1]["message_id"].startswith("assistant-reply:"))
+        self.assertEqual("assistant_reply", rows[1]["metadata"]["source"])
+        self.assertNotIn("其他群的碰撞回复", [item["text"] for item in rows])
+
     def test_recent_context_block_can_render_focus_rows(self):
         rows = [{
             "created_at": 100,
@@ -886,6 +947,13 @@ class WechatGroupReplyPolicyTest(unittest.TestCase):
         self.assertIn("不要使用 Markdown 展示格式", block)
         self.assertIn("wechat_group_sticker_search", block)
         self.assertIn("目标频率约为 20%", block)
+
+    def test_soft_free_reply_policy_is_conditional_and_hides_scorer_details(self):
+        block = build_wechat_group_reply_policy_block("free_reply", reply_mode="soft")
+
+        self.assertIn("如果你是在问我刚才提到的", block)
+        self.assertIn("不要声称确定自己就是被提问对象", block)
+        self.assertIn("不要复述 scorer JSON", block)
 
     def test_zero_sticker_reply_percent_only_allows_explicit_requests(self):
         conf()["wechat_group_sticker_enabled"] = True
