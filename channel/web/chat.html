@@ -728,11 +728,33 @@
                                     <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="skills_title">技能管理</h2>
                                     <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="skills_desc">查看、启用或禁用 Agent 技能</p>
                                 </div>
-                                <a href="https://skills.cowagent.ai/" target="_blank"
+                                <a href="https://yideng966.github.io/LightAgent-SkillHub/" target="_blank"
                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-primary-500 bg-primary-50 dark:bg-primary-900/20 hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors">
                                     <i class="fas fa-puzzle-piece text-[10px]"></i>
                                     <span data-i18n="skills_hub_btn">探索技能广场</span>
                                 </a>
+                            </div>
+
+                            <div class="mb-8 border-b border-slate-200 dark:border-white/10 pb-8">
+                                <div class="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
+                                    <div>
+                                        <h3 class="text-sm font-semibold text-slate-700 dark:text-slate-200">官方技能中心</h3>
+                                        <p class="text-xs text-slate-400 mt-1">安装前检查依赖、权限和 Docker 说明；更新需要明确确认。</p>
+                                    </div>
+                                    <div class="sm:ml-auto flex gap-2">
+                                        <div class="relative flex-1 sm:w-64">
+                                            <i class="fas fa-search absolute left-3 top-2.5 text-xs text-slate-400"></i>
+                                            <input id="skill-hub-search" type="search" placeholder="搜索技能"
+                                                class="w-full h-9 pl-8 pr-3 rounded-md border border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] text-sm focus:outline-none focus:ring-2 focus:ring-primary-400/40">
+                                        </div>
+                                        <button type="button" onclick="loadSkillHub()" title="刷新技能中心"
+                                            class="w-9 h-9 rounded-md border border-slate-200 dark:border-white/10 hover:bg-slate-50 dark:hover:bg-white/5">
+                                            <i class="fas fa-sync-alt text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="skill-hub-status" class="py-5 text-sm text-slate-400">正在加载技能中心...</div>
+                                <div id="skill-hub-list" class="grid gap-3 sm:grid-cols-2"></div>
                             </div>
 
                             <!-- Built-in Tools Section -->

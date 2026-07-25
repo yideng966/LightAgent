@@ -103,7 +103,7 @@ class Agent:
             logger.warning(f"Failed to build skills prompt: {e}")
             return ""
     
-    def get_full_system_prompt(self, skill_filter=None) -> str:
+    def get_full_system_prompt(self, skill_filter=None, skill_snapshot=None, refresh_skills=True) -> str:
         """
         Build the complete system prompt from scratch every time.
 
@@ -114,7 +114,7 @@ class Agent:
         try:
             from agent.prompt import load_context_files, PromptBuilder
 
-            if self.skill_manager:
+            if self.skill_manager and refresh_skills:
                 self.skill_manager.refresh_skills()
 
             context_files = load_context_files(self.workspace_dir) if self.workspace_dir else None
@@ -125,10 +125,17 @@ class Agent:
             except Exception:
                 lang = "zh"
             builder = PromptBuilder(workspace_dir=self.workspace_dir or "", language=lang)
+            prompt_skill_manager = self.skill_manager
+            if skill_snapshot is not None:
+                class _SnapshotSkillManager:
+                    def build_skills_prompt(self):
+                        return skill_snapshot.prompt
+
+                prompt_skill_manager = _SnapshotSkillManager()
             full = builder.build(
                 tools=self.tools,
                 context_files=context_files,
-                skill_manager=self.skill_manager,
+                skill_manager=prompt_skill_manager,
                 memory_manager=self.memory_manager,
                 runtime_info=self.runtime_info,
             )
@@ -448,8 +455,18 @@ class Agent:
         if not self.model:
             raise ValueError("No model available for agent")
 
-        # Get full system prompt with skills
-        full_system_prompt = self.get_full_system_prompt(skill_filter=skill_filter)
+        # Freeze Hub skill code/resources before building paths into the prompt.
+        if self.skill_manager:
+            self.skill_manager.refresh_skills()
+        skill_snapshot = (
+            self.skill_manager.build_skill_snapshot(skill_filter=skill_filter)
+            if self.skill_manager else None
+        )
+        full_system_prompt = self.get_full_system_prompt(
+            skill_filter=skill_filter,
+            skill_snapshot=skill_snapshot,
+            refresh_skills=False,
+        )
 
         # Create a copy of messages for this execution to avoid concurrent modification
         # Record the original length to track which messages are new
@@ -479,6 +496,7 @@ class Agent:
             max_context_turns=max_context_turns,
             cancel_event=cancel_event,
             context=context,
+            skill_snapshot=skill_snapshot,
         )
 
         # Execute
@@ -493,6 +511,9 @@ class Agent:
                     self.messages.clear()
                     logger.info("[Agent] Cleared Agent message history after executor recovery")
             raise
+        finally:
+            if self.skill_manager:
+                self.skill_manager.cleanup_skill_snapshot(skill_snapshot)
 
         # Sync executor's messages back to agent (thread-safe).
         # If the executor trimmed context, its message list is shorter than

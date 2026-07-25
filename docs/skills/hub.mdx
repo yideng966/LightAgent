@@ -1,65 +1,47 @@
 ---
 title: Skill Hub
-description: Browse, search, and install AI Agent skills
+description: Browse, verify, install, update, and roll back LightAgent skills
 ---
 
-[LightAgent Skill Hub](https://skills.cowagent.ai/) is an open-source skill marketplace for AI Agents, aggregating official picks, community contributions, and third-party skills from GitHub, ClawHub, and beyond.
+[LightAgent Skill Hub](https://yideng966.github.io/LightAgent-SkillHub/) is the official GitHub-based registry for LightAgent. Its [source repository](https://github.com/yideng966/LightAgent-SkillHub) contains every published skill, contribution rules, validation workflows, deterministic packages, checksums, and the static catalog.
 
-Source code: [github.com/zhayujie/lightagent-skill-hub](https://github.com/zhayujie/cow-skill-hub)
+LightAgent verifies the registry signature and package SHA-256 before installation. If GitHub is temporarily unavailable, it uses only the last locally cached registry whose signature remains valid. The legacy `skills.cowagent.ai` service remains a compatibility fallback.
 
-<img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="800" />
+## Browse and install
 
-## Features
-
-- **Browse skills** — filter by category (Featured / Community / Third-party) and tags
-- **Search skills** — find skills by name or description
-- **View details** — read the skill manifest, file contents, install command, and required environment variables
-- **One-click install** — copy the install command and run it in LightAgent
-
-## Installing a skill
-
-Run the install command in chat or in your terminal:
-
-<CodeGroup>
-```text Chat
-/skill install <name>
-```
-
-```bash Terminal
-lightagent skill install <name>
-```
-</CodeGroup>
-
-You can also browse the marketplace directly from chat:
+Use the Web console's Skills view, chat commands, or the terminal:
 
 ```text
 /skill list --remote
 /skill search <keyword>
+/skill install <name>
 ```
 
-Beyond the curated list, you can install third-party skills from **GitHub, ClawHub, LinkAI, or any URL** via the CLI. See [Installing skills](/skills/install) for details.
-
-## Contributing a skill
-
-To submit your own skill:
-
-1. Visit [Skill Hub/submit](https://skills.cowagent.ai/submit)
-2. Sign in with GitHub or Google
-3. Upload a folder or zip file containing `SKILL.md`
-4. Skill name, display name, and description are auto-detected — adjust as needed
-5. Submit for review; skills go live after security and quality checks
-
-<img src="https://cdn.link-ai.tech/doc/20260401111904.png" width="800" />
-
-Skill file layout:
-
-```
-your-skill/
-├── SKILL.md        # required, in the root
-├── scripts/        # optional, runtime scripts
-└── resources/      # optional, additional assets
+```bash
+lightagent skill list --remote
+lightagent skill search <keyword>
+lightagent skill install <name>
 ```
 
-<Tip>
-  Skills are built around the `SKILL.md` manifest. You can also download `SKILL.md` from a skill's detail page and use it with any Agent that supports custom instructions (OpenClaw, Cursor, Claude Code, and more).
-</Tip>
+High-risk dependencies are shown before installation and require an owner or administrator to confirm. Chat-based installation, update, rollback, and uninstall are restricted to configured owners or administrators.
+
+## Updates and rollback
+
+Updates are never applied silently:
+
+```bash
+lightagent skill outdated
+lightagent skill update <name>
+lightagent skill rollback <name>
+lightagent skill verify [name]
+```
+
+Installed versions and artifact identities are stored in `<workspace>/skills.lock.json`. Package code, dependency environments, configuration, and user-generated data are stored separately. A normal uninstall preserves configuration and user data.
+
+## Security boundary
+
+The registry declares network domains, file paths, tools, dependencies, Docker notes, and a risk level. These fields support review and user confirmation; they are not a per-skill runtime sandbox. Review third-party skills before use.
+
+## Contributing
+
+Fork [yideng966/LightAgent-SkillHub](https://github.com/yideng966/LightAgent-SkillHub), copy the skill template, run the validation scripts, and submit a Chinese Pull Request. Community skills cannot silently replace LightAgent's built-in skills or reserved namespaces.

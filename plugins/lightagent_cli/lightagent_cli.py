@@ -361,6 +361,9 @@ class LightAgentCliPlugin(Plugin):
                 "/skill list --remote: Browse Skill Hub",
                 "/skill search <keyword>: Search skills",
                 "/skill install <name>: Install a skill",
+                "/skill outdated: Check skill updates",
+                "/skill update <name>: Update a skill",
+                "/skill rollback <name>: Roll back a skill",
                 "/skill info <name>: Show skill details",
                 "/config: Show current config",
                 "/config <key>: Show a config item",
@@ -389,6 +392,9 @@ class LightAgentCliPlugin(Plugin):
                 "/skill list --remote: 浏览技能广场",
                 "/skill search <关键词>: 搜索技能",
                 "/skill install <名称>: 安装技能",
+                "/skill outdated: 检查技能更新",
+                "/skill update <名称>: 更新技能",
+                "/skill rollback <名称>: 回滚技能",
                 "/skill info <名称>: 查看技能详情",
                 "/config: 查看当前配置",
                 "/config <key>: 查看某项配置",
@@ -830,7 +836,15 @@ class LightAgentCliPlugin(Plugin):
         elif sub == "install":
             return self._skill_install(sub_args, e_context)
         elif sub == "uninstall":
-            return self._skill_uninstall(sub_args)
+            return self._skill_uninstall(sub_args, e_context)
+        elif sub == "outdated":
+            return self._skill_outdated()
+        elif sub == "update":
+            return self._skill_update(sub_args, e_context)
+        elif sub == "rollback":
+            return self._skill_rollback(sub_args, e_context)
+        elif sub == "verify":
+            return self._skill_verify(sub_args)
         elif sub == "info":
             return self._skill_info(sub_args)
         elif sub == "enable":
@@ -844,6 +858,10 @@ class LightAgentCliPlugin(Plugin):
                 "list [--remote]: 查看技能列表\n"
                 "search <关键词>: 搜索技能\n"
                 "install <名称>: 安装技能\n"
+                "outdated: 检查更新与撤销警告\n"
+                "update <名称>: 更新技能\n"
+                "rollback <名称>: 回滚技能\n"
+                "verify [名称]: 校验技能\n"
                 "uninstall <名称>: 卸载技能\n"
                 "info <名称>: 查看技能详情\n"
                 "enable <名称>: 启用技能\n"
@@ -853,6 +871,10 @@ class LightAgentCliPlugin(Plugin):
                 "list [--remote]: List skills\n"
                 "search <keyword>: Search skills\n"
                 "install <name>: Install a skill\n"
+                "outdated: Check updates and revocation notices\n"
+                "update <name>: Update a skill\n"
+                "rollback <name>: Roll back a skill\n"
+                "verify [name]: Verify skills\n"
                 "uninstall <name>: Uninstall a skill\n"
                 "info <name>: Show skill details\n"
                 "enable <name>: Enable a skill\n"
@@ -938,20 +960,25 @@ class LightAgentCliPlugin(Plugin):
 
     def _skill_list_remote(self, page: int = 1) -> str:
         import requests
-        from cli.utils import SKILL_HUB_API, load_skills_config
+        from cli.utils import SKILL_HUB_API, SKILL_HUB_WEB, load_skills_config
         page_size = self._REMOTE_PAGE_SIZE
         try:
-            resp = requests.get(
-                f"{SKILL_HUB_API}/skills",
-                params={"page": page, "limit": page_size},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            skills = data.get("skills", [])
-            total = data.get("total", len(skills))
-        except Exception as e:
-            return _t(f"获取技能广场失败: {e}", f"Failed to fetch Skill Hub: {e}")
+            from agent.skills.registry import SkillRegistryClient
+            available = SkillRegistryClient().list_skills()
+            total = len(available)
+            skills = available[(page - 1) * page_size:page * page_size]
+        except Exception:
+            try:
+                resp = requests.get(
+                    f"{SKILL_HUB_API}/skills",
+                    params={"page": page, "limit": page_size}, timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                skills = data.get("skills", [])
+                total = data.get("total", len(skills))
+            except Exception as e:
+                return _t(f"获取技能广场失败: {e}", f"Failed to fetch Skill Hub: {e}")
 
         if not skills and page == 1:
             return _t("技能广场暂无可用技能", "No skills available on Skill Hub")
@@ -982,7 +1009,7 @@ class LightAgentCliPlugin(Plugin):
             lines.append(_t(f"💡 /skill list --remote --page {page - 1}: 上一页", f"💡 /skill list --remote --page {page - 1}: Previous page"))
         lines.append(_t("💡 /skill install <名称>: 安装技能", "💡 /skill install <name>: Install a skill"))
         lines.append(_t("💡 /skill search <关键词>: 搜索技能", "💡 /skill search <keyword>: Search skills"))
-        lines.append(_t("🌐 https://skills.cowagent.ai  在线浏览全部技能", "🌐 https://skills.cowagent.ai  Browse all skills online"))
+        lines.append(_t(f"🌐 {SKILL_HUB_WEB} 在线浏览全部技能", f"🌐 {SKILL_HUB_WEB} Browse all skills online"))
         return "\n".join(lines)
 
     def _skill_search(self, query: str) -> str:
@@ -992,11 +1019,15 @@ class LightAgentCliPlugin(Plugin):
         import requests
         from cli.utils import SKILL_HUB_API, load_skills_config
         try:
-            resp = requests.get(f"{SKILL_HUB_API}/skills/search", params={"q": query}, timeout=10)
-            resp.raise_for_status()
-            skills = resp.json().get("skills", [])
-        except Exception as e:
-            return _t(f"搜索失败: {e}", f"Search failed: {e}")
+            from agent.skills.registry import SkillRegistryClient
+            skills = SkillRegistryClient().list_skills(query=query)
+        except Exception:
+            try:
+                resp = requests.get(f"{SKILL_HUB_API}/skills/search", params={"q": query}, timeout=10)
+                resp.raise_for_status()
+                skills = resp.json().get("skills", [])
+            except Exception as e:
+                return _t(f"搜索失败: {e}", f"Search failed: {e}")
 
         if not skills:
             return _t(f"未找到与「{query}」相关的技能", f"No skills found for \"{query}\"")
@@ -1022,16 +1053,47 @@ class LightAgentCliPlugin(Plugin):
 
     _INSTALL_TIMEOUT = 60
 
+    @staticmethod
+    def _can_manage_skills(e_context) -> bool:
+        """Only configured owners/admins may mutate host skill state from chat."""
+        if e_context is None:
+            return False
+        try:
+            context = e_context["context"]
+            if context.kwargs.get("wechat_group_is_admin") is not None:
+                return bool(context.kwargs.get("wechat_group_is_admin"))
+        except Exception:
+            pass
+        try:
+            from plugins.linkai.utils import Util
+            return bool(Util.is_admin(e_context))
+        except Exception:
+            return False
+
+    def _require_skill_admin(self, e_context):
+        if self._can_manage_skills(e_context):
+            return None
+        return _t(
+            "此操作会修改 LightAgent 主机，仅所有者或管理员可以执行。",
+            "This operation changes the LightAgent host and requires an owner or administrator.",
+        )
+
     def _skill_install(self, name: str, e_context: EventContext) -> str:
+        denied = self._require_skill_admin(e_context)
+        if denied:
+            return denied
         if not name:
             return _t("请指定要安装的技能: /skill install <名称>", "Please specify a skill to install: /skill install <name>")
 
         from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
         from cli.commands.skill import install_skill
+        parts = name.split()
+        approve_risk = "--approve-risk" in parts
+        name = next((part for part in parts if not part.startswith("--")), "")
 
         try:
             with ThreadPoolExecutor(max_workers=1) as pool:
-                future = pool.submit(install_skill, name)
+                future = pool.submit(install_skill, name, approve_risk)
                 result = future.result(timeout=self._INSTALL_TIMEOUT)
 
             if result.error:
@@ -1069,9 +1131,21 @@ class LightAgentCliPlugin(Plugin):
 
         return "\n".join(lines)
 
-    def _skill_uninstall(self, name: str) -> str:
+    def _skill_uninstall(self, name: str, e_context=None) -> str:
+        denied = self._require_skill_admin(e_context)
+        if denied:
+            return denied
         if not name:
             return _t("请指定要卸载的技能: /skill uninstall <名称>", "Please specify a skill to uninstall: /skill uninstall <name>")
+
+        from agent.skills.lifecycle import SkillLifecycleManager
+        lifecycle = SkillLifecycleManager()
+        if name in lifecycle.installed():
+            lifecycle.uninstall(name)
+            return _t(
+                f"✅ 技能 '{name}' 已卸载，配置和用户数据已保留",
+                f"✅ Skill '{name}' uninstalled; config and user data were preserved",
+            )
 
         import shutil
         import json
@@ -1100,6 +1174,51 @@ class LightAgentCliPlugin(Plugin):
                 pass
 
         return _t(f"✅ 技能 '{name}' 已卸载", f"✅ Skill '{name}' uninstalled")
+
+    def _skill_outdated(self) -> str:
+        from agent.skills.lifecycle import SkillLifecycleManager
+        entries = SkillLifecycleManager().outdated()
+        if not entries:
+            return _t("✅ 官方技能均为最新版本", "✅ Official Hub skills are up to date")
+        return "\n".join(
+            f"{item['name']}: {item.get('installed_version')} → {item.get('available_version')} [{item.get('status')}]"
+            for item in entries
+        )
+
+    def _skill_update(self, args: str, e_context=None) -> str:
+        denied = self._require_skill_admin(e_context)
+        if denied:
+            return denied
+        parts = args.split()
+        name = next((part for part in parts if not part.startswith("--")), "")
+        if not name:
+            return _t("请指定要更新的技能", "Please specify a skill to update")
+        from agent.skills.lifecycle import SkillApprovalRequired, SkillLifecycleManager
+        try:
+            record = SkillLifecycleManager().update(name, approve_high_risk="--approve-risk" in parts)
+        except SkillApprovalRequired as exc:
+            return _t(f"{exc}。确认后增加 --approve-risk", f"{exc}. Add --approve-risk after review")
+        return _t(f"✅ 已更新 {name} 到 {record.get('version')}", f"✅ Updated {name} to {record.get('version')}")
+
+    def _skill_rollback(self, name: str, e_context=None) -> str:
+        denied = self._require_skill_admin(e_context)
+        if denied:
+            return denied
+        if not name:
+            return _t("请指定要回滚的技能", "Please specify a skill to roll back")
+        from agent.skills.lifecycle import SkillLifecycleManager
+        record = SkillLifecycleManager().rollback(name.strip())
+        return _t(f"✅ 已回滚 {name} 到 {record.get('version')}", f"✅ Rolled back {name} to {record.get('version')}")
+
+    def _skill_verify(self, name: str) -> str:
+        from agent.skills.lifecycle import SkillLifecycleManager
+        findings = SkillLifecycleManager().verify(name.strip() or None)
+        if not findings:
+            return _t("未安装官方 Hub 技能", "No official Hub skills are installed")
+        return "\n".join(
+            f"{'✅' if item['ok'] else '❌'} {item['name']} {item.get('version')}"
+            for item in findings
+        )
 
     @staticmethod
     def _resolve_skill_dir(name: str, skills_dir: str):

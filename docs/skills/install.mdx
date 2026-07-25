@@ -3,11 +3,11 @@ title: Install Skills
 description: Install skills from multiple sources with a single command
 ---
 
-LightAgent supports installing skills from [LightAgent Skill Hub](https://skills.cowagent.ai/), GitHub, ClawHub, LinkAI, and any URL via a unified `install` command. Use `/skill install` in chat or `lightagent skill install` in the terminal.
+LightAgent supports installing skills from the signed [LightAgent Skill Hub](https://yideng966.github.io/LightAgent-SkillHub/), GitHub, ClawHub, LinkAI, and any URL via a unified `install` command. Use `/skill install` in chat or `lightagent skill install` in the terminal.
 
 ## From the Skill Hub
 
-Browse all available skills at [Skill Hub](https://skills.cowagent.ai/) and install by name:
+Browse all available skills at [Skill Hub](https://yideng966.github.io/LightAgent-SkillHub/) and install by name:
 
 ```text
 /skill list --remote
@@ -58,8 +58,14 @@ Supports zip archives and SKILL.md file links:
 /skill enable pptx           # Enable a skill
 /skill disable pptx          # Disable a skill
 /skill uninstall pptx        # Uninstall a skill
+/skill outdated              # Detect updates and revoked versions
+/skill update pptx           # Explicitly update a skill
+/skill rollback pptx         # Restore the previous version
+/skill verify pptx           # Verify installed files
 ```
 
 <Tip>
   All commands above work in the terminal by replacing `/skill` with `lightagent skill`. See [Skill Management Commands](/cli/skill) for full documentation.
 </Tip>
+
+Official Hub packages use a signed registry, SHA-256 verification, staging, and atomic replacement. High-risk dependency manifests require an owner or administrator to confirm with `--approve-risk`. Normal uninstall preserves skill configuration and user data; terminal users can add `--purge-data` to explicitly remove them.

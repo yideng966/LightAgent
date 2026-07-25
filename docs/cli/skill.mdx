@@ -163,8 +163,22 @@ lightagent skill uninstall pptx
 </CodeGroup>
 
 <Warning>
-  Uninstalling deletes all files in the skill directory. This action cannot be undone.
+  For official Hub skills, normal uninstall removes package code and its isolated dependency environment while preserving configuration and user data. Add `--purge-data` only when that persistent data should also be deleted.
 </Warning>
+
+## outdated / update / rollback / verify
+
+Official Hub skills support explicit lifecycle management:
+
+```bash
+lightagent skill outdated
+lightagent skill update <name>
+lightagent skill update <name> --approve-risk
+lightagent skill rollback <name>
+lightagent skill verify [name]
+```
+
+`outdated` also reports versions marked `yanked` or `revoked`. Updates never run silently. `rollback` restores the previous atomically saved package, and `verify` compares installed files with `skills.lock.json`.
 
 ## enable / disable
 

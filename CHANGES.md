@@ -1,5 +1,35 @@
 # CHANGES
 
+## 2026-07-25
+
+### LightAgent Skill Hub 集成
+
+- 新增签名静态注册表客户端与最后一次验证通过的本地缓存，对索引执行 Ed25519 验签，对技能包和外部下载执行 SHA-256 校验。
+- 新增 staging、路径穿越与符号链接拒绝、原子安装、按技能加锁、独立依赖环境、`skills.lock.json`、更新、回滚、卸载和完整性校验。
+- CLI 新增搜索、安装、过期检查、更新、回滚、卸载和校验入口；聊天命令的变更操作限制为所有者或管理员，Web 控制台增加技能目录、风险摘要、安装、更新、回滚和卸载操作。
+- Agent 请求在启动时固定当前技能内容快照，更新仅对后续请求生效；技能更新后同步刷新 `SkillManager` 和微信群技能 ACL 目录。
+- 补充官方 Hub、CLI 与安装文档，明确 v1 权限元数据仅用于展示、CI 与人工审核，不构成运行时沙箱。
+
+关键文件：
+
+- `agent/skills/registry.py`
+- `agent/skills/lifecycle.py`
+- `cli/commands/skill.py`
+- `plugins/lightagent_cli/lightagent_cli.py`
+- `channel/web/web_channel.py`
+- `channel/web/chat.html`
+- `channel/web/static/js/console.js`
+- `tests/test_skill_registry.py`
+- `tests/test_skill_lifecycle.py`
+- `tests/test_skill_hub_integration.py`
+
+验证记录：
+
+- Skill Hub 新增定向回归 19 项通过，官方 Docker 非 root 组合回归 27 项通过。
+- Hub Schema 校验、签名索引生成、LightAgent 客户端真实验签与 Docker 非 root 安装烟测通过。
+- 全量 Python 回归共运行 916 项；912 项通过，4 项 `origin/master` 可复现的既有断言失败（3 项语言环境断言、1 项 WebUI 缓存参数断言），与本次 Skill Hub 变更无关。
+- Python/JavaScript 语法检查与 `git diff --check` 通过。
+
 ## 2026-07-24
 
 ### 群聊总结归档按群隔离修复

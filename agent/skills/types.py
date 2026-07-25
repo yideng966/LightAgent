@@ -74,3 +74,4 @@ class SkillSnapshot:
     skills: List[Dict[str, str]]  # List of skill info (name, primary_env)
     resolved_skills: List[Skill] = field(default_factory=list)
     version: Optional[int] = None
+    cleanup_dir: Optional[str] = None

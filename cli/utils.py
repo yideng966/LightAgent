@@ -30,7 +30,11 @@ def get_builtin_skills_dir() -> str:
 
 def load_config_json() -> dict:
     """Load config.json from project root."""
-    config_path = os.path.join(get_project_root(), "config.json")
+    data_root = os.environ.get("LIGHTAGENT_DATA_DIR")
+    config_path = os.path.join(
+        os.path.expanduser(data_root) if data_root else get_project_root(),
+        "config.json",
+    )
     if not os.path.exists(config_path):
         return {}
     try:
@@ -76,3 +80,4 @@ def ensure_sys_path():
 
 
 SKILL_HUB_API = "https://skills.cowagent.ai/api"
+SKILL_HUB_WEB = "https://yideng966.github.io/LightAgent-SkillHub/"

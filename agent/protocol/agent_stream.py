@@ -368,6 +368,7 @@ class AgentStreamExecutor:
             max_context_turns: int = 30,
             cancel_event=None,
             context: Optional[Any] = None,
+            skill_snapshot=None,
     ):
         """
         Initialize stream executor
@@ -396,6 +397,9 @@ class AgentStreamExecutor:
         self.max_context_turns = max_context_turns
         self.cancel_event = cancel_event
         self.context = context
+        self.skill_snapshot = {
+            skill.name: skill for skill in getattr(skill_snapshot, "resolved_skills", [])
+        }
 
         # Message history - use provided messages or create new list
         self.messages = messages if messages is not None else []
@@ -1766,29 +1770,23 @@ class AgentStreamExecutor:
         available_tools = list(self.tools.keys())
         base_msg = f"Tool '{tool_name}' not found. Available tools: {available_tools}"
 
-        skill_manager = getattr(self.agent, 'skill_manager', None)
-        if not skill_manager:
-            return base_msg
-
-        skill_entry = skill_manager.get_skill(tool_name)
-        if not skill_entry:
-            return base_msg
+        skill = self.skill_snapshot.get(tool_name)
+        if skill is None:
+            skill_manager = getattr(self.agent, 'skill_manager', None)
+            skill_entry = skill_manager.get_skill(tool_name) if skill_manager else None
+            if not skill_entry:
+                return base_msg
+            skill = skill_entry.skill
 
         denied = self._guard_wechat_group_skill_tool(
             tool_name,
-            {"path": skill_entry.skill.file_path},
+            {"path": skill.file_path},
         )
         if denied:
             return denied
 
-        skill = skill_entry.skill
         skill_md_path = skill.file_path
-        skill_content = ""
-        try:
-            with open(skill_md_path, 'r', encoding='utf-8') as f:
-                skill_content = f.read()
-        except Exception:
-            skill_content = skill.description
+        skill_content = skill.content or skill.description
 
         logger.info(
             f"[Agent] Tool '{tool_name}' not found, but matched skill '{skill.name}'. "
