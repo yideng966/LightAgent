@@ -865,7 +865,7 @@ def search(query):
 # Core install function — reusable from CLI and chat plugin
 # ------------------------------------------------------------------
 
-def install_skill(name: str, approve_high_risk: bool = False) -> InstallResult:
+def install_skill(name: str) -> InstallResult:
     """Core install logic, usable from CLI and chat plugin.
 
     Accepts all formats: Skill Hub name, owner/repo, GitHub/GitLab URL,
@@ -874,7 +874,7 @@ def install_skill(name: str, approve_high_risk: bool = False) -> InstallResult:
     """
     result = InstallResult()
     try:
-        _route_install(name, result, approve_high_risk=approve_high_risk)
+        _route_install(name, result)
         if result.installed:
             _sync_wechat_group_skill_catalog()
     except SkillInstallError as e:
@@ -892,7 +892,7 @@ def _sync_wechat_group_skill_catalog():
         logger.warning(f"Failed to sync WeChat group skill ACL catalog: {e}")
 
 
-def _route_install(name: str, result: InstallResult, approve_high_risk: bool = False):
+def _route_install(name: str, result: InstallResult):
     """Dispatch to the appropriate installer based on input format."""
     # --- Local path ---
     if name.startswith(("./", "../", "/", "~/")):
@@ -979,18 +979,16 @@ def _route_install(name: str, result: InstallResult, approve_high_risk: bool = F
     # --- Fallback: official signed Skill Hub by name, then the legacy Hub ---
     _check_skill_name(name)
     try:
-        from agent.skills.lifecycle import SkillApprovalRequired, SkillLifecycleManager
+        from agent.skills.lifecycle import SkillLifecycleManager
         from agent.skills.registry import RegistryError, RegistrySecurityError
 
-        record = SkillLifecycleManager().install(name, approve_high_risk=approve_high_risk)
+        record = SkillLifecycleManager().install(name)
         result.installed.append(name)
         result.messages.append(
             f"Installed '{name}' {record.get('version')} from the official LightAgent Skill Hub."
         )
     except RegistrySecurityError as e:
         raise SkillInstallError(str(e))
-    except SkillApprovalRequired as e:
-        raise SkillInstallError(f"{e}。CLI 请增加 --approve-risk")
     except RegistryError as e:
         raise SkillInstallError(
             f"Official signed Skill Hub unavailable ({e}). "
@@ -1007,8 +1005,7 @@ def _route_install(name: str, result: InstallResult, approve_high_risk: bool = F
 # ------------------------------------------------------------------
 @skill.command()
 @click.argument("name")
-@click.option("--approve-risk", is_flag=True, help="Approve declared high-risk dependencies")
-def install(name, approve_risk):
+def install(name):
     """Install skill(s) from Skill Hub, GitHub, GitLab, git URL, or local path.
 
     When given an owner/repo (or full URL), downloads the repo and
@@ -1033,7 +1030,7 @@ def install(name, approve_risk):
 
       lightagent skill install https://example.com/path/to/SKILL.md
     """
-    result = install_skill(name, approve_high_risk=approve_risk)
+    result = install_skill(name)
     for msg in result.messages:
         click.echo(msg)
     if result.error:
@@ -1517,16 +1514,13 @@ def outdated_command():
 
 @skill.command("update")
 @click.argument("name")
-@click.option("--approve-risk", is_flag=True, help="Approve changed high-risk dependencies")
-def update_command(name, approve_risk):
+def update_command(name):
     """Update an official Hub skill after explicit confirmation."""
-    from agent.skills.lifecycle import SkillApprovalRequired, SkillLifecycleManager
+    from agent.skills.lifecycle import SkillLifecycleManager
     if not click.confirm(f"Update skill '{name}'?", default=False):
         return
     try:
-        record = SkillLifecycleManager().update(name, approve_high_risk=approve_risk)
-    except SkillApprovalRequired as exc:
-        raise click.ClickException(f"{exc}。请检查声明后增加 --approve-risk")
+        record = SkillLifecycleManager().update(name)
     except Exception as exc:
         raise click.ClickException(str(exc))
     click.echo(click.style(f"✓ Skill '{name}' updated to {record.get('version')}.", fg="green"))

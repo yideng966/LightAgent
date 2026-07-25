@@ -11,7 +11,7 @@ LightAgent verifies the registry signature and package SHA-256 before installati
 
 Use the Web console's Skills view, chat commands, or the terminal:
 
-In the Web console, open **Skills** and choose **Get online skills**. The online library opens as a separate dialog with search, risk and category filters, pagination, skill details, and install/update actions. The main Skills page remains focused on installed skills and built-in tools even when the Hub grows.
+In the Web console, open **Skills** and choose **Get online skills**. The online library opens as a separate dialog with search, category filters, pagination, skill details, and install/update actions. The main Skills page remains focused on installed skills and built-in tools even when the Hub grows.
 
 ```text
 /skill list --remote
@@ -25,7 +25,7 @@ lightagent skill search <keyword>
 lightagent skill install <name>
 ```
 
-High-risk dependencies are shown before installation and require an owner or administrator to confirm. Chat-based installation, update, rollback, and uninstall are restricted to configured owners or administrators.
+Declared dependencies are installed automatically after the user chooses Install. Chat-based installation, update, rollback, and uninstall remain restricted to configured owners or administrators.
 
 ## Updates and rollback
 
@@ -42,7 +42,7 @@ Installed versions and artifact identities are stored in `<workspace>/skills.loc
 
 ## Security boundary
 
-The registry declares network domains, file paths, tools, dependencies, Docker notes, and a risk level. These fields support review and user confirmation; they are not a per-skill runtime sandbox. Review third-party skills before use.
+The registry declares network domains, file paths, tools, dependencies, and Docker notes. These fields support automated and maintainer review; they are not a per-skill runtime sandbox. Review third-party skills before use.
 
 ## Contributing
 
