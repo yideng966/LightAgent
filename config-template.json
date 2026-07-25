@@ -1,6 +1,6 @@
 {
   "lightagent_lang": "auto",
-  "skill_registry_url": "https://yideng966.github.io/LightAgent-SkillHub/registry.json",
+  "skill_registry_url": "https://xiaoguiwucan.github.io/LightAgent-SkillHub/registry.json",
   "channel_type": "web",
   "group_shared_session": false,
   "concurrency_in_session": 1,

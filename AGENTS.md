@@ -268,6 +268,7 @@ docker push yideng966/lightagent:latest
 - 修改 Agent 工具时，同步检查工具注册、工具 schema、异常返回格式、文档和安全测试。
 - Skill Hub 安装必须以签名索引和 SHA-256 为信任边界；后备源只能安装与已验证索引中来源身份和哈希一致的产物，不得用后备源自身返回的哈希建立信任。
 - Hub 技能不得覆盖内置技能或非 Hub 同名技能；更新、回滚和卸载必须保持配置与用户数据分离，高风险依赖声明变化后必须重新获得管理员确认。
+- 官方 Skill Hub 的仓库与 Pages 地址以 `xiaoguiwucan/LightAgent-SkillHub` 为准；修改 Registry 默认地址时必须同步检查配置模板、CLI、Web 入口、文档和签名索引构建配置。
 - 修改桌面后端启动逻辑时，特别注意端口、数据目录、打包后路径和 Windows 行为。
 
 ## 安全边界

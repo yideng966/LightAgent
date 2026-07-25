@@ -2382,3 +2382,8 @@
 未完成：
 
 - 未执行真实微信扫码、入群、真实 @ mention 与跨群隔离的手动链路验证。
+# 2026-07-25
+
+- 任务背景：Skill Hub 的实际共同维护账号调整为 `xiaoguiwucan`，原 `yideng966` 仓库和 Pages 地址不存在并返回 404。
+- 关键改动：将签名 Registry 默认地址、配置模板、CLI/Web 入口及 Skill Hub 新增文档统一切换到 `xiaoguiwucan/LightAgent-SkillHub`，并补充协作规则，旧技能广场继续作为兼容后备来源。
+- 验证结果：`python -m unittest tests.test_skill_registry tests.test_skill_hub_integration` 共 8 项通过；Skill Hub 元数据校验、确定性打包及新地址签名索引生成通过。线上 Pages 与 Registry 校验在仓库发布后执行。

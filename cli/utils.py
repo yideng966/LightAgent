@@ -80,4 +80,4 @@ def ensure_sys_path():
 
 
 SKILL_HUB_API = "https://skills.cowagent.ai/api"
-SKILL_HUB_WEB = "https://yideng966.github.io/LightAgent-SkillHub/"
+SKILL_HUB_WEB = "https://xiaoguiwucan.github.io/LightAgent-SkillHub/"

@@ -11,7 +11,7 @@ import requests
 from cli.utils import get_workspace_dir, load_config_json
 
 
-DEFAULT_REGISTRY_URL = "https://yideng966.github.io/LightAgent-SkillHub/registry.json"
+DEFAULT_REGISTRY_URL = "https://xiaoguiwucan.github.io/LightAgent-SkillHub/registry.json"
 REGISTRY_PUBLIC_KEYS = {
     "lightagent-skillhub-2026-01": "ddZUto18e4bp5pRMgrHD8xJoCfFGxiXznA8G8ksyaMQ=",
 }

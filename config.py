@@ -19,7 +19,7 @@ available_setting = {
     # "zh" (Chinese) or "en" (English). An explicit value locks the language.
     # value: auto/en/zh
     "lightagent_lang": "auto",
-    "skill_registry_url": "https://yideng966.github.io/LightAgent-SkillHub/registry.json",
+    "skill_registry_url": "https://xiaoguiwucan.github.io/LightAgent-SkillHub/registry.json",
     # openai api config
     "open_ai_api_key": "",  # openai api key
     # openai api base; when use_azure_chatgpt is true, set the matching api base
