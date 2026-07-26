@@ -19,9 +19,13 @@ from typing import Dict, List, Optional
 import requests
 
 from agent.skills.frontmatter import parse_frontmatter
-from agent.skills.registry import RegistryError, RegistrySecurityError, SkillRegistryClient
+from agent.skills.registry import (
+    LegacySkillRegistryClient, RegistryError, RegistrySecurityError,
+    SkillRegistryClient,
+)
 from cli import __version__
 from cli.utils import SKILL_HUB_API, get_builtin_skills_dir, get_skills_dir, get_workspace_dir
+from common.log import logger
 
 
 PROTECTED_SKILL_NAMES = {"image-generation", "knowledge-wiki", "skill-creator"}
@@ -32,6 +36,8 @@ _MAX_ARCHIVE_FILES = 2000
 _MAX_DEPENDENCY_DOWNLOAD_BYTES = 100 * 1024 * 1024
 _PROCESS_LOCKS = {}
 _PROCESS_LOCKS_GUARD = threading.Lock()
+_WORKSPACE_LOCKS = {}
+_WORKSPACE_LOCKS_GUARD = threading.Lock()
 
 
 class SkillLifecycleError(RuntimeError):
@@ -68,11 +74,15 @@ def _dependency_fingerprint(skill):
 
 
 class SkillLifecycleManager:
-    def __init__(self, skills_dir=None, workspace=None, registry=None, session=None):
+    def __init__(self, skills_dir=None, workspace=None, registry=None, legacy_registry=None, session=None):
         self.skills_dir = os.path.abspath(skills_dir or get_skills_dir())
         self.workspace = os.path.abspath(workspace or get_workspace_dir())
-        self.registry = registry or SkillRegistryClient()
         self.session = session or requests
+        self.registry = registry or SkillRegistryClient()
+        self.legacy_registry = legacy_registry or LegacySkillRegistryClient(
+            cache_dir=os.path.join(self.workspace, ".skillhub"),
+            session=self.session,
+        )
         self.lock_path = os.path.join(self.workspace, "skills.lock.json")
         self.versions_dir = os.path.join(self.workspace, ".skill-versions")
         self.envs_dir = os.path.join(self.workspace, ".skill-envs")
@@ -80,21 +90,48 @@ class SkillLifecycleManager:
         self.config_dir = os.path.join(self.workspace, "skill-config")
         self.operation_locks_dir = os.path.join(self.workspace, ".skill-locks")
 
-    def search(self, query=""):
-        return self.registry.list_skills(query=query)
+    def search(self, query="", snapshot=None):
+        try:
+            official = self.registry.list_skills(query=query, snapshot=snapshot)
+        except TypeError:
+            official = self.registry.list_skills(query=query)
+        for item in official:
+            item.setdefault("registry_source", "lightagent-skillhub")
+            item.setdefault("registry_label", "LightAgent Skill Hub")
+        seen = {item.get("name") for item in official}
+        try:
+            legacy = [
+                item for item in self.legacy_registry.list_skills(query=query)
+                if item.get("name") not in seen
+            ]
+        except RegistryError as exc:
+            logger.warning("[SkillHub] Original marketplace unavailable: %s", exc)
+            legacy = []
+        return official + legacy
 
     def installed(self):
         return self._load_lock().get("skills", {})
 
-    def install(self, name, expected_version=None):
-        skill = self.registry.get_skill(name)
+    def install(self, name, expected_version=None, source=None):
+        if source == LegacySkillRegistryClient.SOURCE:
+            skill = self.legacy_registry.get_skill(name)
+        else:
+            skill = self.registry.get_skill(name)
+            skill.setdefault("registry_source", "lightagent-skillhub")
         self._validate_entry(skill, expected_version=expected_version)
         fingerprint = _dependency_fingerprint(skill)
         with self._skill_lock(name):
             return self._install_locked(skill, fingerprint)
 
     def outdated(self):
-        remote = {item["name"]: item for item in self.registry.list_skills(include_unavailable=True)}
+        official = {
+            item["name"]: item
+            for item in self.registry.list_skills(include_unavailable=True)
+        }
+        try:
+            legacy = {item["name"]: item for item in self.legacy_registry.list_skills()}
+        except RegistryError:
+            legacy = {}
         revocations = []
         try:
             revocations = self.registry.load().data.get("revocations", [])
@@ -106,7 +143,11 @@ class SkillLifecycleManager:
         }
         result = []
         for name, local in self.installed().items():
-            item = remote.get(name)
+            item = (
+                legacy.get(name)
+                if local.get("source") == LegacySkillRegistryClient.SOURCE
+                else official.get(name)
+            )
             if not item:
                 continue
             revoked = revoked_versions.get((name, str(local.get("version"))))
@@ -121,10 +162,70 @@ class SkillLifecycleManager:
                 })
         return result
 
-    def update(self, name):
-        if name not in self.installed():
+    def update(self, name, expected_version=None, source=None):
+        local = self.installed().get(name)
+        if not local:
             raise SkillLifecycleError(f"技能 {name} 尚未通过官方技能中心安装")
-        return self.install(name)
+        return self.install(
+            name,
+            expected_version=expected_version,
+            source=source or local.get("source"),
+        )
+
+    def batch(self, operation, skills, purge_data=False):
+        if operation not in ("install", "update", "uninstall"):
+            raise SkillLifecycleError(f"不支持的批量操作: {operation}")
+        if not isinstance(skills, list) or not skills:
+            raise SkillLifecycleError("请选择至少一个技能")
+        if len(skills) > 100:
+            raise SkillLifecycleError("单次最多处理 100 个技能")
+
+        results = []
+        seen = set()
+        for raw in skills:
+            item = raw if isinstance(raw, dict) else {"name": raw}
+            name = str(item.get("name") or "").strip()
+            version = str(item.get("version") or "").strip() or None
+            source = str(item.get("source") or "").strip() or None
+            if not name or name in seen:
+                continue
+            seen.add(name)
+            try:
+                installed = self.installed()
+                if operation == "install":
+                    if name in installed:
+                        results.append({"name": name, "status": "skipped", "reason": "already_installed"})
+                        continue
+                    record = self.install(name, expected_version=version, source=source)
+                elif operation == "update":
+                    local = installed.get(name)
+                    if not local:
+                        results.append({"name": name, "status": "skipped", "reason": "not_installed"})
+                        continue
+                    remote_source = source or local.get("source")
+                    remote = (
+                        self.legacy_registry.get_skill(name)
+                        if remote_source == LegacySkillRegistryClient.SOURCE
+                        else self.registry.get_skill(name)
+                    )
+                    if _version_tuple(remote.get("version")) <= _version_tuple(local.get("version")):
+                        results.append({"name": name, "status": "skipped", "reason": "already_latest"})
+                        continue
+                    record = self.update(name, expected_version=version, source=remote_source)
+                else:
+                    if name not in installed:
+                        results.append({"name": name, "status": "skipped", "reason": "not_installed"})
+                        continue
+                    self.uninstall(name, purge_data=purge_data)
+                    record = None
+                results.append({
+                    "name": name,
+                    "status": "success",
+                    "version": record.get("version") if record else None,
+                })
+            except Exception as exc:
+                results.append({"name": name, "status": "failed", "reason": str(exc)})
+        return results
 
     def rollback(self, name):
         with self._skill_lock(name):
@@ -217,7 +318,8 @@ class SkillLifecycleManager:
         if len(package) > _MAX_PACKAGE_BYTES:
             raise RegistrySecurityError(f"技能 {name} 下载包超过 50 MiB 限制")
         actual = hashlib.sha256(package).hexdigest()
-        if actual != str(skill.get("sha256", "")).lower():
+        is_legacy = skill.get("registry_source") == LegacySkillRegistryClient.SOURCE
+        if not is_legacy and actual != str(skill.get("sha256", "")).lower():
             raise RegistrySecurityError(f"技能 {name} 下载包 SHA-256 不匹配")
         os.makedirs(self.skills_dir, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=f".{name}-stage-", dir=self.skills_dir) as stage:
@@ -226,13 +328,16 @@ class SkillLifecycleManager:
             self._safe_extract(package, extract)
             source = self._find_skill_root(extract, name)
             metadata = parse_frontmatter(Path(source, "SKILL.md").read_text(encoding="utf-8"))
-            if metadata.get("name") != name or str(metadata.get("version")) != str(skill.get("version")):
+            if metadata.get("name") != name or (
+                not is_legacy and str(metadata.get("version")) != str(skill.get("version"))
+            ):
                 raise RegistrySecurityError("技能包元数据与注册表不一致")
             staged_skill = os.path.join(stage, "ready")
             shutil.copytree(source, staged_skill)
             staged_env = os.path.join(stage, "environment")
             self._install_dependencies(skill, staged_env)
             env_target = os.path.join(self.envs_dir, name)
+            self._prepare_skill_runtime_links(staged_skill, staged_env, env_target)
             previous = None
             previous_path = None
             previous_env_path = None
@@ -267,14 +372,18 @@ class SkillLifecycleManager:
         record = {
             "name": name,
             "version": skill["version"],
-            "source": "lightagent-skillhub",
-            "registry_url": getattr(self.registry, "url", None),
-            "source_url": skill.get("repository"),
+            "source": skill.get("registry_source", "lightagent-skillhub"),
+            "registry_url": skill.get("registry_url") or getattr(self.registry, "url", None),
+            "source_url": skill.get("repository") or skill.get("source_url"),
             "source_commit": skill.get("source_commit"),
             "artifact_sha256": actual,
             "tree_sha256": _tree_hash(os.path.join(self.skills_dir, name)),
             "dependency_fingerprint": fingerprint,
             "requirements": skill.get("requirements", {}),
+            "missing_env": [
+                key for key in skill.get("requirements", {}).get("env", [])
+                if not os.environ.get(str(key))
+            ],
             "installed_at": datetime.now(timezone.utc).isoformat(),
             "status": skill.get("status", "active"),
             "previous": previous,
@@ -298,6 +407,15 @@ class SkillLifecycleManager:
         return record
 
     def _download_package(self, skill):
+        if skill.get("registry_source") == LegacySkillRegistryClient.SOURCE:
+            response = self.session.post(
+                f"{SKILL_HUB_API}/skills/{skill['name']}/download",
+                json={"mirror": True}, timeout=30,
+            )
+            response.raise_for_status()
+            if "application/zip" not in response.headers.get("Content-Type", ""):
+                raise SkillLifecycleError("原技能广场未返回 ZIP 技能包")
+            return response.content
         try:
             response = self.session.get(
                 skill["download_url"], timeout=(5, 30), allow_redirects=True
@@ -356,29 +474,56 @@ class SkillLifecycleManager:
         if expected_version and str(skill.get("version")) != str(expected_version):
             raise SkillLifecycleError(f"注册表版本已变化，期望 {expected_version}，当前 {skill.get('version')}")
         current = _version_tuple(__version__)
-        if current < _version_tuple(skill.get("min_lightagent_version")):
+        if skill.get("min_lightagent_version") and current < _version_tuple(skill.get("min_lightagent_version")):
             raise SkillLifecycleError(f"技能 {name} 需要 LightAgent >= {skill.get('min_lightagent_version')}")
         maximum = skill.get("max_lightagent_version")
         if maximum and current > _version_tuple(maximum):
             raise SkillLifecycleError(f"技能 {name} 仅支持 LightAgent <= {maximum}")
-        if not str(skill.get("download_url", "")).startswith("https://"):
-            raise RegistrySecurityError("技能下载地址必须使用 HTTPS")
-        if not re.match(r"^[a-fA-F0-9]{64}$", str(skill.get("sha256", ""))):
-            raise RegistrySecurityError("技能缺少有效 SHA-256")
+        if skill.get("registry_source") != LegacySkillRegistryClient.SOURCE:
+            if not str(skill.get("download_url", "")).startswith("https://"):
+                raise RegistrySecurityError("技能下载地址必须使用 HTTPS")
+            if not re.match(r"^[a-fA-F0-9]{64}$", str(skill.get("sha256", ""))):
+                raise RegistrySecurityError("技能缺少有效 SHA-256")
 
     def _install_dependencies(self, skill, env_dir):
         requirements = skill.get("requirements", {})
         os.makedirs(env_dir, exist_ok=True)
+        missing_bins = [
+            str(item) for item in requirements.get("bins", [])
+            if not shutil.which(str(item))
+        ]
+        if missing_bins:
+            raise SkillLifecycleError(
+                f"技能 {skill.get('name')} 缺少系统命令: {', '.join(missing_bins)}"
+            )
         python_packages = [str(item) for item in requirements.get("python", [])]
         if any(item.startswith("-") or "://" in item for item in python_packages):
             raise RegistrySecurityError("Python 依赖只能使用包名与版本约束")
         if python_packages:
-            subprocess.run([sys.executable, "-m", "pip", "install", "--target", os.path.join(env_dir, "python"), *python_packages], check=True, timeout=300)
+            self._run_dependency_command(
+                skill,
+                "Python",
+                [
+                    sys.executable, "-m", "pip", "install", "--disable-pip-version-check",
+                    "--target", os.path.join(env_dir, "python"), *python_packages,
+                ],
+            )
         npm_packages = [str(item) for item in requirements.get("npm", [])]
         if any(item.startswith("-") or "://" in item for item in npm_packages):
             raise RegistrySecurityError("npm 依赖只能使用包名与版本约束")
         if npm_packages:
-            subprocess.run(["npm", "install", "--prefix", os.path.join(env_dir, "npm"), *npm_packages], check=True, timeout=300)
+            if not shutil.which("npm"):
+                raise SkillLifecycleError(
+                    f"技能 {skill.get('name')} 需要 npm，但当前运行环境未安装"
+                )
+            self._run_dependency_command(
+                skill,
+                "npm",
+                [
+                    "npm", "install", "--ignore-scripts", "--no-audit", "--no-fund",
+                    "--prefix", os.path.join(env_dir, "npm"), *npm_packages,
+                ],
+            )
         for item in requirements.get("downloads", []):
             response = self.session.get(item["url"], timeout=(5, 30), allow_redirects=True)
             response.raise_for_status()
@@ -391,6 +536,48 @@ class SkillLifecycleManager:
             filename = os.path.basename(item["url"].split("?", 1)[0]) or item["sha256"]
             with open(os.path.join(downloads, filename), "wb") as handle:
                 handle.write(response.content)
+
+    @staticmethod
+    def _run_dependency_command(skill, kind, command):
+        try:
+            subprocess.run(
+                command,
+                check=True,
+                timeout=300,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+        except FileNotFoundError as exc:
+            raise SkillLifecycleError(
+                f"技能 {skill.get('name')} 无法安装 {kind} 依赖: 缺少安装程序"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise SkillLifecycleError(
+                f"技能 {skill.get('name')} 安装 {kind} 依赖超时"
+            ) from exc
+        except subprocess.CalledProcessError as exc:
+            detail = (exc.stderr or exc.stdout or "").strip()
+            if len(detail) > 800:
+                detail = detail[-800:]
+            suffix = f": {detail}" if detail else ""
+            raise SkillLifecycleError(
+                f"技能 {skill.get('name')} 安装 {kind} 依赖失败{suffix}"
+            ) from exc
+
+    @staticmethod
+    def _prepare_skill_runtime_links(skill_dir, staged_env, env_target):
+        staged_modules = os.path.join(staged_env, "npm", "node_modules")
+        if not os.path.isdir(staged_modules):
+            return
+        skill_modules = os.path.join(skill_dir, "node_modules")
+        if os.path.lexists(skill_modules):
+            raise RegistrySecurityError("技能包不得自带 node_modules")
+        final_modules = os.path.join(env_target, "npm", "node_modules")
+        try:
+            os.symlink(final_modules, skill_modules, target_is_directory=True)
+        except OSError:
+            shutil.copytree(staged_modules, skill_modules)
 
     @staticmethod
     def _safe_extract(package, destination):
@@ -467,6 +654,46 @@ class SkillLifecycleManager:
                     if time.time() >= deadline:
                         raise SkillLifecycleError(f"技能 {name} 正在被其他进程修改")
                     time.sleep(0.1)
+            with self._workspace_lock():
+                yield
+        finally:
+            if fd is not None:
+                os.close(fd)
+                try:
+                    os.unlink(path)
+                except FileNotFoundError:
+                    pass
+            process_lock.release()
+
+    @contextmanager
+    def _workspace_lock(self):
+        with _WORKSPACE_LOCKS_GUARD:
+            process_lock = _WORKSPACE_LOCKS.setdefault(
+                self.workspace, threading.Lock()
+            )
+        if not process_lock.acquire(timeout=30):
+            raise SkillLifecycleError("技能目录正在被其他请求修改")
+        os.makedirs(self.operation_locks_dir, exist_ok=True)
+        path = os.path.join(self.operation_locks_dir, ".workspace.lock")
+        fd = None
+        try:
+            deadline = time.time() + 30
+            while fd is None:
+                try:
+                    fd = os.open(
+                        path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600
+                    )
+                    os.write(fd, str(os.getpid()).encode("ascii"))
+                except FileExistsError:
+                    try:
+                        if time.time() - os.path.getmtime(path) > 300:
+                            os.unlink(path)
+                            continue
+                    except FileNotFoundError:
+                        continue
+                    if time.time() >= deadline:
+                        raise SkillLifecycleError("技能目录正在被其他进程修改")
+                    time.sleep(0.1)
             yield
         finally:
             if fd is not None:
@@ -486,7 +713,8 @@ class SkillLifecycleManager:
             config = {}
         config[skill["name"]] = {
             "name": skill["name"], "description": skill.get("description", ""),
-            "source": "lightagent-skillhub", "source_identity": skill.get("repository", ""),
+            "source": skill.get("registry_source", "lightagent-skillhub"),
+            "source_identity": skill.get("repository") or skill.get("source_url", ""),
             "version": skill.get("version"), "enabled": True, "category": "skill",
         }
         with open(path + ".tmp", "w", encoding="utf-8") as handle:

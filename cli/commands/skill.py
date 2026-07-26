@@ -25,6 +25,7 @@ from cli.utils import (
     get_builtin_skills_dir,
     load_skills_config,
     SKILL_HUB_API,
+    ensure_sys_path,
 )
 
 
@@ -757,9 +758,10 @@ _REMOTE_PAGE_SIZE = 10
 
 def _list_remote(page: int = 1):
     """List skills from remote Skill Hub with server-side pagination."""
+    ensure_sys_path()
     try:
-        from agent.skills.registry import SkillRegistryClient
-        all_skills = SkillRegistryClient().list_skills()
+        from agent.skills.lifecycle import SkillLifecycleManager
+        all_skills = SkillLifecycleManager().search()
         total = len(all_skills)
         start = max(0, (page - 1) * _REMOTE_PAGE_SIZE)
         skills = all_skills[start:start + _REMOTE_PAGE_SIZE]
@@ -824,9 +826,10 @@ def _list_remote(page: int = 1):
 @click.argument("query")
 def search(query):
     """Search skills on Skill Hub."""
+    ensure_sys_path()
     try:
-        from agent.skills.registry import SkillRegistryClient
-        data = {"skills": SkillRegistryClient().list_skills(query=query)}
+        from agent.skills.lifecycle import SkillLifecycleManager
+        data = {"skills": SkillLifecycleManager().search(query=query)}
     except Exception as official_error:
         logger.warning("Official Skill Hub unavailable, using legacy search: %s", official_error)
         try:
@@ -894,6 +897,7 @@ def _sync_wechat_group_skill_catalog():
 
 def _route_install(name: str, result: InstallResult):
     """Dispatch to the appropriate installer based on input format."""
+    ensure_sys_path()
     # --- Local path ---
     if name.startswith(("./", "../", "/", "~/")):
         _install_local(name, result)
@@ -980,7 +984,9 @@ def _route_install(name: str, result: InstallResult):
     _check_skill_name(name)
     try:
         from agent.skills.lifecycle import SkillLifecycleManager
-        from agent.skills.registry import RegistryError, RegistrySecurityError
+        from agent.skills.registry import (
+            LegacySkillRegistryClient, RegistryError, RegistrySecurityError,
+        )
 
         record = SkillLifecycleManager().install(name)
         result.installed.append(name)
@@ -990,10 +996,19 @@ def _route_install(name: str, result: InstallResult):
     except RegistrySecurityError as e:
         raise SkillInstallError(str(e))
     except RegistryError as e:
-        raise SkillInstallError(
-            f"Official signed Skill Hub unavailable ({e}). "
-            "Legacy Hub installation requires a matching verified registry entry."
-        )
+        try:
+            record = SkillLifecycleManager().install(
+                name, source=LegacySkillRegistryClient.SOURCE
+            )
+            result.installed.append(name)
+            result.messages.append(
+                f"Installed '{name}' {record.get('version')} from the original skill marketplace."
+            )
+        except Exception as legacy_error:
+            raise SkillInstallError(
+                f"Skill '{name}' was unavailable from both online sources "
+                f"(official: {e}; original marketplace: {legacy_error})."
+            ) from legacy_error
     except SkillInstallError:
         raise
     except Exception as e:
