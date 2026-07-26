@@ -1159,6 +1159,10 @@
                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
                     <i class="fas fa-arrow-up-right-from-square text-xs"></i>
                 </a>
+                <button type="button" onclick="openSkillRestoreDialog()" title="恢复技能配置和数据备份"
+                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
+                    <i class="fas fa-file-arrow-up text-xs"></i>
+                </button>
                 <button type="button" onclick="closeSkillHubModal()" title="关闭在线技能库"
                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
                     <i class="fas fa-xmark"></i>
@@ -1269,6 +1273,46 @@
             </div>
             <div id="skill-hub-detail-content" class="min-h-0 flex-1 overflow-y-auto px-5 py-4"></div>
             <div id="skill-hub-detail-actions" class="flex items-center justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10"></div>
+        </div>
+    </div>
+
+    <!-- Skill update decision -->
+    <div id="skill-update-modal" class="fixed inset-0 z-[220] hidden flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="skill-update-title">
+        <div class="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
+            <div class="flex items-start gap-3 border-b border-slate-200 px-5 py-4 dark:border-white/10">
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary-50 text-primary-600 dark:bg-primary-900/20 dark:text-primary-400"><i class="fas fa-rotate"></i></div>
+                <div class="min-w-0 flex-1"><h3 id="skill-update-title" class="break-words text-base font-semibold text-slate-800 dark:text-slate-100"></h3><p id="skill-update-subtitle" class="mt-1 text-xs text-slate-400"></p></div>
+                <button type="button" onclick="closeSkillUpdateDialog()" title="关闭" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div id="skill-update-content" class="min-h-0 flex-1 overflow-y-auto px-5 py-4"></div>
+            <div class="flex justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10">
+                <button type="button" onclick="closeSkillUpdateDialog()" class="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">取消</button>
+                <button id="skill-update-confirm" type="button" class="rounded-md bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-60">确认更新</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Encrypted skill backup and restore -->
+    <div id="skill-backup-modal" class="fixed inset-0 z-[230] hidden flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="skill-backup-title">
+        <div class="w-full max-w-lg overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl dark:border-white/10 dark:bg-[#1A1A1A]">
+            <div class="flex items-start gap-3 border-b border-slate-200 px-5 py-4 dark:border-white/10">
+                <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400"><i class="fas fa-shield-halved"></i></div>
+                <div class="min-w-0 flex-1"><h3 id="skill-backup-title" class="break-words text-base font-semibold text-slate-800 dark:text-slate-100"></h3><p id="skill-backup-subtitle" class="mt-1 text-xs leading-5 text-slate-400"></p></div>
+                <button type="button" onclick="closeSkillBackupDialog()" title="关闭" class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="space-y-4 px-5 py-5">
+                <label id="skill-backup-export-option" class="hidden items-start gap-3 rounded-md border border-slate-200 p-3 dark:border-white/10">
+                    <input id="skill-backup-before-uninstall" type="checkbox" class="mt-0.5 accent-primary-500" onchange="toggleSkillBackupPassphrase()">
+                    <span><span class="block text-sm font-medium text-slate-700 dark:text-slate-200">先导出加密备份</span><span class="mt-1 block text-xs leading-5 text-slate-400">仅保存技能配置、密钥和用户数据，不包含技能包和依赖环境。</span></span>
+                </label>
+                <label id="skill-backup-file-row" class="hidden block"><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">备份文件</span><input id="skill-backup-file" type="file" accept=".laskill-backup" class="block w-full min-w-0 rounded-md border border-slate-200 bg-white p-2 text-sm text-slate-600 file:mr-3 file:rounded file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs dark:border-white/10 dark:bg-[#151515] dark:text-slate-300 dark:file:bg-white/10"></label>
+                <label id="skill-backup-passphrase-row" class="hidden block"><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">备份口令（至少 8 位）</span><input id="skill-backup-passphrase" type="password" minlength="8" autocomplete="new-password" class="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-400/20 dark:border-white/10 dark:bg-[#151515] dark:text-slate-200"></label>
+                <p id="skill-backup-error" class="hidden break-words rounded-md bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-900/10"></p>
+            </div>
+            <div class="flex flex-wrap justify-end gap-2 border-t border-slate-200 px-5 py-4 dark:border-white/10">
+                <button type="button" onclick="closeSkillBackupDialog()" class="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">取消</button>
+                <button id="skill-backup-confirm" type="button" class="rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-60"></button>
+            </div>
         </div>
     </div>
 

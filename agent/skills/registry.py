@@ -12,6 +12,7 @@ from urllib.parse import quote
 import requests
 
 from cli.utils import SKILL_HUB_API, get_workspace_dir, load_config_json
+from agent.skills.legacy_compat import merge_legacy_requirements
 
 
 DEFAULT_REGISTRY_URL = "https://xiaoguiwucan.github.io/LightAgent-SkillHub/registry.json"
@@ -22,55 +23,8 @@ REGISTRY_PUBLIC_KEYS = {
 _CACHE_WRITE_LOCK = threading.Lock()
 
 
-# The original marketplace does not expose Python/npm dependencies. Keep a
-# reviewed compatibility manifest for entries whose published SKILL.md names
-# concrete packages. Never execute installation commands parsed from skill text.
-LEGACY_SKILL_REQUIREMENTS = {
-    "apple-reminders": {"bins": ["remindctl"]},
-    "docx": {"python": ["defusedxml>=0.7.1"], "npm": ["docx@9.5.1"]},
-    "eda-reporter": {
-        "python": [
-            "pandas", "openpyxl", "numpy", "scipy", "scikit-learn",
-            "jinja2", "pyyaml", "chardet",
-        ],
-    },
-    "email-daily-summary": {"python": ["browser-use[cli]"]},
-    "linkai-cli": {"npm": ["linkai-cli"]},
-    "pdf": {
-        "bins": ["tesseract", "pdftoppm"],
-        "python": ["pytesseract", "pdf2image"],
-    },
-    "post-job": {
-        "npm": ["axios@^1.6.0", "dayjs@^1.11.19", "dotenv@^17.3.1", "fuse.js@^7.0.0"],
-    },
-    "pptx": {
-        "python": ["markitdown[pptx]", "Pillow", "python-pptx"],
-        "npm": ["pptxgenjs"],
-    },
-    "stock-analysis": {"npm": ["@steipete/bird"]},
-    "wechat-article-search": {"npm": ["cheerio"]},
-    "wecom-cli": {"npm": ["@wecom/cli@0.1.9"]},
-    "youtube-upload": {
-        "python": [
-            "google-api-python-client", "google-auth-oauthlib",
-            "google-auth-httplib2",
-        ],
-    },
-}
-
-
 def _legacy_requirements(item):
-    requirements = item.get("requirements") if isinstance(item.get("requirements"), dict) else {}
-    merged = {
-        "env": list(item.get("requires_env") or requirements.get("env") or []),
-        "bins": list(item.get("requires_bins") or requirements.get("bins") or []),
-        "python": list(requirements.get("python") or []),
-        "npm": list(requirements.get("npm") or []),
-        "downloads": list(requirements.get("downloads") or []),
-    }
-    for kind, values in LEGACY_SKILL_REQUIREMENTS.get(str(item.get("name") or ""), {}).items():
-        merged[kind] = list(dict.fromkeys([*merged.get(kind, []), *values]))
-    return merged
+    return merge_legacy_requirements(item)[0]
 
 
 class RegistryError(RuntimeError):
@@ -156,7 +110,7 @@ class SkillRegistryClient:
         raise RegistryError(f"官方技能中心不存在技能 {name}")
 
     def _verify(self, document):
-        if not isinstance(document, dict) or document.get("registry_version") != 1:
+        if not isinstance(document, dict) or document.get("registry_version") not in (1, 2):
             raise RegistrySecurityError("不支持的技能注册表格式")
         signature = document.get("signature")
         if not isinstance(signature, dict) or signature.get("algorithm") != "ed25519":
@@ -244,7 +198,10 @@ class LegacySkillRegistryClient:
                 "detail_url",
                 f"https://skills.cowagent.ai/{quote(str(item.get('name') or ''), safe='')}",
             )
-            item["requirements"] = _legacy_requirements(item)
+            item["requirements"], compat = merge_legacy_requirements(item)
+            item["compat_manifest_version"] = compat.get("manifest_version") if compat else None
+            item["reviewed_artifact_sha256"] = compat.get("artifact_sha256") if compat else None
+            item["integrity_status"] = "reviewed_hash" if item["reviewed_artifact_sha256"] else "first_install_lock"
         query = str(query or "").strip().lower()
         if query:
             normalized = [
@@ -277,7 +234,7 @@ class LegacySkillRegistryClient:
 
     def _normalize(self, item):
         status = "active" if item.get("status") == "published" else str(item.get("status") or "active")
-        return {
+        normalized = {
             **item,
             "description": item.get("description") or item.get("summary") or "",
             "publisher": item.get("author") or item.get("source_provider") or "community",
@@ -288,12 +245,17 @@ class LegacySkillRegistryClient:
             "detail_url": f"https://skills.cowagent.ai/{quote(str(item.get('name') or ''), safe='')}",
             "min_lightagent_version": None,
             "max_lightagent_version": None,
-            "requirements": _legacy_requirements(item),
+            "requirements": {},
             "lightagent": {
                 "network_domains": [], "file_paths": [], "tools": [],
                 "docker_notes": "请根据技能声明预先准备所需命令和环境变量。",
             },
         }
+        normalized["requirements"], compat = merge_legacy_requirements(normalized)
+        normalized["compat_manifest_version"] = compat.get("manifest_version") if compat else None
+        normalized["reviewed_artifact_sha256"] = compat.get("artifact_sha256") if compat else None
+        normalized["integrity_status"] = "reviewed_hash" if normalized["reviewed_artifact_sha256"] else "first_install_lock"
+        return normalized
 
     def _write_cache(self, skills):
         with _CACHE_WRITE_LOCK:

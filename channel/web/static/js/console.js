@@ -6150,7 +6150,7 @@ function updateSkillHubPagination() {
 
 function renderSkillHubCard(skill) {
     const card = document.createElement('article');
-    card.className = 'flex min-h-[220px] min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-primary-300 dark:border-white/10 dark:bg-[#1A1A1A] dark:hover:border-primary-700';
+    card.className = 'flex min-h-[244px] min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-primary-300 dark:border-white/10 dark:bg-[#1A1A1A] dark:hover:border-primary-700';
     const tags = (skill.tags || []).slice(0, 3);
     const selectionKey = `${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`;
     const selected = skillHubState.selected.has(selectionKey);
@@ -6167,6 +6167,9 @@ function renderSkillHubCard(skill) {
         ? (currentLang === 'zh' ? '安装' : 'Install')
         : (primaryAction === 'update' ? (currentLang === 'zh' ? '更新' : 'Update') : (currentLang === 'zh' ? '检查更新' : 'Check updates'));
     const detailUrl = isSafeSkillExternalUrl(skill.detail_url) ? skill.detail_url : '';
+    const integrity = formatSkillIntegrity(skill.integrity_status);
+    const execution = formatSkillExecution(skill.execution_mode);
+    const capabilities = summarizeSkillCapabilities(skill.capability_status);
     card.innerHTML = `
         <div class="flex items-start gap-2">
             <input type="checkbox" data-skill-hub-select class="mt-0.5 shrink-0 accent-primary-500" ${selected ? 'checked' : ''} aria-label="${currentLang === 'zh' ? '选择技能' : 'Select skill'} ${escapeHtml(skill.name)}">
@@ -6178,7 +6181,12 @@ function renderSkillHubCard(skill) {
             <span class="shrink-0 rounded px-2 py-1 text-[10px] font-medium ${stateClass}">${stateLabel}</span>
         </div>
         <p class="my-3 line-clamp-3 flex-1 text-xs leading-5 text-slate-500 dark:text-slate-400">${escapeHtml(skill.description || '--')}</p>
-        <div class="mb-3 flex min-h-5 flex-wrap gap-1">${tags.map(tag => `<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/5 dark:text-slate-400">${escapeHtml(tag)}</span>`).join('')}</div>
+        <div class="mb-2 flex min-h-5 flex-wrap gap-1">${tags.map(tag => `<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/5 dark:text-slate-400">${escapeHtml(tag)}</span>`).join('')}</div>
+        <div class="mb-3 flex flex-wrap gap-1.5 text-[10px]">
+            <span class="rounded bg-emerald-50 px-1.5 py-0.5 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">${escapeHtml(integrity)}</span>
+            <span class="rounded bg-violet-50 px-1.5 py-0.5 text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">${escapeHtml(execution)}</span>
+            <span class="max-w-full truncate rounded ${capabilities.missing ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400'} px-1.5 py-0.5" title="${escapeHtml(capabilities.label)}">${escapeHtml(capabilities.label)}</span>
+        </div>
         <div class="flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-white/5">
             <button type="button" data-skill-action class="rounded-md bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60">${primaryLabel}</button>
             <button type="button" data-skill-details class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">${currentLang === 'zh' ? '详情' : 'Details'}</button>
@@ -6189,11 +6197,38 @@ function renderSkillHubCard(skill) {
     card.querySelector('[data-skill-hub-select]')?.addEventListener('change', event => toggleSkillHubSelection(skill, event.currentTarget.checked));
     card.querySelector('[data-skill-action]')?.addEventListener('click', event => {
         if (primaryAction === 'check') checkSkillHubUpdate(skill.name, event.currentTarget);
-        else runSkillHubAction(primaryAction, skill.name, skill.version || '', event.currentTarget, skill.registry_source);
+        else runSkillHubAction(primaryAction, skill.name, skill.version || '', event.currentTarget, skill.registry_source, skill);
     });
-    card.querySelector('[data-skill-uninstall]')?.addEventListener('click', event => runSkillHubAction('uninstall', skill.name, '', event.currentTarget, skill.registry_source));
+    card.querySelector('[data-skill-uninstall]')?.addEventListener('click', event => runSkillHubAction('uninstall', skill.name, '', event.currentTarget, skill.registry_source, skill));
     card.querySelector('[data-skill-details]')?.addEventListener('click', () => openSkillHubDetail(skill));
     return card;
+}
+
+function formatSkillIntegrity(value) {
+    const labels = currentLang === 'zh'
+        ? {official_signed:'官方签名', reviewed_hash:'已审核哈希', first_install_lock:'首次安装锁定'}
+        : {official_signed:'Official signature', reviewed_hash:'Reviewed hash', first_install_lock:'First-install lock'};
+    return labels[value] || (currentLang === 'zh' ? '未记录完整性' : 'Integrity not recorded');
+}
+
+function formatSkillExecution(value) {
+    const labels = currentLang === 'zh'
+        ? {runner:'Skill Runner', compatibility:'Runner 兼容隔离', local:'本地执行'}
+        : {runner:'Skill Runner', compatibility:'Runner compatibility', local:'Local execution'};
+    return labels[value] || labels.compatibility;
+}
+
+function summarizeSkillCapabilities(statuses) {
+    const values = Array.isArray(statuses) ? statuses : [];
+    if (!values.length) return {missing:false, label:currentLang === 'zh' ? '无额外系统能力' : 'No extra system capability'};
+    const missing = values.filter(item => !item.available);
+    const names = (missing.length ? missing : values).map(item => item.label || item.name).join('、');
+    return {
+        missing: missing.length > 0,
+        label: missing.length
+            ? (currentLang === 'zh' ? `缺少能力：${names}` : `Missing: ${names}`)
+            : (currentLang === 'zh' ? `能力就绪：${names}` : `Ready: ${names}`),
+    };
 }
 
 function toggleSkillHubSelection(skill, checked) {
@@ -6323,10 +6358,18 @@ function openSkillHubDetail(skill) {
         [currentLang === 'zh' ? '文件路径' : 'File paths', skill.lightagent?.file_paths || []],
         [currentLang === 'zh' ? '工具权限' : 'Tools', skill.lightagent?.tools || []],
     ];
+    const integrity = formatSkillIntegrity(skill.integrity_status);
+    const execution = formatSkillExecution(skill.execution_mode);
+    const capabilities = summarizeSkillCapabilities(skill.capability_status);
     document.getElementById('skill-hub-detail-title').textContent = skill.name || '';
     document.getElementById('skill-hub-detail-meta').textContent = `v${skill.version || '--'} · ${skill.publisher || skill.author || 'community'} · ${skill.registry_label || 'LightAgent Skill Hub'}`;
     content.innerHTML = `
         <p class="text-sm leading-6 text-slate-600 dark:text-slate-300">${escapeHtml(skill.description || '--')}</p>
+        <div class="mt-4 grid gap-2 sm:grid-cols-3">
+            <div class="rounded-md bg-emerald-50 p-3 dark:bg-emerald-900/10"><span class="block text-[10px] uppercase text-emerald-600">${currentLang === 'zh' ? '来源完整性' : 'Integrity'}</span><strong class="mt-1 block break-words text-xs font-medium text-emerald-800 dark:text-emerald-300">${escapeHtml(integrity)}</strong></div>
+            <div class="rounded-md bg-violet-50 p-3 dark:bg-violet-900/10"><span class="block text-[10px] uppercase text-violet-600">${currentLang === 'zh' ? '执行模式' : 'Execution'}</span><strong class="mt-1 block break-words text-xs font-medium text-violet-800 dark:text-violet-300">${escapeHtml(execution)}</strong></div>
+            <div class="rounded-md ${capabilities.missing ? 'bg-amber-50 dark:bg-amber-900/10' : 'bg-slate-50 dark:bg-white/[0.03]'} p-3"><span class="block text-[10px] uppercase ${capabilities.missing ? 'text-amber-600' : 'text-slate-400'}">${currentLang === 'zh' ? '系统能力' : 'Capabilities'}</span><strong class="mt-1 block break-words text-xs font-medium ${capabilities.missing ? 'text-amber-800 dark:text-amber-300' : 'text-slate-600 dark:text-slate-300'}">${escapeHtml(capabilities.label)}</strong></div>
+        </div>
         <div class="mt-5 grid gap-4 sm:grid-cols-2">
             <section class="min-w-0"><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '兼容与来源' : 'Compatibility'}</h4><dl class="mt-2 space-y-2 text-xs"><div><dt class="text-slate-400">LightAgent</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml(skill.min_lightagent_version || '--')} - ${escapeHtml(skill.max_lightagent_version || 'latest')}</dd></div><div><dt class="text-slate-400">${currentLang === 'zh' ? '平台' : 'Platforms'}</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml((skill.platforms || []).join(', ') || '--')}</dd></div><div><dt class="text-slate-400">${currentLang === 'zh' ? '作者' : 'Author'}</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml(skill.author || '--')}</dd></div></dl></section>
             <section class="min-w-0"><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '依赖' : 'Dependencies'}</h4><dl class="mt-2 space-y-2 text-xs">${[['Python', requirements.python], ['npm', requirements.npm], [currentLang === 'zh' ? '命令' : 'Binaries', requirements.bins], [currentLang === 'zh' ? '环境变量' : 'Environment', requirements.env]].map(([label, values]) => `<div><dt class="text-slate-400">${label}</dt><dd class="mt-0.5 break-words text-slate-600 dark:text-slate-300">${escapeHtml((values || []).join(', ') || '--')}</dd></div>`).join('')}</dl></section>
@@ -6357,7 +6400,7 @@ function openSkillHubDetail(skill) {
     actionButton.textContent = labels[action];
     actionButton.addEventListener('click', event => {
         if (action === 'check') checkSkillHubUpdate(skill.name, event.currentTarget);
-        else runSkillHubAction(action, skill.name, skill.version || '', event.currentTarget, skill.registry_source);
+        else runSkillHubAction(action, skill.name, skill.version || '', event.currentTarget, skill.registry_source, skill);
     });
     actions.append(closeButton);
     if (skill.installed) {
@@ -6373,7 +6416,7 @@ function openSkillHubDetail(skill) {
         uninstallButton.type = 'button';
         uninstallButton.className = 'rounded-md border border-red-200 px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:border-red-900/50 dark:hover:bg-red-900/10';
         uninstallButton.textContent = currentLang === 'zh' ? '卸载' : 'Uninstall';
-        uninstallButton.addEventListener('click', event => runSkillHubAction('uninstall', skill.name, '', event.currentTarget));
+        uninstallButton.addEventListener('click', event => runSkillHubAction('uninstall', skill.name, '', event.currentTarget, skill.registry_source, skill));
         actions.append(uninstallButton);
     }
     actions.append(actionButton);
@@ -6384,14 +6427,190 @@ function closeSkillHubDetail() {
     document.getElementById('skill-hub-detail-modal')?.classList.add('hidden');
 }
 
-async function runSkillHubAction(action, name, version, button = null, source = '') {
-    const destructive = action === 'update' || action === 'rollback' || action === 'uninstall';
-    const uninstallWarning = action === 'uninstall'
-        ? (currentLang === 'zh'
-            ? '\n\n技能包、依赖环境、配置、密钥、用户数据和所有回滚版本将永久删除，且无法恢复。'
-            : '\n\nThe skill package, dependency environment, configuration, secrets, user data, and rollback versions will be permanently deleted and cannot be recovered.')
-        : '';
-    if (destructive && !confirm((currentLang === 'zh' ? `确认对技能 ${name} 执行${{update:'更新',rollback:'回滚',uninstall:'彻底卸载'}[action]}？` : `Confirm ${action} for ${name}?`) + uninstallWarning)) return;
+let pendingSkillUpdate = null;
+let pendingSkillUninstall = null;
+
+function renderSkillChangeItems(changes) {
+    const groups = [];
+    const collect = (section, prefix) => Object.entries(section || {}).forEach(([name, value]) => {
+        if (!value?.changed) return;
+        const details = [
+            ...(value.added || []).map(item => `+ ${item}`),
+            ...(value.removed || []).map(item => `- ${item}`),
+        ];
+        groups.push(`<div class="rounded-md border border-slate-200 p-3 dark:border-white/10"><strong class="block text-xs font-medium text-slate-700 dark:text-slate-200">${escapeHtml(prefix)} · ${escapeHtml(name)}</strong><p class="mt-1 whitespace-pre-wrap break-words text-xs leading-5 text-slate-500 dark:text-slate-400">${escapeHtml(details.join('\n') || (currentLang === 'zh' ? '已变更' : 'Changed'))}</p></div>`);
+    });
+    collect(changes?.requirements, currentLang === 'zh' ? '依赖/系统能力' : 'Dependencies/capabilities');
+    collect(changes?.permissions, currentLang === 'zh' ? '执行权限' : 'Execution permissions');
+    return groups.join('') || `<p class="text-xs text-slate-400">${currentLang === 'zh' ? '未检测到依赖或权限变化。' : 'No dependency or permission changes detected.'}</p>`;
+}
+
+function openSkillUpdateDialog(skill, onConfirm) {
+    const modal = document.getElementById('skill-update-modal');
+    const content = document.getElementById('skill-update-content');
+    const button = document.getElementById('skill-update-confirm');
+    if (!modal || !content || !button) return;
+    const changes = skill.changes || {};
+    const notes = changes.release_notes || (currentLang === 'zh' ? '发布者未提供更新说明' : 'The publisher did not provide release notes');
+    const breaking = Array.isArray(changes.breaking_changes) ? changes.breaking_changes : [];
+    document.getElementById('skill-update-title').textContent = `${currentLang === 'zh' ? '更新技能' : 'Update skill'} ${skill.name}`;
+    document.getElementById('skill-update-subtitle').textContent = `${skill.installed_version || skill.version || '--'} → ${skill.available_version || skill.target_version || '--'} · ${skill.registry_label || (skill.source === 'cowagent-skillhub' ? '原技能广场' : 'LightAgent Skill Hub')}`;
+    content.innerHTML = `
+        <section><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '发布说明' : 'Release notes'}</h4><p class="mt-2 whitespace-pre-wrap break-words rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600 dark:bg-white/[0.03] dark:text-slate-300">${escapeHtml(notes)}</p></section>
+        <section class="mt-5"><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '破坏性变更' : 'Breaking changes'}</h4>${breaking.length ? `<ul class="mt-2 space-y-2">${breaking.map(item => `<li class="break-words rounded-md bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800 dark:bg-amber-900/10 dark:text-amber-300">${escapeHtml(item)}</li>`).join('')}</ul>` : `<p class="mt-2 text-xs text-slate-400">${currentLang === 'zh' ? '未声明破坏性变更。' : 'No breaking changes declared.'}</p>`}</section>
+        <section class="mt-5"><h4 class="text-xs font-semibold uppercase text-slate-400">${currentLang === 'zh' ? '依赖、能力与权限变化' : 'Dependency, capability and permission changes'}</h4><div class="mt-2 grid gap-2 sm:grid-cols-2">${renderSkillChangeItems(changes)}</div></section>
+        <p class="mt-5 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs leading-5 text-blue-700 dark:border-blue-900/30 dark:bg-blue-900/10 dark:text-blue-300">${currentLang === 'zh' ? '更新前会保存上一版本；新包、依赖、入口或完整性校验失败时自动恢复。' : 'The previous version is preserved and restored automatically if package, dependency, entrypoint, or integrity validation fails.'}</p>`;
+    pendingSkillUpdate = onConfirm;
+    button.onclick = async () => {
+        const callback = pendingSkillUpdate;
+        closeSkillUpdateDialog();
+        if (callback) await callback();
+    };
+    modal.classList.remove('hidden');
+}
+
+function closeSkillUpdateDialog() {
+    document.getElementById('skill-update-modal')?.classList.add('hidden');
+    pendingSkillUpdate = null;
+}
+
+function openSkillUninstallDialog(name, onConfirm) {
+    const modal = document.getElementById('skill-backup-modal');
+    if (!modal) return;
+    pendingSkillUninstall = {name, onConfirm};
+    document.getElementById('skill-backup-title').textContent = `彻底卸载 ${name}`;
+    document.getElementById('skill-backup-subtitle').textContent = '技能包、私有依赖、回滚版本、配置、密钥和用户数据将永久删除。';
+    document.getElementById('skill-backup-export-option').classList.replace('hidden', 'flex');
+    document.getElementById('skill-backup-file-row').classList.add('hidden');
+    document.getElementById('skill-backup-before-uninstall').checked = false;
+    document.getElementById('skill-backup-passphrase-row').classList.add('hidden');
+    document.getElementById('skill-backup-passphrase').value = '';
+    const confirmButton = document.getElementById('skill-backup-confirm');
+    confirmButton.textContent = '彻底卸载';
+    confirmButton.className = 'rounded-md bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 disabled:opacity-60';
+    confirmButton.onclick = submitSkillUninstall;
+    setSkillBackupError('');
+    modal.classList.remove('hidden');
+}
+
+function openSkillRestoreDialog() {
+    const modal = document.getElementById('skill-backup-modal');
+    if (!modal) return;
+    pendingSkillUninstall = null;
+    document.getElementById('skill-backup-title').textContent = '恢复技能备份';
+    document.getElementById('skill-backup-subtitle').textContent = '请先重新安装同名技能，再恢复加密备份中的配置、密钥和用户数据。';
+    document.getElementById('skill-backup-export-option').classList.add('hidden');
+    document.getElementById('skill-backup-file-row').classList.remove('hidden');
+    document.getElementById('skill-backup-file').value = '';
+    document.getElementById('skill-backup-passphrase-row').classList.remove('hidden');
+    document.getElementById('skill-backup-passphrase').value = '';
+    const confirmButton = document.getElementById('skill-backup-confirm');
+    confirmButton.textContent = '恢复备份';
+    confirmButton.className = 'rounded-md bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-60';
+    confirmButton.onclick = submitSkillRestore;
+    setSkillBackupError('');
+    modal.classList.remove('hidden');
+}
+
+function closeSkillBackupDialog() {
+    document.getElementById('skill-backup-modal')?.classList.add('hidden');
+    pendingSkillUninstall = null;
+    setSkillBackupError('');
+}
+
+function toggleSkillBackupPassphrase() {
+    const checked = document.getElementById('skill-backup-before-uninstall')?.checked;
+    document.getElementById('skill-backup-passphrase-row')?.classList.toggle('hidden', !checked);
+}
+
+function setSkillBackupError(message) {
+    const element = document.getElementById('skill-backup-error');
+    if (!element) return;
+    element.textContent = message || '';
+    element.classList.toggle('hidden', !message);
+}
+
+async function exportSkillBackup(name, passphrase) {
+    const response = await fetch('/api/skill-hub', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action:'export_backup', name, passphrase})});
+    const data = await response.json();
+    if (data.status !== 'success') throw new Error(data.message || '备份导出失败');
+    const download = await fetch(`/api/skill-hub/backup/${encodeURIComponent(data.backup.token)}`);
+    if (!download.ok) throw new Error('备份下载失败');
+    const blob = await download.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = data.backup.filename || `${name}.laskill-backup`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+}
+
+async function submitSkillUninstall() {
+    if (!pendingSkillUninstall) return;
+    const button = document.getElementById('skill-backup-confirm');
+    const exportFirst = document.getElementById('skill-backup-before-uninstall').checked;
+    const passphrase = document.getElementById('skill-backup-passphrase').value;
+    if (exportFirst && passphrase.length < 8) {
+        setSkillBackupError('备份口令至少需要 8 个字符。');
+        return;
+    }
+    button.disabled = true;
+    const pending = pendingSkillUninstall;
+    try {
+        if (exportFirst) await exportSkillBackup(pending.name, passphrase);
+        document.getElementById('skill-backup-modal').classList.add('hidden');
+        pendingSkillUninstall = null;
+        await pending.onConfirm();
+    } catch (error) {
+        setSkillBackupError(error.message);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function submitSkillRestore() {
+    const file = document.getElementById('skill-backup-file').files?.[0];
+    const passphrase = document.getElementById('skill-backup-passphrase').value;
+    if (!file || passphrase.length < 8) {
+        setSkillBackupError('请选择 .laskill-backup 文件并输入至少 8 位口令。');
+        return;
+    }
+    const button = document.getElementById('skill-backup-confirm');
+    button.disabled = true;
+    try {
+        const form = new FormData();
+        form.append('backup', file);
+        form.append('passphrase', passphrase);
+        const response = await fetch('/api/skill-hub/backup/restore', {method:'POST', body:form});
+        const data = await response.json();
+        if (data.status !== 'success') throw new Error(data.message || '备份恢复失败');
+        closeSkillBackupDialog();
+        alert(`已恢复 ${data.restore?.name || ''} 的配置和用户数据。`);
+        loadSkillsSection();
+    } catch (error) {
+        setSkillBackupError(error.message);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+async function runSkillHubAction(action, name, version, button = null, source = '', skill = null) {
+    const actionSkill = skill || skillHubState.skills.find(item => item.name === name) || {name, installed_version:'--', available_version:version, source};
+    if (action === 'update') {
+        openSkillUpdateDialog(actionSkill, () => performSkillHubAction(action, name, version, button, source));
+        return;
+    }
+    if (action === 'uninstall') {
+        openSkillUninstallDialog(name, () => performSkillHubAction(action, name, version, button, source));
+        return;
+    }
+    if (action === 'rollback' && !confirm(currentLang === 'zh' ? `确认回滚技能 ${name}？` : `Confirm rollback for ${name}?`)) return;
+    return performSkillHubAction(action, name, version, button, source);
+}
+
+async function performSkillHubAction(action, name, version, button = null, source = '') {
     const originalButton = button?.innerHTML;
     if (button) {
         button.disabled = true;
@@ -6423,6 +6642,16 @@ document.addEventListener('input', event => {
 
 document.addEventListener('keydown', event => {
     if (event.key !== 'Escape') return;
+    const backup = document.getElementById('skill-backup-modal');
+    if (backup && !backup.classList.contains('hidden')) {
+        closeSkillBackupDialog();
+        return;
+    }
+    const update = document.getElementById('skill-update-modal');
+    if (update && !update.classList.contains('hidden')) {
+        closeSkillUpdateDialog();
+        return;
+    }
     const detail = document.getElementById('skill-hub-detail-modal');
     if (detail && !detail.classList.contains('hidden')) {
         closeSkillHubDetail();
@@ -6537,6 +6766,9 @@ function renderSkillCard(card, sk) {
             ? `${currentLang === 'zh' ? '发现新版本' : 'New version'} v${escapeHtml(sk.available_version || '--')}`
             : (sk.update_status === 'latest' ? (currentLang === 'zh' ? '当前已是最新版本' : 'Up to date') : (currentLang === 'zh' ? '等待更新检查' : 'Waiting for update check')))
         : '';
+    const integrity = sk.hub_managed ? formatSkillIntegrity(sk.integrity_status) : '';
+    const execution = formatSkillExecution(sk.execution_mode);
+    const capabilities = summarizeSkillCapabilities(sk.capability_status);
     card.innerHTML = `
         <input type="checkbox" data-skill-bulk-select value="${escapeHtml(sk.name)}"
             class="mt-2 accent-primary-500" title="${currentLang === 'zh' ? '选择用于批量授权' : 'Select for bulk access'}">
@@ -6550,6 +6782,9 @@ function renderSkillCard(card, sk) {
                     <div class="mt-1 flex flex-wrap items-center gap-1.5">
                         <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/10 dark:text-slate-400">${versionLabel}</span>
                         <span class="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">${sourceLabel}</span>
+                        ${sk.hub_managed ? `<span class="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400">${escapeHtml(integrity)}</span>` : ''}
+                        <span class="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] text-violet-700 dark:bg-violet-900/20 dark:text-violet-400">${escapeHtml(execution)}</span>
+                        ${sk.hub_managed ? `<span class="max-w-full truncate rounded ${capabilities.missing ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/20 dark:text-amber-400' : 'bg-slate-100 text-slate-500 dark:bg-white/10 dark:text-slate-400'} px-1.5 py-0.5 text-[10px]" title="${escapeHtml(capabilities.label)}">${escapeHtml(capabilities.label)}</span>` : ''}
                     </div>
                 </div>
                 <button
@@ -6581,8 +6816,8 @@ function renderSkillCard(card, sk) {
         </div>`;
     card._skillData = sk;
     card.querySelector('[data-local-skill-check]')?.addEventListener('click', event => checkSkillHubUpdate(sk.name, event.currentTarget));
-    card.querySelector('[data-local-skill-update]')?.addEventListener('click', event => runSkillHubAction('update', sk.name, sk.available_version || '', event.currentTarget));
-    card.querySelector('[data-local-skill-uninstall]')?.addEventListener('click', event => runSkillHubAction('uninstall', sk.name, '', event.currentTarget));
+    card.querySelector('[data-local-skill-update]')?.addEventListener('click', event => runSkillHubAction('update', sk.name, sk.available_version || '', event.currentTarget, sk.source, sk));
+    card.querySelector('[data-local-skill-uninstall]')?.addEventListener('click', event => runSkillHubAction('uninstall', sk.name, '', event.currentTarget, sk.source, sk));
 }
 
 function updateSkillUpdateBadge(count) {

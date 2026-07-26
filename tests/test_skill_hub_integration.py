@@ -35,6 +35,7 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         self.assertNotIn("approve-risk", frontend)
         self.assertIn("id=\"skill-hub-select-page\"", html)
         self.assertIn("id=\"skill-hub-batch-result\"", html)
+        self.assertIn("id=\"skill-backup-modal\"", html)
         self.assertIn('data-skill-hub-source="lightagent-skillhub"', html)
         self.assertIn('data-skill-hub-source="cowagent-skillhub"', html)
         self.assertIn("source: 'lightagent-skillhub'", frontend)
@@ -52,7 +53,9 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         backend = (ROOT / "channel/web/web_channel.py").read_text(encoding="utf-8")
         for field in (
             '"installed_version"', '"available_version"', '"update_available"',
-            '"update_status"', '"last_checked_at"',
+            '"update_status"', '"last_checked_at"', '"integrity_status"',
+            '"capability_status"', '"execution_mode"', '"changes"',
+            '"backup_available"',
         ):
             self.assertIn(field, backend)
         self.assertIn('if action == "batch":', backend)
@@ -136,6 +139,27 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         )
         message = executor._build_tool_not_found_message("snapshot-skill")
         self.assertIn("OLD SNAPSHOT CONTENT", message)
+
+    def test_active_executor_injects_snapshot_into_skill_runner(self):
+        old_skill = Skill(
+            name="snapshot-skill", description="old", file_path="/old/SKILL.md",
+            base_dir="/old", source="custom", content="OLD SNAPSHOT CONTENT",
+        )
+        snapshot = SkillSnapshot(prompt="", skills=[], resolved_skills=[old_skill])
+
+        class SnapshotTool:
+            name = "skill_run"
+
+            def set_skill_snapshot(self, value):
+                self.snapshot = value
+
+        tool = SnapshotTool()
+        AgentStreamExecutor(
+            agent=SimpleNamespace(skill_manager=None), model=None,
+            system_prompt="", tools=[tool], skill_snapshot=snapshot,
+        )
+
+        self.assertIs(old_skill, tool.snapshot["snapshot-skill"])
 
     def test_hub_skill_snapshot_pins_scripts_until_request_finishes(self):
         with tempfile.TemporaryDirectory() as workspace:

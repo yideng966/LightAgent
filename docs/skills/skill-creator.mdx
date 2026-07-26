@@ -77,6 +77,10 @@ metadata:
 
 **Skills are auto-enabled/disabled based on dependencies**: they activate when all required environment variables are present and deactivate when any are missing — no need for manual `/skill enable`.
 
+## Schema v2 script entrypoints
+
+New or upgraded script skills published to the official Hub must declare `schema_version: 2` and structured `lightagent.entrypoints`. Their instructions call `skill_run` with a skill name, entrypoint name, and string argument array; they must not tell the Agent to launch skill scripts through Bash, Python, or Node command strings. System components use stable `requirements.capabilities` names and are never installed through runtime apt, brew, or sudo commands.
+
 ## Resource Directories
 
 | Directory | What goes here | What does NOT go here |

@@ -19,6 +19,7 @@ from typing import Dict, List, Optional
 import requests
 
 from agent.skills.frontmatter import parse_frontmatter
+from agent.skills.capabilities import capability_status, require_capabilities
 from agent.skills.registry import (
     LegacySkillRegistryClient, RegistryError, RegistrySecurityError,
     SkillRegistryClient,
@@ -166,11 +167,21 @@ class SkillLifecycleManager:
         local = self.installed().get(name)
         if not local:
             raise SkillLifecycleError(f"技能 {name} 尚未通过官方技能中心安装")
-        return self.install(
+        record = self.install(
             name,
             expected_version=expected_version,
             source=source or local.get("source"),
         )
+        finding = self.verify(name)[0]
+        if not finding.get("ok"):
+            try:
+                self.rollback(name)
+            except Exception as rollback_error:
+                raise SkillLifecycleError(
+                    f"技能 {name} 更新后校验失败，且自动回滚失败: {rollback_error}"
+                ) from rollback_error
+            raise SkillLifecycleError(f"技能 {name} 更新后校验失败，已自动恢复上一版本")
+        return record
 
     def batch(self, operation, skills, purge_data=False):
         if operation not in ("install", "update", "uninstall"):
@@ -319,6 +330,16 @@ class SkillLifecycleManager:
             raise RegistrySecurityError(f"技能 {name} 下载包超过 50 MiB 限制")
         actual = hashlib.sha256(package).hexdigest()
         is_legacy = skill.get("registry_source") == LegacySkillRegistryClient.SOURCE
+        existing = self.installed().get(name) or {}
+        reviewed_hash = str(skill.get("reviewed_artifact_sha256") or "").lower()
+        if is_legacy and reviewed_hash and actual != reviewed_hash:
+            raise RegistrySecurityError(f"技能 {name} 下载包与审核清单 SHA-256 不匹配")
+        if (
+            is_legacy and existing.get("source") == LegacySkillRegistryClient.SOURCE
+            and str(existing.get("version")) == str(skill.get("version"))
+            and existing.get("artifact_sha256") and actual != existing.get("artifact_sha256")
+        ):
+            raise RegistrySecurityError(f"技能 {name} 同版本产物已变化，拒绝静默覆盖")
         if not is_legacy and actual != str(skill.get("sha256", "")).lower():
             raise RegistrySecurityError(f"技能 {name} 下载包 SHA-256 不匹配")
         os.makedirs(self.skills_dir, exist_ok=True)
@@ -332,10 +353,13 @@ class SkillLifecycleManager:
                 not is_legacy and str(metadata.get("version")) != str(skill.get("version"))
             ):
                 raise RegistrySecurityError("技能包元数据与注册表不一致")
+            self._validate_entrypoints(metadata, source)
             staged_skill = os.path.join(stage, "ready")
             shutil.copytree(source, staged_skill)
             staged_env = os.path.join(stage, "environment")
+            capabilities = require_capabilities(skill)
             self._install_dependencies(skill, staged_env)
+            self._verify_staged_dependencies(skill, staged_env)
             env_target = os.path.join(self.envs_dir, name)
             self._prepare_skill_runtime_links(staged_skill, staged_env, env_target)
             previous = None
@@ -377,15 +401,27 @@ class SkillLifecycleManager:
             "source_url": skill.get("repository") or skill.get("source_url"),
             "source_commit": skill.get("source_commit"),
             "artifact_sha256": actual,
+            "integrity_status": (
+                "official_signed" if not is_legacy
+                else ("reviewed_hash" if reviewed_hash else "first_install_lock")
+            ),
+            "compat_manifest_version": skill.get("compat_manifest_version"),
             "tree_sha256": _tree_hash(os.path.join(self.skills_dir, name)),
             "dependency_fingerprint": fingerprint,
             "requirements": skill.get("requirements", {}),
+            "lightagent": skill.get("lightagent", {}),
+            "capabilities": capabilities,
+            "schema_version": int(metadata.get("schema_version") or skill.get("schema_version") or 1),
+            "execution_mode": "runner" if metadata.get("lightagent", {}).get("entrypoints") else "compatibility",
+            "entrypoints": metadata.get("lightagent", {}).get("entrypoints", []),
             "missing_env": [
                 key for key in skill.get("requirements", {}).get("env", [])
                 if not os.environ.get(str(key))
             ],
             "installed_at": datetime.now(timezone.utc).isoformat(),
             "status": skill.get("status", "active"),
+            "release_notes": skill.get("release_notes") or "",
+            "breaking_changes": list(skill.get("breaking_changes") or []),
             "previous": previous,
         }
         lock = self._load_lock()
@@ -538,6 +574,35 @@ class SkillLifecycleManager:
                 handle.write(response.content)
 
     @staticmethod
+    def _validate_entrypoints(metadata, skill_root):
+        schema_version = int(metadata.get("schema_version") or 1)
+        entrypoints = metadata.get("lightagent", {}).get("entrypoints") or []
+        scripts_dir = Path(skill_root, "scripts")
+        has_scripts = scripts_dir.is_dir() and any(path.is_file() for path in scripts_dir.rglob("*"))
+        if schema_version >= 2 and has_scripts and not entrypoints:
+            raise RegistrySecurityError("Schema v2 脚本技能必须声明结构化 entrypoints")
+        names = set()
+        root = Path(skill_root).resolve()
+        for entrypoint in entrypoints:
+            name = str(entrypoint.get("name") or "")
+            if not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", name) or name in names:
+                raise RegistrySecurityError("技能 entrypoint 名称无效或重复")
+            names.add(name)
+            path = (root / str(entrypoint.get("path") or "")).resolve()
+            if root not in path.parents or not path.is_file() or path.is_symlink():
+                raise RegistrySecurityError(f"技能 entrypoint 路径无效: {entrypoint.get('path')}")
+            if entrypoint.get("runtime") not in ("python", "node", "executable"):
+                raise RegistrySecurityError("技能 entrypoint runtime 无效")
+
+    @staticmethod
+    def _verify_staged_dependencies(skill, env_dir):
+        requirements = skill.get("requirements") or {}
+        if requirements.get("python") and not os.path.isdir(os.path.join(env_dir, "python")):
+            raise SkillLifecycleError(f"技能 {skill.get('name')} 的 Python 依赖环境未生成")
+        if requirements.get("npm") and not os.path.isdir(os.path.join(env_dir, "npm", "node_modules")):
+            raise SkillLifecycleError(f"技能 {skill.get('name')} 的 npm 依赖环境未生成")
+
+    @staticmethod
     def _run_dependency_command(skill, kind, command):
         try:
             subprocess.run(
@@ -616,11 +681,22 @@ class SkillLifecycleManager:
         try:
             with open(self.lock_path, "r", encoding="utf-8") as handle:
                 value = json.load(handle)
-            return value if isinstance(value, dict) else {"lock_version": 1, "skills": {}}
+            if not isinstance(value, dict):
+                value = {"skills": {}}
+            value["lock_version"] = 2
+            value.setdefault("skills", {})
+            for entry in value["skills"].values():
+                entry.setdefault("integrity_status", "official_signed" if entry.get("source") == "lightagent-skillhub" else "first_install_lock")
+                entry.setdefault("capabilities", capability_status((entry.get("requirements") or {}).get("capabilities", [])))
+                entry.setdefault("schema_version", 1)
+                entry.setdefault("execution_mode", "compatibility")
+                entry.setdefault("entrypoints", [])
+            return value
         except (FileNotFoundError, json.JSONDecodeError):
-            return {"lock_version": 1, "skills": {}}
+            return {"lock_version": 2, "skills": {}}
 
     def _save_lock(self, value):
+        value["lock_version"] = 2
         os.makedirs(os.path.dirname(self.lock_path), exist_ok=True)
         temp = self.lock_path + ".tmp"
         with open(temp, "w", encoding="utf-8") as handle:

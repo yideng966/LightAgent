@@ -1,0 +1,24 @@
+{
+  "manifest_version": 1,
+  "full_image": "yideng966/lightagent:skills-full",
+  "capabilities": {
+    "office-documents": {
+      "label_zh": "Office 文档处理",
+      "probes": [{"type": "bin", "value": "libreoffice"}],
+      "docker_packages": ["libreoffice", "poppler-utils", "tesseract-ocr"],
+      "build_pack": "office"
+    },
+    "media-processing": {
+      "label_zh": "媒体处理",
+      "probes": [{"type": "bin", "value": "ffmpeg"}],
+      "docker_packages": ["ffmpeg"],
+      "build_pack": "media"
+    },
+    "browser-automation": {
+      "label_zh": "浏览器自动化",
+      "probes": [{"type": "python_module", "value": "playwright"}],
+      "docker_packages": [],
+      "build_pack": "browser"
+    }
+  }
+}
