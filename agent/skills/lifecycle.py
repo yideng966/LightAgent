@@ -115,7 +115,9 @@ class SkillLifecycleManager:
 
     def install(self, name, expected_version=None, source=None):
         if source == LegacySkillRegistryClient.SOURCE:
-            skill = self.legacy_registry.get_skill(name)
+            raise SkillLifecycleError(
+                "原技能广场仅提供技能介绍页浏览，不支持在 LightAgent 中一键安装"
+            )
         else:
             skill = self.registry.get_skill(name)
             skill.setdefault("registry_source", "lightagent-skillhub")
@@ -129,10 +131,6 @@ class SkillLifecycleManager:
             item["name"]: item
             for item in self.registry.list_skills(include_unavailable=True)
         }
-        try:
-            legacy = {item["name"]: item for item in self.legacy_registry.list_skills()}
-        except RegistryError:
-            legacy = {}
         revocations = []
         try:
             revocations = self.registry.load().data.get("revocations", [])
@@ -144,11 +142,9 @@ class SkillLifecycleManager:
         }
         result = []
         for name, local in self.installed().items():
-            item = (
-                legacy.get(name)
-                if local.get("source") == LegacySkillRegistryClient.SOURCE
-                else official.get(name)
-            )
+            if local.get("source") == LegacySkillRegistryClient.SOURCE:
+                continue
+            item = official.get(name)
             if not item:
                 continue
             revoked = revoked_versions.get((name, str(local.get("version"))))
@@ -203,6 +199,16 @@ class SkillLifecycleManager:
             seen.add(name)
             try:
                 installed = self.installed()
+                if (
+                    source == LegacySkillRegistryClient.SOURCE
+                    and operation in ("install", "update")
+                ):
+                    results.append({
+                        "name": name,
+                        "status": "skipped",
+                        "reason": "catalog_only",
+                    })
+                    continue
                 if operation == "install":
                     if name in installed:
                         results.append({"name": name, "status": "skipped", "reason": "already_installed"})
@@ -214,11 +220,14 @@ class SkillLifecycleManager:
                         results.append({"name": name, "status": "skipped", "reason": "not_installed"})
                         continue
                     remote_source = source or local.get("source")
-                    remote = (
-                        self.legacy_registry.get_skill(name)
-                        if remote_source == LegacySkillRegistryClient.SOURCE
-                        else self.registry.get_skill(name)
-                    )
+                    if remote_source == LegacySkillRegistryClient.SOURCE:
+                        results.append({
+                            "name": name,
+                            "status": "skipped",
+                            "reason": "catalog_only",
+                        })
+                        continue
+                    remote = self.registry.get_skill(name)
                     if _version_tuple(remote.get("version")) <= _version_tuple(local.get("version")):
                         results.append({"name": name, "status": "skipped", "reason": "already_latest"})
                         continue

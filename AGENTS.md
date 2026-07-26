@@ -269,6 +269,7 @@ docker push yideng966/lightagent:latest
 - Skill Hub 安装必须以签名索引和 SHA-256 为信任边界；后备源只能安装与已验证索引中来源身份和哈希一致的产物，不得用后备源自身返回的哈希建立信任。
 - Hub 技能不得覆盖内置技能或非 Hub 同名技能；更新、回滚和卸载必须保持配置与用户数据分离，声明的普通依赖与带 SHA-256 的下载依赖在安装时自动处理。
 - 原技能广场未提供结构化依赖时，只能通过代码内人工审核的兼容清单补充依赖；不得解析或执行 `SKILL.md` 中的任意安装命令，依赖安装失败时不得写锁文件或替换现有技能。
+- 原技能广场在 Web 和 CLI 中仅作为只读目录与介绍页跳转来源，不得提供一键安装、在线更新或批量管理入口；历史已安装技能只保留彻底卸载能力。
 - 技能隔离依赖只能根据 `skills.lock.json` 中已安装的安全技能名称注入子进程环境；Python/npm 依赖保持按技能目录隔离，npm 安装不得默认执行第三方生命周期脚本。
 - 官方 Skill Hub 的仓库与 Pages 地址以 `xiaoguiwucan/LightAgent-SkillHub` 为准；修改 Registry 默认地址时必须同步检查配置模板、CLI、Web 入口、文档和签名索引构建配置。
 - Schema v2 脚本技能必须声明结构化 `lightagent.entrypoints` 并通过 `skill_run` 执行；不得让 Agent 通过 Bash/Python/Node 命令字符串绕过 Runner。

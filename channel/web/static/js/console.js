@@ -175,7 +175,7 @@ const I18N = {
         config_password_changed: '密码已更新，请重新登录',
         config_password_cleared: '密码已清除',
         skills_title: '技能管理', skills_desc: '查看、启用或禁用 Agent 工具和技能', skills_hub_btn: '获取在线技能',
-        skill_hub_title: '在线技能库', skill_hub_desc: '同时浏览 LightAgent Skill Hub 和原技能广场，点击安装后即可使用。',
+        skill_hub_title: '在线技能库', skill_hub_desc: 'LightAgent Skill Hub 支持一键安装；原技能广场仅提供技能介绍页跳转。',
         skill_hub_search_placeholder: '搜索名称、描述、作者或标签',
         skill_hub_all_categories: '全部分类', skill_hub_refresh: '刷新', skill_hub_empty: '没有匹配的在线技能',
         skill_hub_empty_hint: '尝试调整搜索词或筛选条件。', skill_hub_prev: '上一页', skill_hub_next: '下一页',
@@ -1074,7 +1074,7 @@ const I18N = {
         config_password_changed: 'Password updated, please re-login',
         config_password_cleared: 'Password cleared',
         skills_title: 'Skills', skills_desc: 'View, enable, or disable agent tools and skills', skills_hub_btn: 'Get online skills',
-        skill_hub_title: 'Online Skill Library', skill_hub_desc: 'Browse LightAgent Skill Hub and the original skill marketplace in one place.',
+        skill_hub_title: 'Online Skill Library', skill_hub_desc: 'Install from LightAgent Skill Hub; the original marketplace is browse-only and opens publisher pages.',
         skill_hub_search_placeholder: 'Search name, description, author, or tag',
         skill_hub_all_categories: 'All categories', skill_hub_refresh: 'Refresh', skill_hub_empty: 'No matching online skills',
         skill_hub_empty_hint: 'Try another search term or filter.', skill_hub_prev: 'Previous', skill_hub_next: 'Next',
@@ -5988,6 +5988,8 @@ function updateSkillHubSourceTabs() {
         sourceLink.href = legacy ? 'https://skills.cowagent.ai/' : 'https://xiaoguiwucan.github.io/LightAgent-SkillHub/';
         sourceLink.title = legacy ? '在新窗口打开原技能广场' : '在新窗口打开 LightAgent Skill Hub';
     }
+    const batchToolbar = document.getElementById('skill-hub-batch-toolbar');
+    batchToolbar?.classList.toggle('hidden', skillHubState.source === 'cowagent-skillhub');
 }
 
 function openSkillHubModal() {
@@ -6080,7 +6082,10 @@ function loadSkillHub(options = {}) {
         skillHubState.totalPages = Math.max(1, Number(pagination.total_pages || 1));
         skillHubState.loaded = true;
         skillHubState.updateState = data.update_state || {};
-        skillHubState.catalogSources = data.catalog_sources || {};
+        skillHubState.catalogSources = {
+            ...skillHubState.catalogSources,
+            ...(data.catalog_sources || {}),
+        };
         updateSkillHubSourceTabs();
         skills.forEach(skill => {
             const key = `${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`;
@@ -6149,6 +6154,9 @@ function updateSkillHubPagination() {
 }
 
 function renderSkillHubCard(skill) {
+    if (skill.catalog_only || skill.registry_source === 'cowagent-skillhub') {
+        return renderLegacySkillHubCard(skill);
+    }
     const card = document.createElement('article');
     card.className = 'flex min-h-[244px] min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-primary-300 dark:border-white/10 dark:bg-[#1A1A1A] dark:hover:border-primary-700';
     const tags = (skill.tags || []).slice(0, 3);
@@ -6204,6 +6212,30 @@ function renderSkillHubCard(skill) {
     return card;
 }
 
+function renderLegacySkillHubCard(skill) {
+    const card = document.createElement('article');
+    card.className = 'flex min-h-[220px] min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-primary-300 dark:border-white/10 dark:bg-[#1A1A1A] dark:hover:border-primary-700';
+    const tags = (skill.tags || []).slice(0, 3);
+    const detailUrl = isSafeSkillExternalUrl(skill.detail_url) ? skill.detail_url : '';
+    card.innerHTML = `
+        <div class="flex items-start gap-2">
+            <div class="min-w-0 flex-1">
+                <h4 class="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(skill.name)}</h4>
+                <p class="mt-1 break-words text-[11px] text-slate-400">v${escapeHtml(skill.version || '--')} · ${escapeHtml(skill.publisher || skill.author || 'community')}</p>
+                <span class="mt-1 inline-flex rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">${currentLang === 'zh' ? '原技能广场' : 'Original marketplace'}</span>
+            </div>
+            <span class="shrink-0 rounded bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500 dark:bg-white/10 dark:text-slate-400">${currentLang === 'zh' ? '仅浏览' : 'Browse only'}</span>
+        </div>
+        <p class="my-3 line-clamp-3 flex-1 text-xs leading-5 text-slate-500 dark:text-slate-400">${escapeHtml(skill.description || '--')}</p>
+        <div class="mb-3 flex min-h-5 flex-wrap gap-1">${tags.map(tag => `<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/5 dark:text-slate-400">${escapeHtml(tag)}</span>`).join('')}</div>
+        <div class="border-t border-slate-100 pt-3 dark:border-white/5">
+            ${detailUrl
+                ? `<a href="${escapeHtml(detailUrl)}" target="_blank" rel="noopener noreferrer" class="inline-flex h-8 items-center gap-2 rounded-md bg-primary-500 px-3 text-xs font-medium text-white hover:bg-primary-600"><i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>${currentLang === 'zh' ? '查看技能介绍' : 'View skill page'}</span></a>`
+                : `<span class="text-xs text-slate-400">${currentLang === 'zh' ? '发布者未提供介绍页' : 'No publisher page available'}</span>`}
+        </div>`;
+    return card;
+}
+
 function formatSkillIntegrity(value) {
     const labels = currentLang === 'zh'
         ? {official_signed:'官方签名', reviewed_hash:'已审核哈希', first_install_lock:'首次安装锁定'}
@@ -6239,6 +6271,7 @@ function toggleSkillHubSelection(skill, checked) {
 }
 
 function selectSkillHubCurrentPage(checked) {
+    if (skillHubState.source === 'cowagent-skillhub') return;
     skillHubState.skills.forEach(skill => {
         const key = `${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`;
         if (checked) skillHubState.selected.set(key, skill);
@@ -6255,6 +6288,9 @@ function clearSkillHubSelection() {
 }
 
 function updateSkillHubBatchToolbar() {
+    if (skillHubState.source === 'cowagent-skillhub') {
+        skillHubState.selected.clear();
+    }
     const selected = Array.from(skillHubState.selected.values());
     const count = document.getElementById('skill-hub-selected-count');
     if (count) count.textContent = currentLang === 'zh' ? `已选 ${selected.length} 项` : `${selected.length} selected`;
@@ -6275,6 +6311,7 @@ function updateSkillHubBatchToolbar() {
 }
 
 async function runSkillHubBatch(operation) {
+    if (skillHubState.source === 'cowagent-skillhub') return;
     const selected = Array.from(skillHubState.selected.values());
     if (!selected.length) return;
     const labels = currentLang === 'zh'
@@ -6319,8 +6356,8 @@ async function runSkillHubBatch(operation) {
 
 function formatSkillBatchReason(reason) {
     const labels = currentLang === 'zh'
-        ? {already_installed:'已安装', not_installed:'未安装', already_latest:'已是最新版本'}
-        : {already_installed:'Already installed', not_installed:'Not installed', already_latest:'Already up to date'};
+        ? {already_installed:'已安装', not_installed:'未安装', already_latest:'已是最新版本', catalog_only:'原技能广场仅提供介绍页浏览'}
+        : {already_installed:'Already installed', not_installed:'Not installed', already_latest:'Already up to date', catalog_only:'Original marketplace is browse-only'};
     return labels[reason] || reason || (currentLang === 'zh' ? '未知原因' : 'Unknown reason');
 }
 
@@ -6710,7 +6747,7 @@ function loadSkillsSection() {
     fetch('/api/skills').then(r => r.json()).then(data => {
         if (data.status !== 'success') return;
         const skills = data.skills || [];
-        const updateCount = skills.filter(skill => skill.hub_managed && skill.update_available).length;
+        const updateCount = skills.filter(skill => skill.update_supported && skill.update_available).length;
         updateSkillUpdateBadge(updateCount);
         if (skills.length === 0) {
             listEl.innerHTML = '';
@@ -6761,11 +6798,13 @@ function renderSkillCard(card, sk) {
     const versionLabel = sk.version
         ? `v${escapeHtml(sk.version)}`
         : (currentLang === 'zh' ? '未声明版本' : 'Version not declared');
-    const updateMessage = sk.hub_managed
+    const updateMessage = sk.update_supported
         ? (sk.update_available
             ? `${currentLang === 'zh' ? '发现新版本' : 'New version'} v${escapeHtml(sk.available_version || '--')}`
             : (sk.update_status === 'latest' ? (currentLang === 'zh' ? '当前已是最新版本' : 'Up to date') : (currentLang === 'zh' ? '等待更新检查' : 'Waiting for update check')))
-        : '';
+        : (sk.source === 'cowagent-skillhub'
+            ? (currentLang === 'zh' ? '原技能广场仅提供介绍页，不支持在线更新' : 'Original marketplace is browse-only; online updates are unavailable')
+            : '');
     const integrity = sk.hub_managed ? formatSkillIntegrity(sk.integrity_status) : '';
     const execution = formatSkillExecution(sk.execution_mode);
     const capabilities = summarizeSkillCapabilities(sk.capability_status);
@@ -6800,8 +6839,8 @@ function renderSkillCard(card, sk) {
             <p class="text-xs text-slate-400 dark:text-slate-500 line-clamp-2">${escapeHtml(sk.description || '--')}</p>
             ${sk.hub_managed ? `<div class="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-slate-50 px-2.5 py-2 dark:bg-white/[0.03]">
                 <span class="min-w-0 flex-1 break-words text-[11px] ${sk.update_available ? 'font-medium text-amber-600' : 'text-slate-400'}">${updateMessage}</span>
-                <button type="button" data-local-skill-check class="rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-white dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">${currentLang === 'zh' ? '检查更新' : 'Check updates'}</button>
-                ${sk.update_available ? `<button type="button" data-local-skill-update class="rounded-md bg-primary-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-600">${currentLang === 'zh' ? '更新' : 'Update'}</button>` : ''}
+                ${sk.update_supported ? `<button type="button" data-local-skill-check class="rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-white dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">${currentLang === 'zh' ? '检查更新' : 'Check updates'}</button>` : ''}
+                ${sk.update_supported && sk.update_available ? `<button type="button" data-local-skill-update class="rounded-md bg-primary-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-600">${currentLang === 'zh' ? '更新' : 'Update'}</button>` : ''}
                 <button type="button" data-local-skill-uninstall title="${currentLang === 'zh' ? '彻底卸载' : 'Completely uninstall'}" class="flex h-6 w-6 items-center justify-center rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10"><i class="fas fa-trash-can text-[10px]"></i></button>
             </div>` : ''}
             <div class="flex flex-wrap items-center gap-2 mt-3">

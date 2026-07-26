@@ -7469,6 +7469,9 @@ class SkillsHandler:
                 frontmatter = entry.skill.frontmatter if entry else {}
                 local = installed.get(name)
                 status = statuses.get(name, {}) if local else {}
+                update_supported = bool(
+                    local and local.get("source") != "cowagent-skillhub"
+                )
                 is_builtin = os.path.isdir(
                     os.path.join(get_builtin_skills_dir(), name)
                 )
@@ -7488,9 +7491,13 @@ class SkillsHandler:
                         )
                     ),
                     "hub_managed": bool(local),
+                    "update_supported": update_supported,
+                    "can_uninstall": bool(local),
                     "installed_version": local.get("version") if local else None,
                     "available_version": status.get("available_version"),
-                    "update_available": bool(status.get("update_available")),
+                    "update_available": bool(
+                        update_supported and status.get("update_available")
+                    ),
                     "update_status": status.get("update_status", "unmanaged"),
                     "last_checked_at": update_state.get("checked_at"),
                     "integrity_status": (
@@ -7553,6 +7560,19 @@ def _filter_skill_hub_source(skills, source="lightagent-skillhub"):
         item for item in skills
         if item.get("registry_source", "lightagent-skillhub") == source
     ]
+
+
+def _load_skill_hub_source(manager, source="lightagent-skillhub", query="", snapshot=None):
+    source = str(source or "lightagent-skillhub").strip()
+    if source not in _SKILL_HUB_SOURCES:
+        raise ValueError("unsupported skill hub source")
+    if source == "cowagent-skillhub":
+        return manager.legacy_registry.list_skills(query=query)
+    skills = manager.registry.list_skills(query=query, snapshot=snapshot)
+    for item in skills:
+        item.setdefault("registry_source", "lightagent-skillhub")
+        item.setdefault("registry_label", "LightAgent Skill Hub")
+    return skills
 
 
 def _paginate_skill_hub_catalog(skills, category="", page=1, page_size=12):
@@ -7633,14 +7653,19 @@ class SkillHubHandler:
                     or item.get("update_status") in ("yanked", "revoked")
                 ]
                 return json.dumps({"status": "success", "skills": updates, "update_state": state}, ensure_ascii=False)
-            snapshot = manager.registry.load()
-            update_state = checker.check(snapshot=snapshot)
-            skills = manager.search(params.q, snapshot=snapshot)
-            source_counts = {}
-            for item in skills:
-                source = item.get("registry_source", "lightagent-skillhub")
-                source_counts[source] = source_counts.get(source, 0) + 1
-            skills = _filter_skill_hub_source(skills, params.source)
+            source = str(params.source or "lightagent-skillhub").strip()
+            if source not in _SKILL_HUB_SOURCES:
+                raise ValueError("unsupported skill hub source")
+            snapshot = None
+            if source == "lightagent-skillhub":
+                snapshot = manager.registry.load()
+                update_state = checker.check(snapshot=snapshot)
+            else:
+                update_state = checker.read_status()
+            skills = _load_skill_hub_source(
+                manager, source=source, query=params.q, snapshot=snapshot
+            )
+            source_counts = {source: len(skills)}
             skills, categories, pagination = _paginate_skill_hub_catalog(
                 skills,
                 category=params.category,
@@ -7653,14 +7678,23 @@ class SkillHubHandler:
                 status = (update_state.get("skills") or {}).get(item.get("name"), {})
                 item["registry_source"] = item.get("registry_source", "lightagent-skillhub")
                 item["registry_label"] = item.get("registry_label", "LightAgent Skill Hub")
+                item["catalog_only"] = bool(
+                    item.get("catalog_only")
+                    or item["registry_source"] == "cowagent-skillhub"
+                )
+                item["install_supported"] = not item["catalog_only"]
+                item["update_supported"] = not item["catalog_only"]
                 item["installed_version"] = local.get("version")
                 item["installed"] = bool(local)
                 item["rollback_available"] = bool(local.get("previous"))
                 item["update_available"] = bool(
-                    local and _version_tuple(item.get("version")) > _version_tuple(local.get("version"))
+                    not item["catalog_only"]
+                    and local
+                    and _version_tuple(item.get("version"))
+                    > _version_tuple(local.get("version"))
                 )
                 item["is_latest"] = bool(local and not item["update_available"])
-                item["can_uninstall"] = bool(local)
+                item["can_uninstall"] = bool(local and not item["catalog_only"])
                 item["integrity_status"] = (
                     local.get("integrity_status")
                     if local
@@ -7728,12 +7762,20 @@ class SkillHubHandler:
                 )
                 return json.dumps({"status": "success", "backup": backup}, ensure_ascii=False)
             if action == "install":
+                if body.get("source") == "cowagent-skillhub":
+                    raise ValueError(
+                        "原技能广场仅提供技能介绍页浏览，不支持在 LightAgent 中一键安装"
+                    )
                 record = manager.install(
                     name,
                     expected_version=body.get("version"),
                     source=body.get("source"),
                 )
             elif action == "update":
+                if body.get("source") == "cowagent-skillhub":
+                    raise ValueError(
+                        "原技能广场仅提供技能介绍页浏览，不支持在 LightAgent 中在线更新"
+                    )
                 results = manager.batch(
                     "update", [{
                         "name": name,

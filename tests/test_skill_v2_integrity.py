@@ -1,6 +1,4 @@
-import hashlib
 import io
-import json
 import tempfile
 import unittest
 import zipfile
@@ -9,8 +7,7 @@ from unittest.mock import patch
 
 from agent.skills.capabilities import capability_status
 from agent.skills.legacy_compat import legacy_compat_entry, merge_legacy_requirements
-from agent.skills.lifecycle import SkillLifecycleManager
-from agent.skills.registry import RegistrySecurityError
+from agent.skills.lifecycle import SkillLifecycleError, SkillLifecycleManager
 from scripts.audit_legacy_skills import fetch_catalog
 
 
@@ -96,8 +93,7 @@ class SkillV2IntegrityTest(unittest.TestCase):
         self.assertEqual(205, len(catalog))
         self.assertEqual([1, 2, 3], session.pages)
 
-    def test_same_legacy_version_cannot_change_after_first_lock(self):
-        first = package()
+    def test_legacy_catalog_cannot_be_used_as_install_source(self):
         entry = {
             "name": "sample-skill", "version": "1.0.0", "status": "active",
             "registry_source": "cowagent-skillhub", "requirements": {
@@ -108,15 +104,12 @@ class SkillV2IntegrityTest(unittest.TestCase):
             skills = Path(workspace, "skills")
             manager = SkillLifecycleManager(
                 workspace=workspace, skills_dir=str(skills), legacy_registry=_LegacyRegistry(entry),
-                session=_Session(first),
+                session=_Session(package()),
             )
-            manager.install("sample-skill", source="cowagent-skillhub")
-            manager.session.content = package(version="1.0.0") + b"changed"
-            with self.assertRaisesRegex(RegistrySecurityError, "同版本产物已变化"):
+            with self.assertRaisesRegex(SkillLifecycleError, "仅提供技能介绍页"):
                 manager.install("sample-skill", source="cowagent-skillhub")
-            lock = json.loads(Path(workspace, "skills.lock.json").read_text())
-            self.assertEqual(2, lock["lock_version"])
-            self.assertEqual(hashlib.sha256(first).hexdigest(), lock["skills"]["sample-skill"]["artifact_sha256"])
+            self.assertFalse(Path(workspace, "skills.lock.json").exists())
+            self.assertFalse(Path(skills, "sample-skill").exists())
 
 
 if __name__ == "__main__":

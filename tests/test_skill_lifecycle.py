@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from agent.skills.lifecycle import SkillLifecycleManager
+from agent.skills.lifecycle import SkillLifecycleError, SkillLifecycleManager
 from agent.skills.registry import RegistrySecurityError
 
 
@@ -185,7 +185,7 @@ class SkillLifecycleManagerTest(unittest.TestCase):
         )
         self.assertEqual(package, dependency.read_bytes())
 
-    def test_original_marketplace_install_keeps_distinct_source(self):
+    def test_original_marketplace_is_browse_only_and_cannot_install(self):
         package = _package(version="1.2.3")
         entry = _entry(package, version="1.2.3")
         entry.update({
@@ -201,10 +201,17 @@ class SkillLifecycleManagerTest(unittest.TestCase):
             legacy_registry=_LegacyRegistry(entry),
             session=_LegacySession(package),
         )
-        record = manager.install("sample-skill", source="cowagent-skillhub")
-        self.assertEqual("cowagent-skillhub", record["source"])
-        self.assertEqual("1.2.3", record["version"])
-        self.assertTrue(Path(self.skills, "sample-skill", "SKILL.md").is_file())
+        with self.assertRaisesRegex(SkillLifecycleError, "仅提供技能介绍页"):
+            manager.install("sample-skill", source="cowagent-skillhub")
+        results = manager.batch("install", [{
+            "name": "sample-skill",
+            "version": "1.2.3",
+            "source": "cowagent-skillhub",
+        }])
+        self.assertEqual("skipped", results[0]["status"])
+        self.assertEqual("catalog_only", results[0]["reason"])
+        self.assertFalse(Path(self.skills, "sample-skill").exists())
+        self.assertNotIn("sample-skill", manager.installed())
 
     def test_missing_system_binary_rejects_install_without_lock_record(self):
         package = _package()
