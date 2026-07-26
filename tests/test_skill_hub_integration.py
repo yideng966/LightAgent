@@ -9,7 +9,11 @@ from agent.protocol.agent_stream import AgentStreamExecutor
 from agent.skills.manager import SkillManager
 from agent.skills.types import Skill, SkillEntry, SkillSnapshot
 from cli.commands.skill import InstallResult, SkillInstallError, _install_hub
-from channel.web.web_channel import _filter_skill_hub_source, _paginate_skill_hub_catalog
+from channel.web.web_channel import (
+    _filter_skill_hub_source,
+    _load_skill_hub_source,
+    _paginate_skill_hub_catalog,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,7 +47,10 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         self.assertIn("function switchSkillHubSource(source)", frontend)
         self.assertIn("if (search) search.value = '';", frontend)
         self.assertIn("formatSkillCategory(skill.category)", frontend)
-        self.assertIn("访问原技能广场", frontend)
+        self.assertIn("function renderLegacySkillHubCard(skill)", frontend)
+        self.assertIn("查看技能介绍", frontend)
+        self.assertIn("id=\"skill-hub-batch-toolbar\"", html)
+        self.assertIn("原技能广场仅提供技能介绍页跳转", html)
         dockerfile = (ROOT / "docker/Dockerfile.latest").read_text(encoding="utf-8")
         self.assertIn("/usr/local/bin/npm /usr/local/bin/npm", dockerfile)
         self.assertIn("/usr/local/lib/node_modules/npm", dockerfile)
@@ -70,6 +77,7 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         self.assertIn('source="lightagent-skillhub", action="list", category="", page="1", page_size="12"', backend)
         self.assertIn("_paginate_skill_hub_catalog", backend)
         self.assertIn("_filter_skill_hub_source", backend)
+        self.assertIn("_load_skill_hub_source", backend)
         self.assertIn('"catalog_sources": source_counts', backend)
         self.assertIn("skill.registry_source || 'lightagent-skillhub'", frontend)
         self.assertIn("原技能广场", frontend)
@@ -116,16 +124,39 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             _filter_skill_hub_source(skills, "unknown")
 
+    def test_original_marketplace_catalog_does_not_load_official_registry(self):
+        class ExplodingOfficialRegistry:
+            def list_skills(self, **_kwargs):
+                raise AssertionError("official registry must not be loaded")
+
+        class LegacyRegistry:
+            def list_skills(self, **_kwargs):
+                return [{
+                    "name": "legacy",
+                    "registry_source": "cowagent-skillhub",
+                    "catalog_only": True,
+                }]
+
+        manager = SimpleNamespace(
+            registry=ExplodingOfficialRegistry(), legacy_registry=LegacyRegistry()
+        )
+        skills = _load_skill_hub_source(
+            manager, source="cowagent-skillhub", query="legacy"
+        )
+        self.assertEqual(["legacy"], [item["name"] for item in skills])
+        self.assertTrue(skills[0]["catalog_only"])
+
     def test_chat_mutations_require_admin(self):
         plugin = (ROOT / "plugins/lightagent_cli/lightagent_cli.py").read_text(encoding="utf-8")
         self.assertIn("def _require_skill_admin", plugin)
         self.assertIn("denied = self._require_skill_admin(e_context)", plugin)
 
-    def test_cli_search_and_install_use_the_merged_catalog(self):
+    def test_cli_searches_both_catalogs_but_installs_only_from_official_hub(self):
         cli = (ROOT / "cli/commands/skill.py").read_text(encoding="utf-8")
         self.assertIn("all_skills = SkillLifecycleManager().search()", cli)
         self.assertIn('SkillLifecycleManager().search(query=query)', cli)
-        self.assertIn('source=LegacySkillRegistryClient.SOURCE', cli)
+        self.assertNotIn('source=LegacySkillRegistryClient.SOURCE', cli)
+        self.assertIn("The original marketplace is browse-only", cli)
 
     def test_active_executor_uses_the_skill_snapshot_content(self):
         old_skill = Skill(

@@ -4,6 +4,9 @@
 
 ### 技能完整性、能力包、加密备份与 Skill Runner
 
+- 修复 Issue #18：Registry 客户端显式接受已验签的 v1/v2 索引，未知未来版本返回包含实际版本的明确错误；补充 v2 验签、未知版本拒绝和最后一次有效缓存回归合同。
+- 官方 Hub 与原技能广场改为按当前标签独立加载，官方 Registry 网络或格式错误不再连带阻断原技能广场目录页。
+- 原技能广场调整为只读导航来源：在线卡片仅保留 HTTPS“查看技能介绍”跳转，隐藏选择框、安装、更新、卸载、详情及批量工具栏；Web API、生命周期和 CLI 同时拒绝将其作为一键安装或在线更新来源。历史已安装技能仍可在本地技能卡彻底卸载。
 - 升级 Registry/lockfile v2：记录产物 SHA-256、完整性来源、原广场兼容清单版本、系统能力、执行模式、结构化入口和更新变更摘要，并保留 v1 只读兼容。
 - 新增 `legacy_compat.json` 和审计脚本：已审核的原技能广场版本必须匹配固定哈希；清单外版本首次安装锁定哈希，同版本静默变更被拒绝。
 - 新增系统能力清单与探测，首批覆盖 Office 文档、媒体和浏览器；Dockerfile 支持 `SKILL_CAPABILITY_PACKS`，发布工作流增加 `skills-full` 镜像变体。
@@ -14,7 +17,7 @@
 
 验证记录：
 
-- Registry、生命周期、运行时、后台检查、Web/API、完整性、备份、Runner 和微信群 ACL 定向回归 71 项通过；Runner 在 `ResourceWarning` 视为错误的模式下 9 项通过，覆盖保留环境变量与超时子进程组清理。
+- Registry、生命周期、运行时、后台检查、Web/API、完整性、备份、Runner 和微信群 ACL 定向回归 74 项通过；Runner 在 `ResourceWarning` 视为错误的模式下 9 项通过，覆盖保留环境变量与超时子进程组清理。
 - Skill Hub 校验 2 个技能通过，Registry v2 确定性构建成功，4 项 Schema 合同测试通过；Docker 非 root 安装和当前 LightAgent 主分支兼容性烟测通过。
 - Bash 流式及隔离依赖回归 7 项通过、3 项按平台跳过。全量 Python 回归运行 992 项，3 项语言状态断言失败和 2 项因官方镜像未包含 `pytest` 而导入失败；未修改的 `origin/master` 复跑失败集合一致。
 - `node --check channel/web/static/js/console.js`、Python `py_compile`、`git diff --check` 通过。

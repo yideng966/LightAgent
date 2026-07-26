@@ -3,11 +3,11 @@ title: Skill Hub
 description: Browse, verify, install, update, and roll back LightAgent skills
 ---
 
-[LightAgent Skill Hub](https://xiaoguiwucan.github.io/LightAgent-SkillHub/) is LightAgent's official GitHub-based registry. Its [source repository](https://github.com/xiaoguiwucan/LightAgent-SkillHub) contains skill sources, contribution rules, CI validation, deterministic packages, and the signed static index. `skills.cowagent.ai` remains available as the separately labelled original marketplace and is never presented as an official signed source.
+[LightAgent Skill Hub](https://xiaoguiwucan.github.io/LightAgent-SkillHub/) is LightAgent's official GitHub-based registry. Its [source repository](https://github.com/xiaoguiwucan/LightAgent-SkillHub) contains skill sources, contribution rules, CI validation, deterministic packages, and the signed static index. `skills.cowagent.ai` remains available as a separately labelled, browse-only original marketplace. LightAgent only links to its publisher pages and does not install or update those entries.
 
 ## Browse and install
 
-In the Web console, open **Skills -> Get online skills**. The dialog separates both sources and provides search, translated categories, 12-item pagination, details, individual actions, and cross-page batch management. It refreshes the catalog and local state every time it opens.
+In the Web console, open **Skills -> Get online skills**. The dialog separates both sources and provides search, translated categories, and 12-item pagination. Official Hub entries support details, installation, updates, uninstall, and cross-page batch management. Original marketplace entries only provide an external **View skill page** action because their packages and dependencies do not implement the signed one-click installation contract.
 
 ```text
 /skill list --remote

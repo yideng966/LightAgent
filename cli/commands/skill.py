@@ -980,13 +980,11 @@ def _route_install(name: str, result: InstallResult):
         _install_github(spec, result, subpath=subpath)
         return
 
-    # --- Fallback: official signed Skill Hub by name, then the legacy Hub ---
+    # --- Fallback: official signed Skill Hub by name ---
     _check_skill_name(name)
     try:
         from agent.skills.lifecycle import SkillLifecycleManager
-        from agent.skills.registry import (
-            LegacySkillRegistryClient, RegistryError, RegistrySecurityError,
-        )
+        from agent.skills.registry import RegistryError, RegistrySecurityError
 
         record = SkillLifecycleManager().install(name)
         result.installed.append(name)
@@ -996,19 +994,11 @@ def _route_install(name: str, result: InstallResult):
     except RegistrySecurityError as e:
         raise SkillInstallError(str(e))
     except RegistryError as e:
-        try:
-            record = SkillLifecycleManager().install(
-                name, source=LegacySkillRegistryClient.SOURCE
-            )
-            result.installed.append(name)
-            result.messages.append(
-                f"Installed '{name}' {record.get('version')} from the original skill marketplace."
-            )
-        except Exception as legacy_error:
-            raise SkillInstallError(
-                f"Skill '{name}' was unavailable from both online sources "
-                f"(official: {e}; original marketplace: {legacy_error})."
-            ) from legacy_error
+        raise SkillInstallError(
+            f"Skill '{name}' is unavailable from the official signed Skill Hub: {e}. "
+            "The original marketplace is browse-only; open its introduction page "
+            "and follow the publisher's instructions instead."
+        ) from e
     except SkillInstallError:
         raise
     except Exception as e:

@@ -14,6 +14,7 @@ from agent.skills.registry import (
     LegacySkillRegistryClient,
     REGISTRY_PUBLIC_KEYS,
     RegistrySecurityError,
+    SUPPORTED_REGISTRY_VERSIONS,
     SkillRegistryClient,
     _canonical_json,
 )
@@ -53,9 +54,9 @@ class SkillRegistryClientTest(unittest.TestCase):
         self.key_patch.stop()
         self.temp.cleanup()
 
-    def _document(self):
+    def _document(self, registry_version=1):
         payload = {
-            "registry_version": 1,
+            "registry_version": registry_version,
             "repository": "https://example.test/hub",
             "source_commit": "abc",
             "skills": [{"name": "sample", "status": "active", "tags": []}],
@@ -69,6 +70,21 @@ class SkillRegistryClientTest(unittest.TestCase):
                 "value": base64.b64encode(signature).decode(),
             },
         }
+
+    def test_registry_v2_is_verified_and_unknown_future_version_is_rejected(self):
+        self.assertEqual({1, 2}, set(SUPPORTED_REGISTRY_VERSIONS))
+        v2 = self._document(registry_version=2)
+        client = SkillRegistryClient(
+            "https://example.test/registry.json", self.temp.name, _Session(v2)
+        )
+        self.assertEqual(2, client.load().data["registry_version"])
+
+        future = self._document(registry_version=3)
+        client = SkillRegistryClient(
+            "https://example.test/registry.json", self.temp.name, _Session(future)
+        )
+        with self.assertRaisesRegex(RegistrySecurityError, "版本: 3"):
+            client.load()
 
     def test_valid_registry_is_cached_and_cache_survives_network_failure(self):
         document = self._document()
@@ -130,6 +146,8 @@ class SkillRegistryClientTest(unittest.TestCase):
         )
         item = client.list_skills()[0]
         self.assertEqual("cowagent-skillhub", item["registry_source"])
+        self.assertTrue(item["catalog_only"])
+        self.assertFalse(item["install_supported"])
         self.assertEqual("active", item["status"])
         self.assertEqual(["TOKEN"], item["requirements"]["env"])
         self.assertEqual("https://skills.cowagent.ai/legacy-skill", item["detail_url"])

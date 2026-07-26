@@ -124,12 +124,17 @@ class SkillUpdateChecker:
                 for skill_name, local in installed.items():
                     if name and skill_name != name:
                         continue
-                    item = remote.get(skill_name)
                     if local.get("source") == "cowagent-skillhub":
-                        try:
-                            item = manager.legacy_registry.get_skill(skill_name)
-                        except Exception:
-                            item = None
+                        statuses[skill_name] = {
+                            "name": skill_name,
+                            "installed_version": local.get("version"),
+                            "available_version": None,
+                            "update_available": False,
+                            "update_status": "catalog_only",
+                            "reason": "原技能广场仅提供介绍页浏览，不支持在线更新",
+                        }
+                        continue
+                    item = remote.get(skill_name)
                     if not item:
                         statuses[skill_name] = {
                             "name": skill_name,

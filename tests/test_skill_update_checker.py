@@ -108,6 +108,28 @@ class SkillUpdateCheckerTest(unittest.TestCase):
         self.assertTrue(changes["requirements_changed"])
         self.assertTrue(changes["permissions_changed"])
 
+    def test_original_marketplace_install_is_not_checked_for_online_updates(self):
+        Path(self.workspace, "skills.lock.json").write_text(
+            json.dumps({
+                "lock_version": 2,
+                "skills": {
+                    "sample-skill": {
+                        "version": "1.0.0",
+                        "source": "cowagent-skillhub",
+                    }
+                },
+            }),
+            encoding="utf-8",
+        )
+        checker = SkillUpdateChecker(
+            self.workspace, registry=_Registry(_snapshot("9.9.9"))
+        )
+        state = checker.check()
+        status = state["skills"]["sample-skill"]
+        self.assertFalse(status["update_available"])
+        self.assertEqual("catalog_only", status["update_status"])
+        self.assertEqual(0, state["update_count"])
+
 
 if __name__ == "__main__":
     unittest.main()

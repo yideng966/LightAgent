@@ -16,6 +16,7 @@ from agent.skills.legacy_compat import merge_legacy_requirements
 
 
 DEFAULT_REGISTRY_URL = "https://xiaoguiwucan.github.io/LightAgent-SkillHub/registry.json"
+SUPPORTED_REGISTRY_VERSIONS = frozenset({1, 2})
 REGISTRY_PUBLIC_KEYS = {
     "lightagent-skillhub-2026-01": "ddZUto18e4bp5pRMgrHD8xJoCfFGxiXznA8G8ksyaMQ=",
 }
@@ -110,8 +111,14 @@ class SkillRegistryClient:
         raise RegistryError(f"官方技能中心不存在技能 {name}")
 
     def _verify(self, document):
-        if not isinstance(document, dict) or document.get("registry_version") not in (1, 2):
-            raise RegistrySecurityError("不支持的技能注册表格式")
+        if not isinstance(document, dict):
+            raise RegistrySecurityError("技能注册表必须是 JSON 对象")
+        registry_version = document.get("registry_version")
+        if registry_version not in SUPPORTED_REGISTRY_VERSIONS:
+            raise RegistrySecurityError(
+                f"不支持的技能注册表版本: {registry_version!r}，"
+                f"当前支持 {sorted(SUPPORTED_REGISTRY_VERSIONS)}"
+            )
         signature = document.get("signature")
         if not isinstance(signature, dict) or signature.get("algorithm") != "ed25519":
             raise RegistrySecurityError("技能注册表缺少 Ed25519 签名")
@@ -202,6 +209,8 @@ class LegacySkillRegistryClient:
             item["compat_manifest_version"] = compat.get("manifest_version") if compat else None
             item["reviewed_artifact_sha256"] = compat.get("artifact_sha256") if compat else None
             item["integrity_status"] = "reviewed_hash" if item["reviewed_artifact_sha256"] else "first_install_lock"
+            item["catalog_only"] = True
+            item["install_supported"] = False
         query = str(query or "").strip().lower()
         if query:
             normalized = [
@@ -243,6 +252,8 @@ class LegacySkillRegistryClient:
             "registry_label": "原技能广场",
             "registry_url": self.api_url,
             "detail_url": f"https://skills.cowagent.ai/{quote(str(item.get('name') or ''), safe='')}",
+            "catalog_only": True,
+            "install_supported": False,
             "min_lightagent_version": None,
             "max_lightagent_version": None,
             "requirements": {},
