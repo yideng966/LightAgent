@@ -2,6 +2,24 @@
 
 ## 2026-07-26
 
+### 原技能广场依赖安装与运行修复
+
+- 为 `https://skills.cowagent.ai` 原技能广场补充受控依赖兼容表，覆盖已核实声明 Python、npm 或系统命令的技能；旧 Registry 缓存也会在读取时补齐依赖，不执行 `SKILL.md` 中的任意安装命令。
+- 更新 `AGENTS.md`：明确原技能广场只能使用人工审核依赖清单、依赖失败不得落锁，以及隔离环境只允许从 `skills.lock.json` 注入的协作边界。
+- 修复技能安装“依赖失败但仍显示成功”的问题：缺少系统命令、pip/npm 安装失败或超时都会终止安装，且不替换原技能、不写入锁文件；npm 安装禁用第三方生命周期脚本。
+- 将 Python 与 npm 依赖安装到每个技能独立的 `.skill-envs/<name>`，并为技能目录建立受控 `node_modules` 入口；Bash 工具只根据 `skills.lock.json` 注入已安装技能的 `PATH`、`PYTHONPATH` 和 `NODE_PATH`。
+- 原技能广场安装的技能与官方 Hub 技能统一使用请求启动时的技能快照，避免更新或卸载影响正在执行的 Agent 请求。
+- 完整 Docker 镜像补齐 npm/npx 工具链，使 `docx`、`pptx` 等声明 npm 依赖的技能可以在非 root 用户下自动安装普通依赖。
+- `docx` 的兼容依赖明确为 `docx@9.5.1` 与 `defusedxml>=0.7.1`，重新安装后可使用官方 JavaScript 生成路径和自带 Python 校验脚本。
+
+验证记录：
+
+- `python -m unittest tests.test_skill_registry tests.test_skill_lifecycle tests.test_skill_runtime tests.test_skill_update_checker tests.test_skill_hub_integration tests.test_wechat_group_skill_access`（49 项通过）。
+- `PYTHONPATH=. uv run --with pytest pytest -q tests/test_bash_streaming.py`（7 项通过，3 项按平台条件跳过）。
+- `node --check channel/web/static/js/console.js`、Python `py_compile` 与 `git diff --check` 通过。
+- 本地 `9899` 完整镜像已补齐 npm/npx 并重启；原技能广场 `docx 1.0.0` 已重新安装，LightAgent Bash 工具可直接导入 `docx@9.5.1` 与 `defusedxml 0.7.1`，真实生成的 DOCX 通过技能自带 `validate.py` 校验。
+- 全量 Python 回归运行 965 项，结果为 7 项错误、3 项跳过；同一环境下最新 `origin/master` 运行 945 项，错误和跳过集合完全一致，均为缺少 `pytest`、`dashscope`、`PyYAML`、`Pillow` 等可选测试依赖或其连带导入错误。
+
 ### 微信群自由回复大模型二次判定说明
 
 - 更新 `channel/web/static/js/console.js`：在「群聊 / 自由回复 / 大模型二次判定」设置块增加中英文流程说明，明确本地初筛、后台队列、LLM 仅作接话判定、`should_reply=true` 与最低置信度的放行条件、异常拒绝、关闭开关后的直通行为，以及复读消息的本地直通例外；同时为开关补充 `aria-describedby` 关联。
@@ -22,12 +40,22 @@
 - CLI 新增搜索、安装、过期检查、更新、回滚、卸载和校验入口；聊天命令的变更操作限制为所有者或管理员，Web 控制台增加技能目录、安装、更新、回滚和卸载操作。
 - Web 技能页将在线目录迁移到独立二级弹窗，支持搜索、分类筛选、12 条分页、技能详情及一键安装；依赖自动安装，不再区分风险等级或要求二次确认。
 - Agent 请求在启动时固定当前技能内容快照，更新仅对后续请求生效；技能更新后同步刷新 `SkillManager` 和微信群技能 ACL 目录。
+- 技能卡新增版本和来源标识，Hub 技能可直接检查更新、更新或彻底卸载；内置及手工本地技能只读展示，未声明版本时明确显示“未声明版本”。
+- 新增启动即执行、每 6 小时运行一次的后台更新检查，网络异常时保留最后一次验签缓存和已有更新提示；技能页每 5 分钟及窗口重新可见时同步状态。
+- 在线技能库每次打开都会强制刷新目录、安装版本与更新状态，并显示在线最新版、已安装版本、离线缓存及最近检查时间。
+- 在线技能库新增跨分页选择、当前页全选、单项与最多 100 项的批量安装/更新/卸载；逐项返回成功、跳过与失败结果，单项失败不阻断后续技能。
+- Web 卸载统一彻底删除技能包、隔离依赖环境、所有回滚版本、技能配置、密钥、用户数据及锁记录，并在操作前明确提示不可恢复。
+- Registry 缓存改用进程锁、唯一临时文件和原子替换；技能生命周期增加 workspace 级提交锁，避免后台刷新、CLI 与 Web 并发操作破坏缓存或锁文件。
+- 在线技能库合并 LightAgent Skill Hub 与 `https://skills.cowagent.ai` 原技能广场；卡片显示真实来源，同名条目优先展示签名 GitHub Hub 版本，安装、更新和批量操作按来源正确路由。
+- 原技能广场目录支持分页拉取与本地缓存，其未签名条目保持独立来源标识，不伪装成已经 Ed25519 验签的官方产物。
+- 在线技能库新增来源标签页，每次打开会清理旧筛选并默认展示 LightAgent Skill Hub，可单独切换原技能广场；分类名称中文化，原广场技能可直接跳转官网介绍页。
 - 补充官方 Hub、CLI 与安装文档，明确 v1 权限元数据仅用于展示、CI 与人工审核，不构成运行时沙箱。
 
 关键文件：
 
 - `agent/skills/registry.py`
 - `agent/skills/lifecycle.py`
+- `agent/skills/update_checker.py`
 - `cli/commands/skill.py`
 - `plugins/lightagent_cli/lightagent_cli.py`
 - `channel/web/web_channel.py`
@@ -35,15 +63,25 @@
 - `channel/web/static/js/console.js`
 - `tests/test_skill_registry.py`
 - `tests/test_skill_lifecycle.py`
+- `tests/test_skill_update_checker.py`
 - `tests/test_skill_hub_integration.py`
 
 验证记录：
 
-- Skill Hub 路由、Registry 和生命周期定向回归 21 项通过，官方 Docker 非 root 组合回归 27 项通过。
+- 官方 GitHub Hub 与原技能广场真实合并返回 69 个去重技能（官方 2、原广场 67），同名条目无重复；`9899` 的 `/api/skill-hub` 实际返回与本地目录一致。
+- 原技能广场 `github 1.0.0` 在隔离临时 workspace 中真实下载、安装并通过完整性校验，未改动用户已安装技能。
+- Registry、生命周期、后台检查、CLI/Web 合同和微信群 ACL 定向回归 42 项通过；Python/JavaScript 语法检查与 `git diff --check` 通过。
+- 本机全量 Python 回归运行 920 项，1 项既有 Web UI cache-buster 断言失败、8 项因本机未安装 `pytest`、`dashscope`、`yaml`、`croniter`、`PIL` 等可选测试依赖报错、3 项跳过，均与本次双来源合并无关。
+- Skill Hub 路由、Registry、后台更新检查和生命周期定向回归 30 项通过；覆盖缓存保留、6 小时周期、单技能刷新、批量部分成功、去重、数量限制及彻底卸载。
+- 技能管理、Registry、生命周期、后台检查和微信群 ACL 组合回归 39 项通过；全量 Python 回归运行 929 项，4 项既有语言断言/缓存参数断言失败，2 项因官方镜像未包含 `pytest` 导入失败，与本次改动无关。
+- 已重建并重启本地 `9899` Docker 服务；真实 Registry 在线刷新、12 条分页、内置/本地/Hub 来源、已安装版本、最新状态及无副作用批量跳过结果验证通过。
+- Chrome 在 1440×900 与移动断点完成技能卡和在线库验收，批量工具栏、长名称、版本状态及分页无横向溢出；截图见 `docs/images/skill-management-versions-zh.jpg`、`docs/images/skill-hub-dual-source-zh.jpg` 和 `docs/images/skill-hub-batch-management-mobile.png`。
 - Hub Schema 校验、签名索引生成、LightAgent 客户端真实验签与 Docker 非 root 安装烟测通过。
 - Playwright 在 1440×900 与 390×844 视口完成主页面、在线技能库和详情弹窗验收；移动端无横向溢出，并确认 `hello-lightagent` 点击安装后直接完成且不出现二次确认。
 - 全量 Python 回归共运行 908 项，结果为 1 项失败、8 项错误、3 项跳过；在最新 `origin/master` 上结果完全一致，均为缺少可选测试依赖和既有 WebUI 缓存参数断言，与本次 Skill Hub 页面调整无关。
 - Python/JavaScript 语法检查与 `git diff --check` 通过。
+- 来源标签、中文分类及原技能广场介绍页定向回归合计 43 项通过；`9899` 实际验证默认仅返回官方 Hub 2 个技能，切换原技能广场返回 67 个技能且当前页介绍链接全部为 HTTPS。
+- 合并最新 `origin/master` 后复验上游群聊报告 7 个测试模块 29 项通过，本地 `9899` 镜像已同步上游新模块及 `tzdata` 依赖。
 
 ### 群聊统计与群聊报告
 

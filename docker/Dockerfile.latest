@@ -34,6 +34,9 @@ RUN if [ "$USE_CN_MIRROR" = "true" ]; then \
 ADD . ${BUILD_PREFIX}
 
 COPY --from=wechat-group-sidecar-build /usr/local/bin/node /usr/local/bin/node
+COPY --from=wechat-group-sidecar-build /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=wechat-group-sidecar-build /usr/local/bin/npx /usr/local/bin/npx
+COPY --from=wechat-group-sidecar-build /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY --from=wechat-group-sidecar-build \
     /build/wechat-group-sidecar/node_modules \
     /app/channel/wechat_group/sidecar/node_modules

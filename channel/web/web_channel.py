@@ -1377,6 +1377,14 @@ class WebChannel(ChatChannel):
         # Reclaim orphaned SSE queues so disconnected clients don't leak fds.
         self._start_sse_janitor()
         try:
+            from agent.skills.update_checker import start_skill_update_checker
+            workspace = _get_workspace_root()
+            start_skill_update_checker(
+                workspace, skills_dir=os.path.join(workspace, "skills")
+            )
+        except Exception as exc:
+            logger.warning(f"[SkillHub] Could not start update checker: {exc}")
+        try:
             server.start()
         except (KeyboardInterrupt, SystemExit):
             server.stop()
@@ -7436,10 +7444,54 @@ class SkillsHandler:
             from agent.skills.manager import SkillManager
             workspace_root = _get_workspace_root()
             manager = SkillManager(custom_dir=os.path.join(workspace_root, "skills"))
+            from agent.skills.lifecycle import SkillLifecycleManager
+            from cli.utils import get_builtin_skills_dir
+            from agent.skills.update_checker import get_skill_update_checker
             from channel.wechat_group.wechat_group_skill_access import (
                 get_wechat_group_skill_access_service,
             )
             skills = get_wechat_group_skill_access_service().list_skills(manager)
+            lifecycle = SkillLifecycleManager(
+                workspace=workspace_root,
+                skills_dir=os.path.join(workspace_root, "skills"),
+            )
+            installed = lifecycle.installed()
+            update_state = get_skill_update_checker(
+                workspace_root,
+                skills_dir=os.path.join(workspace_root, "skills"),
+            ).read_status()
+            statuses = update_state.get("skills") or {}
+            for item in skills:
+                name = str(item.get("name") or "")
+                entry = manager.get_skill(name)
+                frontmatter = entry.skill.frontmatter if entry else {}
+                local = installed.get(name)
+                status = statuses.get(name, {}) if local else {}
+                is_builtin = os.path.isdir(
+                    os.path.join(get_builtin_skills_dir(), name)
+                )
+                item.update({
+                    "version": (
+                        local.get("version")
+                        if local
+                        else frontmatter.get("version")
+                    ),
+                    "source": (
+                        local.get("source", "lightagent-skillhub")
+                        if local
+                        else (
+                            "builtin"
+                            if is_builtin
+                            else (entry.skill.source if entry else item.get("source"))
+                        )
+                    ),
+                    "hub_managed": bool(local),
+                    "installed_version": local.get("version") if local else None,
+                    "available_version": status.get("available_version"),
+                    "update_available": bool(status.get("update_available")),
+                    "update_status": status.get("update_status", "unmanaged"),
+                    "last_checked_at": update_state.get("checked_at"),
+                })
             return json.dumps({"status": "success", "skills": skills}, ensure_ascii=False)
         except Exception as e:
             logger.error(f"[WebChannel] Skills API error: {e}")
@@ -7469,6 +7521,19 @@ class SkillsHandler:
         except Exception as e:
             logger.error(f"[WebChannel] Skills POST error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+
+_SKILL_HUB_SOURCES = {"lightagent-skillhub", "cowagent-skillhub"}
+
+
+def _filter_skill_hub_source(skills, source="lightagent-skillhub"):
+    source = str(source or "lightagent-skillhub").strip()
+    if source not in _SKILL_HUB_SOURCES:
+        raise ValueError("unsupported skill hub source")
+    return [
+        item for item in skills
+        if item.get("registry_source", "lightagent-skillhub") == source
+    ]
 
 
 def _paginate_skill_hub_catalog(skills, category="", page=1, page_size=12):
@@ -7512,17 +7577,50 @@ class SkillHubHandler:
             skills_dir=os.path.join(workspace, "skills"),
         )
 
+    @staticmethod
+    def _checker():
+        from agent.skills.update_checker import get_skill_update_checker
+        workspace = _get_workspace_root()
+        return get_skill_update_checker(
+            workspace, skills_dir=os.path.join(workspace, "skills")
+        )
+
     def GET(self):
         _require_auth()
         web.header('Content-Type', 'application/json; charset=utf-8')
         params = web.input(
-            q="", action="list", category="", page="1", page_size="12"
+            q="", source="lightagent-skillhub", action="list", category="", page="1", page_size="12",
+            name="", refresh="0",
         )
         try:
+            from agent.skills.lifecycle import _version_tuple
             manager = self._manager()
+            checker = self._checker()
+            force_refresh = str(params.refresh).lower() in ("1", "true", "yes")
+            if params.action == "update_status":
+                state = checker.check(name=params.name or None) if force_refresh else checker.read_status()
+                skill_status = (state.get("skills") or {}).get(params.name) if params.name else None
+                return json.dumps({
+                    "status": "success",
+                    "update_state": state,
+                    "skill": skill_status,
+                }, ensure_ascii=False)
             if params.action == "outdated":
-                return json.dumps({"status": "success", "skills": manager.outdated()}, ensure_ascii=False)
-            skills = manager.search(params.q)
+                state = checker.check() if force_refresh else checker.read_status()
+                updates = [
+                    item for item in (state.get("skills") or {}).values()
+                    if item.get("update_available")
+                    or item.get("update_status") in ("yanked", "revoked")
+                ]
+                return json.dumps({"status": "success", "skills": updates, "update_state": state}, ensure_ascii=False)
+            snapshot = manager.registry.load()
+            update_state = checker.check(snapshot=snapshot)
+            skills = manager.search(params.q, snapshot=snapshot)
+            source_counts = {}
+            for item in skills:
+                source = item.get("registry_source", "lightagent-skillhub")
+                source_counts[source] = source_counts.get(source, 0) + 1
+            skills = _filter_skill_hub_source(skills, params.source)
             skills, categories, pagination = _paginate_skill_hub_catalog(
                 skills,
                 category=params.category,
@@ -7532,17 +7630,29 @@ class SkillHubHandler:
             installed = manager.installed()
             for item in skills:
                 local = installed.get(item.get("name"), {})
+                item["registry_source"] = item.get("registry_source", "lightagent-skillhub")
+                item["registry_label"] = item.get("registry_label", "LightAgent Skill Hub")
                 item["installed_version"] = local.get("version")
                 item["installed"] = bool(local)
                 item["rollback_available"] = bool(local.get("previous"))
                 item["update_available"] = bool(
-                    local and local.get("version") != item.get("version")
+                    local and _version_tuple(item.get("version")) > _version_tuple(local.get("version"))
                 )
+                item["is_latest"] = bool(local and not item["update_available"])
+                item["can_uninstall"] = bool(local)
             return json.dumps({
                 "status": "success",
                 "skills": skills,
                 "categories": categories,
                 "pagination": pagination,
+                "catalog_sources": source_counts,
+                "update_state": {
+                    key: update_state.get(key)
+                    for key in (
+                        "checked_at", "last_attempted_at", "source", "cached",
+                        "error", "update_count",
+                    )
+                },
             }, ensure_ascii=False)
         except Exception as exc:
             logger.error(f"[WebChannel] Skill Hub GET error: {exc}")
@@ -7554,27 +7664,56 @@ class SkillHubHandler:
         try:
             body = json.loads(web.data() or b"{}")
             action = str(body.get("action", "")).strip()
+            manager = self._manager()
+            if action == "batch":
+                operation = str(body.get("operation") or "").strip()
+                results = manager.batch(
+                    operation,
+                    body.get("skills"),
+                    purge_data=operation == "uninstall",
+                )
+                state = self._checker().check()
+                return json.dumps({
+                    "status": "success",
+                    "results": results,
+                    "summary": {
+                        key: sum(1 for item in results if item.get("status") == key)
+                        for key in ("success", "skipped", "failed")
+                    },
+                    "update_state": state,
+                }, ensure_ascii=False)
             name = str(body.get("name", "")).strip()
             if not action or not name:
                 raise ValueError("action and name are required")
-            manager = self._manager()
             if action == "install":
                 record = manager.install(
                     name,
                     expected_version=body.get("version"),
+                    source=body.get("source"),
                 )
             elif action == "update":
-                record = manager.update(name)
+                results = manager.batch(
+                    "update", [{
+                        "name": name,
+                        "version": body.get("version"),
+                        "source": body.get("source"),
+                    }]
+                )
+                result = results[0]
+                if result.get("status") == "failed":
+                    raise ValueError(result.get("reason") or "update failed")
+                record = manager.installed().get(name)
             elif action == "rollback":
                 record = manager.rollback(name)
             elif action == "uninstall":
-                manager.uninstall(name, purge_data=bool(body.get("purge_data")))
+                manager.uninstall(name, purge_data=True)
                 record = None
             elif action == "verify":
                 return json.dumps({"status": "success", "findings": manager.verify(name)}, ensure_ascii=False)
             else:
                 raise ValueError(f"unknown action: {action}")
-            return json.dumps({"status": "success", "record": record}, ensure_ascii=False)
+            state = self._checker().check()
+            return json.dumps({"status": "success", "record": record, "update_state": state}, ensure_ascii=False)
         except Exception as exc:
             logger.error(f"[WebChannel] Skill Hub POST error: {exc}")
             web.ctx.status = "400 Bad Request"

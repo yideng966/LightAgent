@@ -3,18 +3,74 @@
 import base64
 import json
 import os
+import tempfile
+import threading
 from dataclasses import dataclass
 from typing import Dict, List, Optional
+from urllib.parse import quote
 
 import requests
 
-from cli.utils import get_workspace_dir, load_config_json
+from cli.utils import SKILL_HUB_API, get_workspace_dir, load_config_json
 
 
 DEFAULT_REGISTRY_URL = "https://xiaoguiwucan.github.io/LightAgent-SkillHub/registry.json"
 REGISTRY_PUBLIC_KEYS = {
     "lightagent-skillhub-2026-01": "ddZUto18e4bp5pRMgrHD8xJoCfFGxiXznA8G8ksyaMQ=",
 }
+
+_CACHE_WRITE_LOCK = threading.Lock()
+
+
+# The original marketplace does not expose Python/npm dependencies. Keep a
+# reviewed compatibility manifest for entries whose published SKILL.md names
+# concrete packages. Never execute installation commands parsed from skill text.
+LEGACY_SKILL_REQUIREMENTS = {
+    "apple-reminders": {"bins": ["remindctl"]},
+    "docx": {"python": ["defusedxml>=0.7.1"], "npm": ["docx@9.5.1"]},
+    "eda-reporter": {
+        "python": [
+            "pandas", "openpyxl", "numpy", "scipy", "scikit-learn",
+            "jinja2", "pyyaml", "chardet",
+        ],
+    },
+    "email-daily-summary": {"python": ["browser-use[cli]"]},
+    "linkai-cli": {"npm": ["linkai-cli"]},
+    "pdf": {
+        "bins": ["tesseract", "pdftoppm"],
+        "python": ["pytesseract", "pdf2image"],
+    },
+    "post-job": {
+        "npm": ["axios@^1.6.0", "dayjs@^1.11.19", "dotenv@^17.3.1", "fuse.js@^7.0.0"],
+    },
+    "pptx": {
+        "python": ["markitdown[pptx]", "Pillow", "python-pptx"],
+        "npm": ["pptxgenjs"],
+    },
+    "stock-analysis": {"npm": ["@steipete/bird"]},
+    "wechat-article-search": {"npm": ["cheerio"]},
+    "wecom-cli": {"npm": ["@wecom/cli@0.1.9"]},
+    "youtube-upload": {
+        "python": [
+            "google-api-python-client", "google-auth-oauthlib",
+            "google-auth-httplib2",
+        ],
+    },
+}
+
+
+def _legacy_requirements(item):
+    requirements = item.get("requirements") if isinstance(item.get("requirements"), dict) else {}
+    merged = {
+        "env": list(item.get("requires_env") or requirements.get("env") or []),
+        "bins": list(item.get("requires_bins") or requirements.get("bins") or []),
+        "python": list(requirements.get("python") or []),
+        "npm": list(requirements.get("npm") or []),
+        "downloads": list(requirements.get("downloads") or []),
+    }
+    for kind, values in LEGACY_SKILL_REQUIREMENTS.get(str(item.get("name") or ""), {}).items():
+        merged[kind] = list(dict.fromkeys([*merged.get(kind, []), *values]))
+    return merged
 
 
 class RegistryError(RuntimeError):
@@ -73,8 +129,10 @@ class SkillRegistryClient:
                     return RegistrySnapshot(cached, self.cache_path, cached=True)
             raise RegistryError(f"无法读取技能注册表: {exc}") from exc
 
-    def list_skills(self, query="", include_unavailable=False) -> List[Dict]:
-        skills = self.load().data.get("skills", [])
+    def list_skills(
+        self, query="", include_unavailable=False, snapshot: Optional[RegistrySnapshot] = None
+    ) -> List[Dict]:
+        skills = (snapshot or self.load()).data.get("skills", [])
         if not include_unavailable:
             skills = [item for item in skills if item.get("status", "active") in ("active", "deprecated")]
         query = str(query or "").strip().lower()
@@ -120,13 +178,22 @@ class SkillRegistryClient:
             raise RegistrySecurityError("技能注册表签名无效") from exc
 
     def _write_cache(self, document):
-        os.makedirs(self.cache_dir, exist_ok=True)
-        temp_path = self.cache_path + ".tmp"
-        with open(temp_path, "w", encoding="utf-8") as handle:
-            json.dump(document, handle, ensure_ascii=False, indent=2)
-            handle.flush()
-            os.fsync(handle.fileno())
-        os.replace(temp_path, self.cache_path)
+        with _CACHE_WRITE_LOCK:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            fd, temp_path = tempfile.mkstemp(
+                prefix="registry.", suffix=".tmp", dir=self.cache_dir
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(document, handle, ensure_ascii=False, indent=2)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temp_path, self.cache_path)
+            finally:
+                try:
+                    os.unlink(temp_path)
+                except FileNotFoundError:
+                    pass
 
     def _read_cache(self):
         try:
@@ -139,4 +206,115 @@ class SkillRegistryClient:
         except RegistrySecurityError:
             raise
         except Exception:
+            return None
+
+
+class LegacySkillRegistryClient:
+    """Catalog client for the original CowAgent skill marketplace.
+
+    This source is intentionally kept distinct from the signed official
+    registry. Its entries are normalized for the shared UI, but are never
+    presented as signed artifacts.
+    """
+
+    SOURCE = "cowagent-skillhub"
+
+    def __init__(self, api_url: Optional[str] = None, cache_dir: Optional[str] = None, session=None):
+        self.api_url = (api_url or SKILL_HUB_API).rstrip("/")
+        self.cache_dir = cache_dir or os.path.join(get_workspace_dir(), ".skillhub")
+        self.cache_path = os.path.join(self.cache_dir, "cowagent-catalog.last-good.json")
+        self.session = session or requests
+
+    def list_skills(self, query="", allow_cache=True) -> List[Dict]:
+        try:
+            first = self._fetch_page(1)
+            skills = list(first.get("skills") or [])
+            total = int(first.get("total") or len(skills))
+            limit = max(1, int(first.get("limit") or 50))
+            for page in range(2, (total + limit - 1) // limit + 1):
+                skills.extend(self._fetch_page(page).get("skills") or [])
+            normalized = [self._normalize(item) for item in skills]
+            self._write_cache(normalized)
+        except Exception as exc:
+            normalized = self._read_cache() if allow_cache else None
+            if normalized is None:
+                raise RegistryError(f"无法读取原技能广场: {exc}") from exc
+        for item in normalized:
+            item.setdefault(
+                "detail_url",
+                f"https://skills.cowagent.ai/{quote(str(item.get('name') or ''), safe='')}",
+            )
+            item["requirements"] = _legacy_requirements(item)
+        query = str(query or "").strip().lower()
+        if query:
+            normalized = [
+                item for item in normalized
+                if query in " ".join([
+                    str(item.get("name", "")), str(item.get("display_name", "")),
+                    str(item.get("description", "")), str(item.get("author", "")),
+                    *[str(tag) for tag in item.get("tags", [])],
+                ]).lower()
+            ]
+        return normalized
+
+    def get_skill(self, name: str) -> Dict:
+        for item in self.list_skills():
+            if item.get("name") == name:
+                return item
+        raise RegistryError(f"原技能广场不存在技能 {name}")
+
+    def _fetch_page(self, page):
+        response = self.session.get(
+            f"{self.api_url}/skills",
+            params={"page": page, "limit": 50},
+            timeout=(5, 15),
+        )
+        response.raise_for_status()
+        value = response.json()
+        if not isinstance(value, dict) or not isinstance(value.get("skills"), list):
+            raise RegistryError("原技能广场返回了无效目录")
+        return value
+
+    def _normalize(self, item):
+        status = "active" if item.get("status") == "published" else str(item.get("status") or "active")
+        return {
+            **item,
+            "description": item.get("description") or item.get("summary") or "",
+            "publisher": item.get("author") or item.get("source_provider") or "community",
+            "status": status,
+            "registry_source": self.SOURCE,
+            "registry_label": "原技能广场",
+            "registry_url": self.api_url,
+            "detail_url": f"https://skills.cowagent.ai/{quote(str(item.get('name') or ''), safe='')}",
+            "min_lightagent_version": None,
+            "max_lightagent_version": None,
+            "requirements": _legacy_requirements(item),
+            "lightagent": {
+                "network_domains": [], "file_paths": [], "tools": [],
+                "docker_notes": "请根据技能声明预先准备所需命令和环境变量。",
+            },
+        }
+
+    def _write_cache(self, skills):
+        with _CACHE_WRITE_LOCK:
+            os.makedirs(self.cache_dir, exist_ok=True)
+            fd, temp_path = tempfile.mkstemp(prefix="cowagent-catalog.", suffix=".tmp", dir=self.cache_dir)
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    json.dump(skills, handle, ensure_ascii=False, indent=2)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temp_path, self.cache_path)
+            finally:
+                try:
+                    os.unlink(temp_path)
+                except FileNotFoundError:
+                    pass
+
+    def _read_cache(self):
+        try:
+            with open(self.cache_path, "r", encoding="utf-8") as handle:
+                value = json.load(handle)
+            return value if isinstance(value, list) else None
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
             return None
