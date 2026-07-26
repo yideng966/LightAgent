@@ -1,65 +1,63 @@
 ---
-title: 技能广场
-description: 浏览、搜索和安装 AI Agent 技能
+title: 技能中心
+description: 浏览、校验、安装、更新和回滚 LightAgent 技能
 ---
 
-[LightAgent Skill Hub](https://skills.cowagent.ai/) 是开源的 AI Agent 技能广场，汇集了官方推荐、社区贡献和第三方平台（GitHub、ClawHub 等）的技能。
+[LightAgent Skill Hub](https://xiaoguiwucan.github.io/LightAgent-SkillHub/) 是基于 GitHub 的 LightAgent 官方技能中心。[源码仓库](https://github.com/xiaoguiwucan/LightAgent-SkillHub) 包含技能源码、开发规范、CI 校验、确定性压缩包和签名静态索引。`https://skills.cowagent.ai` 作为“原技能广场”独立展示，不伪装成官方签名来源。
 
-开源仓库：[github.com/zhayujie/lightagent-skill-hub](https://github.com/zhayujie/cow-skill-hub)
+## 浏览和安装
 
-<img src="https://cdn.link-ai.tech/doc/20260401110103.png" width="800" />
-
-## 功能
-
-- **浏览技能**：按类别（推荐 / 社区 / 第三方）和标签筛选
-- **搜索技能**：按名称或描述搜索
-- **查看详情**：查看技能文档、文件内容、安装命令和依赖的环境变量
-- **一键安装**：复制安装命令即可在 LightAgent 中使用
-
-## 安装技能
-
-在对话中或终端中执行安装命令：
-
-<CodeGroup>
-```text 对话
-/skill install <name>
-```
-
-```bash 终端
-lightagent skill install <name>
-```
-</CodeGroup>
-
-也可以在对话中浏览技能广场：
+Web 控制台中打开“技能 -> 获取在线技能”，可以分别浏览 LightAgent Skill Hub 和原技能广场，并使用中文分类、搜索、12 条分页、详情、单项操作与跨页批量管理。每次打开在线库都会立即刷新目录和本地状态。
 
 ```text
 /skill list --remote
 /skill search <关键词>
+/skill install <name>
 ```
 
-除了在列表中展示的精选技能，还可以通过 **CLI命令 + Skill Hub** 安装各种第三方技能（**GitHub、ClawHub、LinkAI、URL** 等）参考 [安装技能](/zh/skills/install)。
+```bash
+lightagent skill list --remote
+lightagent skill search <关键词>
+lightagent skill install <name>
+```
+
+点击安装后，LightAgent 会先校验包完整性，再在技能私有环境中安装已声明的 Python、npm 和带 SHA-256 的下载依赖。页面使用事实状态区分“官方签名”、“已审核哈希”和“首次安装锁定”。
+
+## 更新和回滚
+
+后台只在启动时、每 6 小时及用户打开在线库时检查更新，不会自动升级。用户点击更新前，页面会展示当前/目标版本、来源、发布说明、破坏性变更以及依赖、系统能力和执行权限变化。
+
+```bash
+lightagent skill outdated
+lightagent skill update <name>
+lightagent skill rollback <name>
+lightagent skill verify [name]
+```
+
+更新前会保存上一版本；新包、依赖、入口或完整性校验失败时自动恢复旧包、旧依赖和旧锁记录。
+
+## 系统能力
+
+技能用 `requirements.capabilities` 声明 `office-documents`、`media-processing` 或 `browser-automation`。LightAgent 不会在技能安装时运行 `sudo`、`apt` 或 `brew`。缺少能力时，请使用 `yideng966/lightagent:skills-full` 或构建自定义镜像：
+
+```bash
+docker build -f docker/Dockerfile.latest \
+  --build-arg SKILL_CAPABILITY_PACKS=office,media,browser \
+  -t lightagent:custom .
+```
+
+## 彻底卸载和加密备份
+
+Web 卸载会彻底删除技能包、私有依赖、回滚版本、配置、密钥、用户数据和锁记录。确认框可先导出口令加密的 `.laskill-backup`；它仅包含单个技能的配置和用户数据，使用 scrypt 派生密钥和 AES-256-GCM 加密。恢复时需要先重新安装同名技能。
+
+## Skill Runner 边界
+
+Schema v2 脚本技能必须声明结构化 `lightagent.entrypoints` 并通过 `skill_run` 执行，不使用 shell 命令字符串。Runner 限制请求快照、环境变量、路径、时间、输出、内存和子进程数，并写入不包含参数的审计日志。这是受控进程边界，不是完整文件系统或网络沙箱；旧技能仍显示“Runner 兼容隔离”并逐步迁移。
 
 ## 贡献技能
 
-欢迎向技能广场提交你的技能：
-
-1. 访问 [Skill Hub/submit](https://skills.cowagent.ai/submit)
-2. 使用 GitHub 或 Google 账号登录
-3. 上传包含 `SKILL.md` 的文件夹或 zip 包
-4. 自动解析技能名称、显示名称和描述，可按需修改
-5. 提交后将经过安全检查和审核后发布
-
-<img src="https://cdn.link-ai.tech/doc/20260401111904.png" width="800" />
-
-技能文件结构：
-
-```
-your-skill/
-├── SKILL.md        # 必须，放在根目录
-├── scripts/        # 可选，运行脚本
-└── resources/      # 可选，其他资源
-```
-
-<Tip>
-  技能基于 `SKILL.md` 文件构建，你也可以在技能详情页下载 SKILL.md，用于任何支持自定义指令的 Agent（如 OpenClaw、Cursor、Claude Code 等）。
-</Tip>
+1. Fork [LightAgent-SkillHub](https://github.com/xiaoguiwucan/LightAgent-SkillHub)。
+2. 将 `templates/skill/` 复制到 `skills/<name>/`，补全 Schema v2 元数据和测试。
+3. 脚本技能声明结构化入口，正文通过 `skill_run` 调用。
+4. 运行 `python scripts/validate.py` 和 `python scripts/build_registry.py --output dist`。
+5. 使用中文 PR 说明功能、测试、依赖、权限、兼容性和变更摘要。

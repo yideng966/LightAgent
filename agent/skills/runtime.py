@@ -44,6 +44,38 @@ def build_skill_runtime_env(
     return env
 
 
+def build_single_skill_runtime_env(
+    workspace: str,
+    skill_name: str,
+    base_env: Optional[Mapping[str, str]] = None,
+):
+    """Expose only one lockfile-backed skill dependency environment."""
+    env = dict(base_env or {})
+    workspace = os.path.abspath(workspace)
+    if skill_name not in _installed_skill_names(os.path.join(workspace, "skills.lock.json")):
+        return env
+    if not _valid_skill_name(skill_name):
+        return env
+    root = os.path.realpath(os.path.join(workspace, ".skill-envs"))
+    skill_env = os.path.realpath(os.path.join(root, skill_name))
+    if skill_env == root or not skill_env.startswith(root + os.sep):
+        return env
+    path_entries = [
+        path for path in (
+            os.path.join(skill_env, "bin"),
+            os.path.join(skill_env, "python", "bin"),
+            os.path.join(skill_env, "npm", "node_modules", ".bin"),
+        ) if os.path.isdir(path)
+    ]
+    python_dir = os.path.join(skill_env, "python")
+    node_dir = os.path.join(skill_env, "npm", "node_modules")
+    _prepend_env_path(env, "PATH", path_entries)
+    _prepend_env_path(env, "PYTHONPATH", [python_dir] if os.path.isdir(python_dir) else [])
+    _prepend_env_path(env, "NODE_PATH", [node_dir] if os.path.isdir(node_dir) else [])
+    env["LIGHTAGENT_SKILL_ENVS"] = root
+    return env
+
+
 def _installed_skill_names(lock_path):
     try:
         value = json.loads(Path(lock_path).read_text(encoding="utf-8"))

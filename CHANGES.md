@@ -2,6 +2,25 @@
 
 ## 2026-07-26
 
+### 技能完整性、能力包、加密备份与 Skill Runner
+
+- 升级 Registry/lockfile v2：记录产物 SHA-256、完整性来源、原广场兼容清单版本、系统能力、执行模式、结构化入口和更新变更摘要，并保留 v1 只读兼容。
+- 新增 `legacy_compat.json` 和审计脚本：已审核的原技能广场版本必须匹配固定哈希；清单外版本首次安装锁定哈希，同版本静默变更被拒绝。
+- 新增系统能力清单与探测，首批覆盖 Office 文档、媒体和浏览器；Dockerfile 支持 `SKILL_CAPABILITY_PACKS`，发布工作流增加 `skills-full` 镜像变体。
+- 新增 `.laskill-backup`：仅打包单技能配置与用户数据，使用 scrypt 派生密钥和 AES-256-GCM 加密，通过 10 分钟一次性令牌下载，下载后立即删除服务端临时文件。
+- Web 彻底卸载确认框增加“先导出加密备份”，在线库增加备份恢复入口；更新弹窗展示版本、来源、发布说明、破坏性变更和依赖/能力/权限差异。
+- 新增 `skill_run` 受控入口工具：只执行请求快照中声明的入口，不使用 shell，限制参数、环境、路径、时间、输出、内存和进程数，拒绝覆盖 Runner 保留环境变量，POSIX 超时时终止整个子进程组，并写入不包含参数的审计日志。
+- Web/API 技能卡新增完整性、系统能力、执行模式、更新变更摘要和备份可用性字段；旧技能明确显示“Runner 兼容隔离”，不宣称已有完整网络/文件系统沙箱。
+
+验证记录：
+
+- Registry、生命周期、运行时、后台检查、Web/API、完整性、备份、Runner 和微信群 ACL 定向回归 71 项通过；Runner 在 `ResourceWarning` 视为错误的模式下 9 项通过，覆盖保留环境变量与超时子进程组清理。
+- Skill Hub 校验 2 个技能通过，Registry v2 确定性构建成功，4 项 Schema 合同测试通过；Docker 非 root 安装和当前 LightAgent 主分支兼容性烟测通过。
+- Bash 流式及隔离依赖回归 7 项通过、3 项按平台跳过。全量 Python 回归运行 992 项，3 项语言状态断言失败和 2 项因官方镜像未包含 `pytest` 而导入失败；未修改的 `origin/master` 复跑失败集合一致。
+- `node --check channel/web/static/js/console.js`、Python `py_compile`、`git diff --check` 通过。
+- `docker build --check -f docker/Dockerfile.latest .` 通过，无 Dockerfile 警告。
+- 已构建 `lightagent:local-skill-v2` 并原位重启本地 `9899`，保留原配置与 workspace 挂载；真实 Chromium 验证官方 Hub 2 个技能、原技能广场 67 个技能、v2 API 字段和 390px 无横向溢出。截图见 `docs/images/skill-v2-*.png`。
+
 ### 原技能广场依赖安装与运行修复
 
 - 为 `https://skills.cowagent.ai` 原技能广场补充受控依赖兼容表，覆盖已核实声明 Python、npm 或系统命令的技能；旧 Registry 缓存也会在读取时补齐依赖，不执行 `SKILL.md` 中的任意安装命令。

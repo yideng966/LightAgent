@@ -1328,6 +1328,7 @@ class WebChannel(ChatChannel):
             '/api/tools', 'ToolsHandler',
             '/api/skills', 'SkillsHandler',
             '/api/skill-hub', 'SkillHubHandler',
+            '/api/skill-hub/backup/(.*)', 'SkillBackupHandler',
             '/api/skills/access', 'SkillsAccessHandler',
             '/api/skills/access/bulk', 'SkillsAccessBulkHandler',
             '/api/skills/access/templates', 'SkillsAccessTemplatesHandler',
@@ -7447,6 +7448,7 @@ class SkillsHandler:
             from agent.skills.lifecycle import SkillLifecycleManager
             from cli.utils import get_builtin_skills_dir
             from agent.skills.update_checker import get_skill_update_checker
+            from agent.skills.capabilities import capability_status
             from channel.wechat_group.wechat_group_skill_access import (
                 get_wechat_group_skill_access_service,
             )
@@ -7491,6 +7493,23 @@ class SkillsHandler:
                     "update_available": bool(status.get("update_available")),
                     "update_status": status.get("update_status", "unmanaged"),
                     "last_checked_at": update_state.get("checked_at"),
+                    "integrity_status": (
+                        local.get("integrity_status") if local else None
+                    ),
+                    "capability_status": capability_status(
+                        (local.get("requirements") or {}).get("capabilities", [])
+                        if local else (frontmatter.get("requirements") or {}).get("capabilities", [])
+                    ),
+                    "execution_mode": (
+                        local.get("execution_mode", "compatibility")
+                        if local else (
+                            "runner"
+                            if (frontmatter.get("lightagent") or {}).get("entrypoints")
+                            else "local"
+                        )
+                    ),
+                    "changes": status.get("changes") or {},
+                    "backup_available": bool(local),
                 })
             return json.dumps({"status": "success", "skills": skills}, ensure_ascii=False)
         except Exception as e:
@@ -7594,6 +7613,7 @@ class SkillHubHandler:
         )
         try:
             from agent.skills.lifecycle import _version_tuple
+            from agent.skills.capabilities import capability_status
             manager = self._manager()
             checker = self._checker()
             force_refresh = str(params.refresh).lower() in ("1", "true", "yes")
@@ -7630,6 +7650,7 @@ class SkillHubHandler:
             installed = manager.installed()
             for item in skills:
                 local = installed.get(item.get("name"), {})
+                status = (update_state.get("skills") or {}).get(item.get("name"), {})
                 item["registry_source"] = item.get("registry_source", "lightagent-skillhub")
                 item["registry_label"] = item.get("registry_label", "LightAgent Skill Hub")
                 item["installed_version"] = local.get("version")
@@ -7640,6 +7661,21 @@ class SkillHubHandler:
                 )
                 item["is_latest"] = bool(local and not item["update_available"])
                 item["can_uninstall"] = bool(local)
+                item["integrity_status"] = (
+                    local.get("integrity_status")
+                    if local
+                    else item.get("integrity_status") or "official_signed"
+                )
+                item["capability_status"] = capability_status(
+                    (item.get("requirements") or {}).get("capabilities", [])
+                )
+                item["execution_mode"] = (
+                    "runner"
+                    if (item.get("lightagent") or {}).get("entrypoints")
+                    else local.get("execution_mode", "compatibility")
+                )
+                item["changes"] = status.get("changes") or {}
+                item["backup_available"] = bool(local)
             return json.dumps({
                 "status": "success",
                 "skills": skills,
@@ -7685,6 +7721,12 @@ class SkillHubHandler:
             name = str(body.get("name", "")).strip()
             if not action or not name:
                 raise ValueError("action and name are required")
+            if action == "export_backup":
+                from agent.skills.backup import create_download_token
+                backup = create_download_token(
+                    _get_workspace_root(), name, str(body.get("passphrase") or "")
+                )
+                return json.dumps({"status": "success", "backup": backup}, ensure_ascii=False)
             if action == "install":
                 record = manager.install(
                     name,
@@ -7716,6 +7758,41 @@ class SkillHubHandler:
             return json.dumps({"status": "success", "record": record, "update_state": state}, ensure_ascii=False)
         except Exception as exc:
             logger.error(f"[WebChannel] Skill Hub POST error: {exc}")
+            web.ctx.status = "400 Bad Request"
+            return json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False)
+
+
+class SkillBackupHandler:
+    """One-time encrypted Skill backup download and restore endpoint."""
+
+    def GET(self, token):
+        _require_auth()
+        from agent.skills.backup import consume_download_token
+        try:
+            name, content = consume_download_token(token)
+            web.header("Content-Type", "application/octet-stream")
+            web.header("Content-Disposition", f'attachment; filename="{name}.laskill-backup"')
+            web.header("Cache-Control", "no-store")
+            return content
+        except Exception as exc:
+            web.ctx.status = "404 Not Found"
+            web.header("Content-Type", "application/json; charset=utf-8")
+            return json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False)
+
+    def POST(self, _token):
+        _require_auth()
+        web.header("Content-Type", "application/json; charset=utf-8")
+        try:
+            value = _raw_web_input()
+            upload = value.get("backup")
+            passphrase = str(value.get("passphrase") or "")
+            if upload is None:
+                raise ValueError("backup is required")
+            content = _read_uploaded_file_bytes_limited(upload, 100 * 1024 * 1024)
+            from agent.skills.backup import restore_encrypted_backup
+            result = restore_encrypted_backup(_get_workspace_root(), content, passphrase)
+            return json.dumps({"status": "success", "restore": result}, ensure_ascii=False)
+        except Exception as exc:
             web.ctx.status = "400 Bad Request"
             return json.dumps({"status": "error", "message": str(exc)}, ensure_ascii=False)
 

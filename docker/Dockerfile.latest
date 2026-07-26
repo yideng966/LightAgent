@@ -19,11 +19,14 @@ ARG TZ='Asia/Shanghai'
 ARG CHATGPT_ON_WECHAT_VER
 # Set to "false" to skip Playwright/Chromium and produce a smaller image
 ARG INSTALL_BROWSER=true
+# Comma-separated official capability packs: office,media,browser
+ARG SKILL_CAPABILITY_PACKS=""
 # Set to "true" to use China mirrors for apt / pip / playwright (faster in CN)
 ARG USE_CN_MIRROR=false
 
 ENV PLAYWRIGHT_BROWSERS_PATH=/app/ms-playwright
 ENV BUILD_PREFIX=/app
+ENV LIGHTAGENT_SKILL_CAPABILITY_PACKS=${SKILL_CAPABILITY_PACKS}
 
 # Optionally switch apt and pip to China mirrors
 RUN if [ "$USE_CN_MIRROR" = "true" ]; then \
@@ -43,13 +46,24 @@ COPY --from=wechat-group-sidecar-build \
 
 # All heavy installs + user creation in ONE layer to avoid chown duplication
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends bash ffmpeg espeak libavcodec-extra libatomic1 libstdc++6 \
+    && CAPABILITY_PACKAGES="" \
+    && ENABLE_BROWSER="$INSTALL_BROWSER" \
+    && for pack in $(echo "$SKILL_CAPABILITY_PACKS" | tr ',' ' '); do \
+        case "$pack" in \
+            office) CAPABILITY_PACKAGES="$CAPABILITY_PACKAGES libreoffice poppler-utils tesseract-ocr" ;; \
+            media) CAPABILITY_PACKAGES="$CAPABILITY_PACKAGES ffmpeg" ;; \
+            browser) ENABLE_BROWSER=true ;; \
+            "") ;; \
+            *) echo "Unknown SKILL_CAPABILITY_PACKS entry: $pack" >&2; exit 1 ;; \
+        esac; \
+    done \
+    && apt-get install -y --no-install-recommends bash ffmpeg espeak libavcodec-extra libatomic1 libstdc++6 $CAPABILITY_PACKAGES \
     && cd ${BUILD_PREFIX} \
     && /usr/local/bin/python -m pip install --no-cache --upgrade pip \
     && pip install --no-cache -r requirements.txt \
     && pip install --no-cache -r requirements-optional.txt \
     && pip install --no-cache -e . \
-    && if [ "$INSTALL_BROWSER" = "true" ]; then \
+    && if [ "$ENABLE_BROWSER" = "true" ]; then \
         apt-get install -y --no-install-recommends fonts-wqy-zenhei \
         && pip install --no-cache "playwright==1.52.0" \
         && python -m playwright install-deps chromium \

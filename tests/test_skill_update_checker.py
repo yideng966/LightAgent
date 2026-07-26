@@ -92,6 +92,22 @@ class SkillUpdateCheckerTest(unittest.TestCase):
         self.assertEqual(2, checker.check.call_count)
         checker._stop_event.wait.assert_called_with(DEFAULT_CHECK_INTERVAL_SECONDS)
 
+    def test_update_status_includes_manual_decision_changes(self):
+        snapshot = _snapshot("1.2.0")
+        snapshot.data["skills"][0].update({
+            "release_notes": "修复转换失败",
+            "breaking_changes": ["输出目录参数改名"],
+            "requirements": {"python": ["new-package"], "capabilities": ["office-documents"]},
+            "lightagent": {"network_domains": ["example.test"], "file_paths": [], "tools": ["skill_run"]},
+        })
+        checker = SkillUpdateChecker(self.workspace, registry=_Registry(snapshot))
+        state = checker.check()
+        changes = state["skills"]["sample-skill"]["changes"]
+        self.assertTrue(changes["release_notes_available"])
+        self.assertEqual(["输出目录参数改名"], changes["breaking_changes"])
+        self.assertTrue(changes["requirements_changed"])
+        self.assertTrue(changes["permissions_changed"])
+
 
 if __name__ == "__main__":
     unittest.main()

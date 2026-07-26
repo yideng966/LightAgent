@@ -400,6 +400,9 @@ class AgentStreamExecutor:
         self.skill_snapshot = {
             skill.name: skill for skill in getattr(skill_snapshot, "resolved_skills", [])
         }
+        skill_run = self.tools.get("skill_run") if isinstance(self.tools, dict) else None
+        if skill_run and hasattr(skill_run, "set_skill_snapshot"):
+            skill_run.set_skill_snapshot(self.skill_snapshot)
 
         # Message history - use provided messages or create new list
         self.messages = messages if messages is not None else []

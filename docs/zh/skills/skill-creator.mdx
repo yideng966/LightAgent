@@ -77,6 +77,32 @@ metadata:
 
 **技能会自动按依赖启禁用**：环境变量齐了就自动启用，缺了就自动禁用，不需要手动 `/skill enable`。
 
+## Skill Hub Schema v2 脚本入口
+
+向官方 Hub 新发布或升级的脚本技能必须声明 `schema_version: 2` 和结构化 `lightagent.entrypoints`。正文说明调用 `skill_run` 的技能名、入口名和字符串参数数组，不要让 Agent 通过 Bash、Python 或 Node 命令字符串直接执行技能脚本。
+
+```yaml
+schema_version: 2
+requirements:
+  capabilities: [office-documents]
+lightagent:
+  tools: [skill_run]
+  entrypoints:
+    - name: generate
+      path: scripts/generate.py
+      runtime: python
+      timeout_seconds: 60
+      max_output_bytes: 262144
+      max_memory_mb: 512
+      max_processes: 8
+      arguments:
+        min_items: 1
+        max_items: 8
+        max_length: 2048
+```
+
+`requirements.capabilities` 只允许稳定能力名；技能不得包含运行时 `apt`、`brew` 或 `sudo` 安装步骤。
+
 ## 资源目录怎么用
 
 | 目录 | 放什么 | 不要放 |

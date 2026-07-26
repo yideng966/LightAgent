@@ -3,15 +3,11 @@ title: Skill Hub
 description: Browse, verify, install, update, and roll back LightAgent skills
 ---
 
-[LightAgent Skill Hub](https://xiaoguiwucan.github.io/LightAgent-SkillHub/) is the official GitHub-based registry for LightAgent. Its [source repository](https://github.com/xiaoguiwucan/LightAgent-SkillHub) contains every published skill, contribution rules, validation workflows, deterministic packages, checksums, and the static catalog.
-
-LightAgent verifies the registry signature and package SHA-256 before installation. If GitHub is temporarily unavailable, it uses only the last locally cached registry whose signature remains valid. The legacy `skills.cowagent.ai` service remains a compatibility fallback.
+[LightAgent Skill Hub](https://xiaoguiwucan.github.io/LightAgent-SkillHub/) is LightAgent's official GitHub-based registry. Its [source repository](https://github.com/xiaoguiwucan/LightAgent-SkillHub) contains skill sources, contribution rules, CI validation, deterministic packages, and the signed static index. `skills.cowagent.ai` remains available as the separately labelled original marketplace and is never presented as an official signed source.
 
 ## Browse and install
 
-Use the Web console's Skills view, chat commands, or the terminal:
-
-In the Web console, open **Skills** and choose **Get online skills**. The online library opens as a separate dialog with search, category filters, pagination, skill details, and install/update actions. The main Skills page remains focused on installed skills and built-in tools even when the Hub grows.
+In the Web console, open **Skills -> Get online skills**. The dialog separates both sources and provides search, translated categories, 12-item pagination, details, individual actions, and cross-page batch management. It refreshes the catalog and local state every time it opens.
 
 ```text
 /skill list --remote
@@ -19,17 +15,11 @@ In the Web console, open **Skills** and choose **Get online skills**. The online
 /skill install <name>
 ```
 
-```bash
-lightagent skill list --remote
-lightagent skill search <keyword>
-lightagent skill install <name>
-```
-
-Declared dependencies are installed automatically after the user chooses Install. Chat-based installation, update, rollback, and uninstall remain restricted to configured owners or administrators.
+After Install, LightAgent verifies the artifact and prepares declared Python, npm, and SHA-256-pinned download dependencies in a private skill environment. The UI distinguishes **official signature**, **reviewed hash**, and **first-install lock** integrity states.
 
 ## Updates and rollback
 
-Updates are never applied silently:
+Background jobs only check at startup and every six hours; they never update a skill automatically. Before an explicit update, the Web console shows current and target versions, source, release notes, breaking changes, and dependency, capability, and permission changes.
 
 ```bash
 lightagent skill outdated
@@ -38,12 +28,20 @@ lightagent skill rollback <name>
 lightagent skill verify [name]
 ```
 
-Installed versions and artifact identities are stored in `<workspace>/skills.lock.json`. Package code, dependency environments, configuration, and user-generated data are stored separately. A normal uninstall preserves configuration and user data.
+The previous package, dependency environment, and lock record are preserved. A package, dependency, entrypoint, or integrity verification failure restores them automatically.
 
-## Security boundary
+## System capabilities
 
-The registry declares network domains, file paths, tools, dependencies, and Docker notes. These fields support automated and maintainer review; they are not a per-skill runtime sandbox. Review third-party skills before use.
+Skills declare stable `requirements.capabilities` names: `office-documents`, `media-processing`, or `browser-automation`. LightAgent never executes sudo, apt, or brew during skill installation. Use `yideng966/lightagent:skills-full`, or build a custom image with `SKILL_CAPABILITY_PACKS=office,media,browser`.
+
+## Complete uninstall and encrypted backup
+
+A Web uninstall permanently removes package code, private dependencies, rollback versions, configuration, secrets, user data, and lock records. The dialog can first export a single-skill `.laskill-backup`, encrypted with a scrypt-derived key and AES-256-GCM. Reinstall the same skill before restoring its backup.
+
+## Skill Runner boundary
+
+Schema v2 script skills declare structured `lightagent.entrypoints` and run through `skill_run` without shell command strings. Runner constrains the request snapshot, environment, paths, time, output, memory, and process count, and records an argument-free audit event. This is controlled process isolation, not a complete filesystem or network sandbox. Older skills remain in **Runner compatibility isolation** while they are migrated.
 
 ## Contributing
 
-Fork [xiaoguiwucan/LightAgent-SkillHub](https://github.com/xiaoguiwucan/LightAgent-SkillHub), copy the skill template, run the validation scripts, and submit a Chinese Pull Request. Community skills cannot silently replace LightAgent's built-in skills or reserved namespaces.
+Fork [LightAgent-SkillHub](https://github.com/xiaoguiwucan/LightAgent-SkillHub), copy `templates/skill/` to `skills/<name>/`, declare Schema v2 metadata and tests, run the validation and registry build scripts, and submit a Chinese Pull Request describing behavior, tests, dependencies, permissions, compatibility, and changes.

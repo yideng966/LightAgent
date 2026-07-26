@@ -1,0 +1,52 @@
+{
+  "manifest_version": 1,
+  "source": "https://skills.cowagent.ai",
+  "skills": {
+    "apple-reminders": {
+      "*": {"requirements": {"bins": ["remindctl"]}}
+    },
+    "docx": {
+      "1.0.0": {
+        "artifact_sha256": "4f8f602a5b179ca01edbd5335b3b7b8d9e7ae089270ea66d64965496e49ae6ef",
+        "source_url": "https://github.com/anthropics/skills/tree/main/skills/docx",
+        "reviewed_at": "2026-07-26",
+        "min_lightagent_version": "2.1.0",
+        "requirements": {
+          "python": ["defusedxml>=0.7.1"],
+          "npm": ["docx@9.5.1"],
+          "capabilities": ["office-documents"]
+        }
+      }
+    },
+    "eda-reporter": {
+      "1.0.0": {"requirements": {"python": ["pandas", "openpyxl", "numpy", "scipy", "scikit-learn", "jinja2", "pyyaml", "chardet"]}}
+    },
+    "email-daily-summary": {
+      "*": {"requirements": {"python": ["browser-use[cli]"], "capabilities": ["browser-automation"]}}
+    },
+    "linkai-cli": {
+      "1.0.0": {"requirements": {"npm": ["linkai-cli"]}}
+    },
+    "pdf": {
+      "1.0.0": {"requirements": {"bins": ["tesseract", "pdftoppm"], "python": ["pytesseract", "pdf2image"], "capabilities": ["office-documents"]}}
+    },
+    "post-job": {
+      "*": {"requirements": {"npm": ["axios@^1.6.0", "dayjs@^1.11.19", "dotenv@^17.3.1", "fuse.js@^7.0.0"]}}
+    },
+    "pptx": {
+      "1.0.0": {"requirements": {"python": ["markitdown[pptx]", "Pillow", "python-pptx"], "npm": ["pptxgenjs"], "capabilities": ["office-documents"]}}
+    },
+    "stock-analysis": {
+      "6.2.0": {"requirements": {"npm": ["@steipete/bird"]}}
+    },
+    "wechat-article-search": {
+      "0.1.0": {"requirements": {"npm": ["cheerio"]}}
+    },
+    "wecom-cli": {
+      "1.0.0": {"requirements": {"npm": ["@wecom/cli@0.1.9"]}}
+    },
+    "youtube-upload": {
+      "1.0.0": {"requirements": {"python": ["google-api-python-client", "google-auth-oauthlib", "google-auth-httplib2"]}}
+    }
+  }
+}

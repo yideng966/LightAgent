@@ -15,6 +15,40 @@ from agent.skills.lifecycle import SkillLifecycleManager, _version_tuple
 from agent.skills.registry import SkillRegistryClient
 
 
+def _list_change(previous, current):
+    before = list(previous or [])
+    after = list(current or [])
+    return {
+        "added": [item for item in after if item not in before],
+        "removed": [item for item in before if item not in after],
+        "changed": before != after,
+    }
+
+
+def _update_changes(local, remote):
+    old_requirements = local.get("requirements") or {}
+    new_requirements = remote.get("requirements") or {}
+    requirements = {
+        kind: _list_change(old_requirements.get(kind), new_requirements.get(kind))
+        for kind in ("env", "bins", "python", "npm", "downloads", "capabilities")
+    }
+    old_lightagent = local.get("lightagent") or {}
+    new_lightagent = remote.get("lightagent") or {}
+    permissions = {
+        kind: _list_change(old_lightagent.get(kind), new_lightagent.get(kind))
+        for kind in ("network_domains", "file_paths", "tools")
+    }
+    return {
+        "release_notes": remote.get("release_notes") or "",
+        "release_notes_available": bool(remote.get("release_notes")),
+        "breaking_changes": list(remote.get("breaking_changes") or []),
+        "requirements": requirements,
+        "permissions": permissions,
+        "requirements_changed": any(item["changed"] for item in requirements.values()),
+        "permissions_changed": any(item["changed"] for item in permissions.values()),
+    }
+
+
 DEFAULT_CHECK_INTERVAL_SECONDS = 6 * 60 * 60
 
 
@@ -128,13 +162,20 @@ class SkillUpdateChecker:
                             else ("update_available" if update_available else "latest")
                         ),
                         "reason": revoked.get("reason") if revoked else None,
+                        "source": local.get("source"),
+                        "integrity_status": item.get("integrity_status") or local.get("integrity_status"),
+                        "execution_mode": (
+                            "runner" if (item.get("lightagent") or {}).get("entrypoints")
+                            else local.get("execution_mode", "compatibility")
+                        ),
+                        "changes": _update_changes(local, item),
                     }
                 if name:
                     merged = dict(previous.get("skills") or {})
                     merged.update(statuses)
                     statuses = merged
                 value = {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "checked_at": attempted_at,
                     "last_attempted_at": attempted_at,
                     "source": snapshot.source,
@@ -152,7 +193,7 @@ class SkillUpdateChecker:
                 return value
             except Exception as exc:
                 value = dict(previous)
-                value.setdefault("schema_version", 1)
+                value.setdefault("schema_version", 2)
                 value.setdefault("skills", {})
                 value.setdefault("update_count", 0)
                 value["last_attempted_at"] = attempted_at
@@ -169,7 +210,7 @@ class SkillUpdateChecker:
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             pass
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "checked_at": None,
             "last_attempted_at": None,
             "source": None,

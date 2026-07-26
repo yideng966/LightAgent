@@ -25,6 +25,18 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: base
+            latest_tag: latest
+            version_suffix: ""
+            capability_packs: ""
+          - variant: skills-full
+            latest_tag: skills-full
+            version_suffix: -skills-full
+            capability_packs: office,media,browser
 
     steps:
       - name: Checkout repository
@@ -65,8 +77,8 @@ jobs:
             ${{ env.DOCKERHUB_IMAGE }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=true
-            type=ref,event=tag
+            type=raw,value=${{ matrix.latest_tag }},enable=true
+            type=ref,event=tag,suffix=${{ matrix.version_suffix }}
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
@@ -77,8 +89,11 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SKILL_CAPABILITY_PACKS=${{ matrix.capability_packs }}
 
       - uses: actions/delete-package-versions@v4
+        if: matrix.variant == 'base'
         with:
           package-name: 'lightagent'
           package-type: 'container'
