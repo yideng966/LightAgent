@@ -449,6 +449,7 @@ const I18N = {
         wechat_group_free_reply_worker_queue_size: '队列长度上限',
         wechat_group_free_reply_llm_title: '大模型二次判定',
         wechat_group_free_reply_llm_enabled: '启用大模型二次判定',
+        wechat_group_free_reply_llm_hint: '候选消息会先通过群范围、抑制、冷却和评分筛选，再进入后台队列。大模型只判断“是否适合接话”，不生成最终回复；仅返回 should_reply=true 且置信度达到下方阈值才放行。模型失败或 JSON 无效时默认不回复。关闭后，本地初筛通过的候选直接放行；3 人及以上复读同一句且未命中抑制时也由本地规则直接放行。',
         wechat_group_free_reply_llm_timeout: '判定超时（秒）',
         wechat_group_free_reply_llm_confidence: '最低置信度',
         wechat_group_free_reply_rules: '评分规则',
@@ -1345,6 +1346,7 @@ const I18N = {
         wechat_group_free_reply_worker_queue_size: 'Queue size limit',
         wechat_group_free_reply_llm_title: 'LLM decision',
         wechat_group_free_reply_llm_enabled: 'Enable LLM decision',
+        wechat_group_free_reply_llm_hint: 'Candidates first pass group scope, suppression, cooldown, and score checks, then enter the worker queue. The LLM only decides whether it is appropriate to join the conversation; it does not generate the final reply. A candidate is released only when it returns should_reply=true and reaches the threshold below. Model failures or invalid JSON default to no reply. With this switch off, locally qualified candidates pass directly; a message repeated by at least three distinct members without a suppression also passes locally without calling the LLM.',
         wechat_group_free_reply_llm_timeout: 'Decision timeout (seconds)',
         wechat_group_free_reply_llm_confidence: 'Minimum confidence',
         wechat_group_free_reply_rules: 'Scoring rules',
@@ -13614,10 +13616,11 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
             <div class="flex items-center justify-between gap-3">
                 <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('wechat_group_free_reply_llm_title')}</h4>
                 <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-                    <input id="free-reply-llm-enabled" type="checkbox" class="accent-primary-500" ${free.llm_judge_enabled !== false ? 'checked' : ''}>
+                    <input id="free-reply-llm-enabled" type="checkbox" class="accent-primary-500" aria-describedby="free-reply-llm-hint" ${free.llm_judge_enabled !== false ? 'checked' : ''}>
                     ${t('wechat_group_free_reply_llm_enabled')}
                 </label>
             </div>
+            <p id="free-reply-llm-hint" class="text-xs leading-relaxed text-slate-500 dark:text-slate-400">${t('wechat_group_free_reply_llm_hint')}</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 ${buildFreeReplyNumberField('free-reply-llm-timeout', 'wechat_group_free_reply_llm_timeout', free.llm_judge_timeout_seconds ?? 8, 1, 30, 1)}
                 ${buildFreeReplyNumberField('free-reply-llm-confidence', 'wechat_group_free_reply_llm_confidence', free.llm_judge_min_confidence ?? 0.6, 0, 1, 0.05)}

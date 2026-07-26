@@ -1290,6 +1290,16 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("const selectable = isWechatGroupRoomSelectable(room);", console_js)
         self.assertIn("const pendingStatuses = ['suspected', 'legacy_imported', 'conflict', 'identity_unresolved'];", console_js)
 
+    def test_console_explains_wechat_group_free_reply_llm_decision(self):
+        from pathlib import Path
+
+        console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
+
+        self.assertIn("wechat_group_free_reply_llm_hint", console_js)
+        self.assertIn("只判断“是否适合接话”，不生成最终回复", console_js)
+        self.assertIn("模型失败或 JSON 无效时默认不回复", console_js)
+        self.assertIn('aria-describedby="free-reply-llm-hint"', console_js)
+
     def test_console_exposes_and_saves_per_room_free_reply_activity_levels(self):
         console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
 

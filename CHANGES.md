@@ -1,5 +1,18 @@
 # CHANGES
 
+## 2026-07-26
+
+### 微信群自由回复大模型二次判定说明
+
+- 更新 `channel/web/static/js/console.js`：在「群聊 / 自由回复 / 大模型二次判定」设置块增加中英文流程说明，明确本地初筛、后台队列、LLM 仅作接话判定、`should_reply=true` 与最低置信度的放行条件、异常拒绝、关闭开关后的直通行为，以及复读消息的本地直通例外；同时为开关补充 `aria-describedby` 关联。
+- 更新 `tests/test_wechat_group_web.py`：新增静态界面断言，覆盖关键说明文案与可访问性关联，避免后续调整误删说明。
+
+验证记录：
+
+- `python -m unittest tests.test_wechat_group_free_reply tests.test_wechat_group_free_reply_judge tests.test_wechat_group_free_reply_worker tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`（281 项通过）。
+- `node --check channel/web/static/js/console.js` 通过。
+- `git diff --check` 通过。
+
 ## 2026-07-25
 
 ### LightAgent Skill Hub 集成
