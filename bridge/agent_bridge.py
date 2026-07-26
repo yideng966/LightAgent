@@ -428,6 +428,20 @@ class TextModelRouter(LLMModel):
                 )
         return deduped
 
+    @staticmethod
+    def _build_override_candidates(provider=None, model=None):
+        if provider is None and model is None:
+            return None
+        provider_id = str(provider or "").strip()
+        model_name = str(model or "").strip()
+        if not provider_id or not model_name:
+            raise ValueError("provider and model are required for a model override")
+        return [{
+            "bot_type": "chatGPT" if provider_id == "openai" else provider_id,
+            "model": model_name,
+            "source": "override",
+        }]
+
     def _configure_custom_candidate_bot(self, bot, candidate):
         bot_type = candidate.get("bot_type") or ""
         try:
@@ -507,6 +521,9 @@ class TextModelRouter(LLMModel):
         }
         if request.max_tokens is not None:
             kwargs['max_tokens'] = request.max_tokens
+        request_options = getattr(request, 'request_options', None)
+        if isinstance(request_options, dict) and request_options:
+            kwargs['request_options'] = dict(request_options)
 
         system_prompt = getattr(request, 'system', None)
         if system_prompt:
@@ -620,12 +637,15 @@ class TextModelRouter(LLMModel):
         marked["model_fallback_exhausted"] = True
         return marked
 
-    def call(self, request: LLMRequest):
+    def call(self, request: LLMRequest, model=None, provider=None):
         """
         Call the model using LightAgent's bot infrastructure
         """
         try:
-            candidates = self._build_model_candidates()
+            candidates = (
+                self._build_override_candidates(provider, model)
+                or self._build_model_candidates()
+            )
             last_response = None
             for index, candidate in enumerate(candidates):
                 try:
@@ -785,7 +805,16 @@ class TextModelRouter(LLMModel):
             )
         return str(content or response.get("message") or ""), content is not None
 
-    def complete(self, messages, purpose="text", system="", max_tokens=None):
+    def complete(
+        self,
+        messages,
+        purpose="text",
+        system="",
+        max_tokens=None,
+        model=None,
+        provider=None,
+        request_options=None,
+    ):
         """Run a stateless text completion through the shared fallback chain."""
         request = LLMRequest(
             messages=[dict(item) for item in (messages or [])],
@@ -793,8 +822,9 @@ class TextModelRouter(LLMModel):
             system=system or "",
             max_tokens=max_tokens,
             stream=False,
+            request_options=dict(request_options or {}),
         )
-        response = self.call(request)
+        response = self.call(request, model=model, provider=provider)
         text, success = self._extract_text_response(response)
         logger.debug(
             "[TextModelRouter] completion finished: purpose=%s success=%s",

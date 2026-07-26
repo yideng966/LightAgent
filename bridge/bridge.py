@@ -168,12 +168,22 @@ class Bridge(object):
             self._text_model_router = TextModelRouter(self)
         return self._text_model_router
 
-    def complete_text(self, messages, purpose="text", system="", max_tokens=None):
+    def complete_text(
+        self,
+        messages,
+        purpose="text",
+        system="",
+        max_tokens=None,
+        model=None,
+        provider=None,
+    ):
         return self.get_text_model_router().complete(
             messages,
             purpose=purpose,
             system=system,
             max_tokens=max_tokens,
+            model=model,
+            provider=provider,
         )
 
     def get_chat_sessions(self):

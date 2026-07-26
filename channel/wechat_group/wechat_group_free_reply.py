@@ -1,12 +1,10 @@
 """Local scoring and runtime state for WeChat group free replies."""
 
 import copy
-import os
 import re
 import time
 
 from config import conf
-from models.custom_provider import resolve_custom_provider_config
 
 
 FREE_REPLY_ACTIVITY_LEVELS = ["quiet", "normal", "active", "crazy"]
@@ -230,21 +228,6 @@ def get_wechat_group_free_reply_config() -> dict:
         level = "normal"
     stable_room_ids = _as_list(conf().get("wechat_group_free_reply_stable_room_ids", []))
     legacy_room_ids = _as_list(conf().get("wechat_group_free_reply_room_ids", []))
-    scorer_provider = str(conf().get("wechat_group_free_reply_scorer_provider", "") or "").strip()
-    scorer_environment_key = str(os.environ.get("WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY") or "").strip()
-    scorer_config_key = str(conf().get("wechat_group_free_reply_scorer_api_key", "") or "").strip()
-    scorer_custom_key = ""
-    if scorer_provider.startswith("custom:"):
-        try:
-            scorer_custom = resolve_custom_provider_config(scorer_provider) or {}
-            scorer_custom_key = str(scorer_custom.get("api_key") or "").strip()
-        except Exception:
-            scorer_custom_key = ""
-    scorer_api_key_source = (
-        "environment"
-        if scorer_environment_key
-        else "config" if scorer_config_key or scorer_custom_key else ""
-    )
     return {
         "enabled": _as_bool(conf().get("wechat_group_free_reply_enabled", False)),
         "room_ids": stable_room_ids or legacy_room_ids,
@@ -264,14 +247,6 @@ def get_wechat_group_free_reply_config() -> dict:
         "llm_judge_timeout_seconds": _clamp_int(conf().get("wechat_group_free_reply_llm_judge_timeout_seconds", 8), 8, 1, 30),
         "llm_judge_min_confidence": _clamp_float(conf().get("wechat_group_free_reply_llm_judge_min_confidence", 0.6), 0.6, 0.0, 1.0),
         "scorer_enabled": _as_bool(conf().get("wechat_group_free_reply_scorer_enabled", False)),
-        "scorer_provider": scorer_provider,
-        "scorer_model": str(conf().get("wechat_group_free_reply_scorer_model", "") or "").strip(),
-        "scorer_api_base": str(conf().get("wechat_group_free_reply_scorer_api_base", "") or "").strip(),
-        "scorer_api_key_configured": bool(scorer_api_key_source),
-        "scorer_api_key_source": scorer_api_key_source,
-        "scorer_timeout_seconds": _clamp_int(
-            conf().get("wechat_group_free_reply_scorer_timeout_seconds", 8), 8, 1, 60
-        ),
         "scorer_context_limit": _clamp_int(
             conf().get("wechat_group_free_reply_scorer_context_limit", 12), 12, 1, 50
         ),
@@ -280,9 +255,6 @@ def get_wechat_group_free_reply_config() -> dict:
         ),
         "scorer_soft_reply_threshold": _clamp_float(
             conf().get("wechat_group_free_reply_scorer_soft_reply_threshold", 0.60), 0.60, 0.0, 1.0
-        ),
-        "scorer_temperature": _clamp_float(
-            conf().get("wechat_group_free_reply_scorer_temperature", 0.0), 0.0, 0.0, 2.0
         ),
         "scorer_max_tokens": _clamp_int(
             conf().get("wechat_group_free_reply_scorer_max_tokens", 256), 256, 16, 2048

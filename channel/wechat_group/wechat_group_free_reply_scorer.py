@@ -1,33 +1,21 @@
-"""Independent LLM scorer for WeChat group free reply ownership decisions."""
+"""LLM scorer for WeChat group free reply ownership decisions."""
 
 from __future__ import annotations
 
 import json
-import os
 import re
 import threading
 import time
 from typing import Any
 
+from bridge.bridge import Bridge
 from common.log import logger
 from config import conf
-from models.custom_provider import resolve_custom_provider_config
-from models.openai.openai_http_client import OpenAIHTTPClient, OpenAIHTTPError
 
 
-SCORER_API_KEY_ENV = "WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY"
 _SCORER_ACTIONS = {"reply", "soft_reply", "ignore"}
 _SMALL_GROUP_MAX_MEMBERS = 8
 _LARGE_GROUP_MIN_MEMBERS = 21
-_STRUCTURED_OUTPUT_UNSUPPORTED_HINTS = (
-    "reasoning_effort",
-    "response_format",
-    "json_object",
-    "unsupported parameter",
-    "unknown parameter",
-    "unrecognized parameter",
-    "extra inputs are not permitted",
-)
 _SENSITIVE_KEY_RE = re.compile(
     r"(?i)\b(api[_ -]?key|access[_ -]?token|refresh[_ -]?token|token|secret|password|cookie)"
     r"\b\s*[:=]\s*[^\s,;]+"
@@ -355,47 +343,9 @@ def parse_scorer_response(text, reply_threshold, soft_threshold, group_size=0) -
     }
 
 
-def _resolve_scorer_credentials(config) -> tuple:
-    config = config if isinstance(config, dict) else {}
-    provider = str(
-        config.get("scorer_provider")
-        or conf().get("wechat_group_free_reply_scorer_provider", "")
-        or ""
-    ).strip()
-    custom = resolve_custom_provider_config(provider) if provider.startswith("custom:") else None
-    custom = custom if isinstance(custom, dict) else {}
-    explicit_key = str(conf().get("wechat_group_free_reply_scorer_api_key", "") or "").strip()
-    api_key = str(os.environ.get(SCORER_API_KEY_ENV) or "").strip() or explicit_key or str(
-        custom.get("api_key") or ""
-    ).strip()
-    api_base = str(
-        config.get("scorer_api_base")
-        or conf().get("wechat_group_free_reply_scorer_api_base", "")
-        or custom.get("api_base")
-        or ""
-    ).strip()
-    model = str(
-        config.get("scorer_model")
-        or conf().get("wechat_group_free_reply_scorer_model", "")
-        or custom.get("model")
-        or ""
-    ).strip()
-    return api_key, api_base, model
-
-
-def _structured_output_options_unsupported(exc) -> bool:
-    if int(getattr(exc, "status_code", 0) or 0) not in (400, 422):
-        return False
-    details = "{} {}".format(
-        getattr(exc, "message", ""),
-        getattr(exc, "body", ""),
-    ).lower()
-    return any(hint in details for hint in _STRUCTURED_OUTPUT_UNSUPPORTED_HINTS)
-
-
 class WechatGroupFreeReplyScorer:
-    def __init__(self, client=None):
-        self.client = client or OpenAIHTTPClient()
+    def __init__(self, router=None):
+        self.router = router or Bridge().get_text_model_router()
         self._lock = threading.Lock()
         self._counters = {
             "scored": 0,
@@ -450,94 +400,105 @@ class WechatGroupFreeReplyScorer:
         )
         return values
 
+    def _score_configured(self, task, config, provider, model):
+        msg = task.get("msg")
+        current_fields = {
+            "message_id": getattr(msg, "msg_id", "") if msg is not None else "",
+            "timestamp": getattr(msg, "create_time", None) if msg is not None else None,
+            "sender_id": task.get("sender_id") or "",
+            "runtime_sender_id": task.get("runtime_sender_id") or "",
+            "sender_name": task.get("sender_name") or "",
+            "bot_sender_id": getattr(msg, "stable_self_id", "") if msg is not None else "",
+            "runtime_bot_sender_id": getattr(msg, "to_user_id", "") if msg is not None else "",
+            "text": task.get("text") or "",
+        }
+        messages = normalize_scorer_context(
+            current_fields,
+            task.get("recent_messages") or [],
+            config.get("scorer_context_limit", 12),
+        )
+        local = task.get("local_decision") or {}
+        prompt = build_scorer_prompt(
+            {
+                "room_name": task.get("room_name") or "",
+                "group_size": task.get("group_size") or 0,
+                "group_size_source": task.get("group_size_source") or "",
+                "messages": messages,
+                "local_features": {
+                    "score": local.get("score", 0),
+                    "threshold": local.get("threshold", 0),
+                    "reasons": list(local.get("reasons") or []),
+                    "suppressions": list(local.get("suppressions") or []),
+                },
+            }
+        )
+        result = self.router.complete(
+            prompt,
+            purpose="wechat_group_free_reply_scorer",
+            max_tokens=config.get("scorer_max_tokens", 256),
+            provider=provider,
+            model=model,
+            request_options={
+                "reasoning_effort": "none",
+                "response_format": {"type": "json_object"},
+            },
+        )
+        if not result.get("success"):
+            raw = result.get("raw")
+            status_code = raw.get("status_code") if isinstance(raw, dict) else None
+            try:
+                timed_out = int(status_code or 0) == 408
+            except (TypeError, ValueError):
+                timed_out = False
+            return self._fallback_decision(
+                config,
+                "timeout" if timed_out else "model_error",
+                result.get("content", ""),
+            ), timed_out
+
+        decision = parse_scorer_response(
+            result.get("content", ""),
+            config.get("scorer_reply_threshold", 0.82),
+            config.get("scorer_soft_reply_threshold", 0.60),
+            task.get("group_size") or 0,
+        )
+        if decision.get("error") in ("invalid_json", "invalid_schema"):
+            decision["fallback_to_rules"] = bool(
+                config.get("scorer_fallback_to_rules", True)
+            )
+        return decision, False
+
     def score(self, task, config) -> dict:
         started = time.monotonic()
         task = task if isinstance(task, dict) else {}
         config = config if isinstance(config, dict) else {}
-        provider = str(config.get("scorer_provider") or "").strip()
-        api_key, api_base, model = _resolve_scorer_credentials(config)
+        provider = str(
+            conf().get("wechat_group_free_reply_scorer_provider", "") or ""
+        ).strip()
+        model = str(
+            conf().get("wechat_group_free_reply_scorer_model", "") or ""
+        ).strip()
         timed_out = False
         try:
-            if not api_key or not api_base or not model:
-                raise ValueError("scorer_credentials_incomplete")
-            msg = task.get("msg")
-            current_fields = {
-                "message_id": getattr(msg, "msg_id", "") if msg is not None else "",
-                "timestamp": getattr(msg, "create_time", None) if msg is not None else None,
-                "sender_id": task.get("sender_id") or "",
-                "runtime_sender_id": task.get("runtime_sender_id") or "",
-                "sender_name": task.get("sender_name") or "",
-                "bot_sender_id": getattr(msg, "stable_self_id", "") if msg is not None else "",
-                "runtime_bot_sender_id": getattr(msg, "to_user_id", "") if msg is not None else "",
-                "text": task.get("text") or "",
-            }
-            messages = normalize_scorer_context(
-                current_fields,
-                task.get("recent_messages") or [],
-                config.get("scorer_context_limit", 12),
-            )
-            local = task.get("local_decision") or {}
-            prompt = build_scorer_prompt(
-                {
-                    "room_name": task.get("room_name") or "",
-                    "group_size": task.get("group_size") or 0,
-                    "group_size_source": task.get("group_size_source") or "",
-                    "messages": messages,
-                    "local_features": {
-                        "score": local.get("score", 0),
-                        "threshold": local.get("threshold", 0),
-                        "reasons": list(local.get("reasons") or []),
-                        "suppressions": list(local.get("suppressions") or []),
-                    },
-                }
-            )
-            request_kwargs = {
-                "api_key": api_key,
-                "api_base": api_base,
-                "timeout": config.get("scorer_timeout_seconds", 8),
-                "model": model,
-                "messages": prompt,
-                "temperature": config.get("scorer_temperature", 0.0),
-                "max_tokens": config.get("scorer_max_tokens", 256),
-                # The scorer needs a short classification, not a visible
-                # reasoning trace. On Ollama's OpenAI-compatible endpoint,
-                # disabling reasoning also prevents the trace from consuming
-                # the entire completion budget before the JSON answer.
-                "reasoning_effort": "none",
-                "response_format": {"type": "json_object"},
-            }
-            try:
-                response = self.client.chat_completions(**request_kwargs)
-            except OpenAIHTTPError as exc:
-                if not _structured_output_options_unsupported(exc):
-                    raise
-                logger.info(
-                    "[wechat_group] scorer endpoint rejected structured-output "
-                    "options; retrying with the basic OpenAI-compatible payload"
+            if not provider or not model:
+                decision = self._fallback_decision(
+                    config,
+                    "scorer_model_unconfigured",
                 )
-                request_kwargs.pop("reasoning_effort", None)
-                request_kwargs.pop("response_format", None)
-                response = self.client.chat_completions(**request_kwargs)
-            content = response["choices"][0]["message"]["content"]
-            decision = parse_scorer_response(
-                content,
-                config.get("scorer_reply_threshold", 0.82),
-                config.get("scorer_soft_reply_threshold", 0.60),
-                task.get("group_size") or 0,
-            )
-            if decision.get("error") in ("invalid_json", "invalid_schema"):
-                decision["fallback_to_rules"] = bool(
-                    config.get("scorer_fallback_to_rules", True)
+            else:
+                decision, timed_out = self._score_configured(
+                    task,
+                    config,
+                    provider,
+                    model,
                 )
-        except OpenAIHTTPError as exc:
-            timed_out = int(getattr(exc, "status_code", 0) or 0) == 408
+        except Exception as exc:
+            timed_out = "timeout" in str(exc).lower()
             decision = self._fallback_decision(
                 config,
-                "timeout" if timed_out else "http_error",
-                "HTTP {}".format(getattr(exc, "status_code", "")),
+                "timeout" if timed_out else "exception",
+                str(exc),
             )
-        except Exception as exc:
-            decision = self._fallback_decision(config, "exception", str(exc))
 
         decision["group_size"] = _normalize_group_size(task.get("group_size"))
         decision["group_size_band"] = _group_size_band(task.get("group_size"))

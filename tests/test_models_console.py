@@ -8,6 +8,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 
 class TestModelsConsole(unittest.TestCase):
+    def test_models_page_exposes_scorer_capability(self):
+        console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
+
+        self.assertIn("{ id: 'scorer'", console_js)
+        self.assertIn("models_capability_scorer", console_js)
+        self.assertIn("models_capability_scorer_desc", console_js)
+        self.assertIn("saveCapability(capId)", console_js)
+
     def test_models_page_exposes_chat_fallback_controls(self):
         console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
 

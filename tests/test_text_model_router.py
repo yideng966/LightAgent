@@ -113,6 +113,118 @@ class TestTextModelRouter(unittest.TestCase):
         self.assertEqual("title", result["content"])
         self.assertEqual({}, router.sessions._sessions)
 
+    def test_complete_model_override_uses_only_selected_candidate(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        override = FakeBot([
+            {"choices": [{"message": {"content": "scored"}}]},
+        ])
+        config = self._config()
+        with patch("bridge.agent_bridge.conf", return_value=config), \
+                patch("models.bot_factory.create_bot", return_value=override) as create_bot:
+            router = TextModelRouter(FakeBridge())
+            result = router.complete(
+                [{"role": "user", "content": "score"}],
+                purpose="wechat_group_free_reply_scorer",
+                provider="openai",
+                model="scorer-model",
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("scored", result["content"])
+        create_bot.assert_called_once_with("chatGPT")
+        self.assertEqual("scorer-model", override.calls[0]["model"])
+        self.assertEqual("primary-model", config["model"])
+        self.assertEqual("openai", config["bot_type"])
+        self.assertEqual({}, router._failover_state._routes)
+
+    def test_complete_request_options_are_scoped_to_one_call(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        primary = FakeBot([
+            {"choices": [{"message": {"content": "scored"}}]},
+            {"choices": [{"message": {"content": "main answer"}}]},
+        ])
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", return_value=primary):
+            router = TextModelRouter(FakeBridge())
+            scored = router.complete(
+                [{"role": "user", "content": "score"}],
+                request_options={
+                    "reasoning_effort": "none",
+                    "response_format": {"type": "json_object"},
+                },
+            )
+            main = router.complete(
+                [{"role": "user", "content": "answer normally"}],
+            )
+
+        self.assertTrue(scored["success"])
+        self.assertTrue(main["success"])
+        self.assertEqual(
+            {
+                "reasoning_effort": "none",
+                "response_format": {"type": "json_object"},
+            },
+            primary.calls[0]["request_options"],
+        )
+        self.assertNotIn("request_options", primary.calls[1])
+
+    def test_complete_model_override_does_not_fallback_or_update_primary_circuit(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        transient = {"error": True, "message": "rate limit", "status_code": 429}
+        override = FakeBot([transient])
+        config = self._config()
+        with patch("bridge.agent_bridge.conf", return_value=config), \
+                patch("models.bot_factory.create_bot", return_value=override) as create_bot:
+            router = TextModelRouter(FakeBridge())
+            result = router.complete(
+                [{"role": "user", "content": "score"}],
+                provider="openai",
+                model="scorer-model",
+            )
+
+        self.assertFalse(result["success"])
+        self.assertIs(transient, result["raw"])
+        create_bot.assert_called_once_with("chatGPT")
+        self.assertEqual(1, len(override.calls))
+        self.assertEqual({}, router._failover_state._routes)
+
+    def test_complete_custom_override_reuses_custom_provider_credentials(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        override = FakeBot([
+            {"choices": [{"message": {"content": "custom scored"}}]},
+        ])
+        override.args = {}
+        config = self._config()
+        provider = {
+            "id": "scorer",
+            "api_key": "scorer-key",
+            "api_base": "https://scorer.example/v1",
+            "model": "default-scorer-model",
+        }
+        with patch("bridge.agent_bridge.conf", return_value=config), \
+                patch("models.bot_factory.create_bot", return_value=override), \
+                patch("models.custom_provider.get_custom_providers", return_value=[provider]), \
+                patch("models.openai.openai_http_client.OpenAIHTTPClient") as http_client:
+            router = TextModelRouter(FakeBridge())
+            result = router.complete(
+                [{"role": "user", "content": "score"}],
+                provider="custom:scorer",
+                model="selected-scorer-model",
+            )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("selected-scorer-model", override.args["model"])
+        http_client.assert_called_once_with(
+            api_key="scorer-key",
+            api_base="https://scorer.example/v1",
+            proxy=None,
+        )
+        self.assertEqual("primary-model", config["model"])
+
     def test_clear_memory_command_does_not_call_model(self):
         from bridge.agent_bridge import TextModelRouter
         from bridge.reply import ReplyType

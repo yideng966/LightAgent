@@ -1,12 +1,9 @@
-import os
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 from config import conf
-from models.openai.openai_http_client import OpenAIHTTPError
 from channel.wechat_group.wechat_group_free_reply_scorer import (
     WechatGroupFreeReplyScorer,
-    _resolve_scorer_credentials,
     build_scorer_prompt,
     normalize_scorer_context,
     parse_scorer_response,
@@ -231,26 +228,27 @@ class WechatGroupFreeReplyScorerPureFunctionTest(unittest.TestCase):
 
 class WechatGroupFreeReplyScorerTest(unittest.TestCase):
     def setUp(self):
-        self._original_key = conf().get("wechat_group_free_reply_scorer_api_key")
-        conf()["wechat_group_free_reply_scorer_api_key"] = "config-key"
+        self._original_provider = conf().get("wechat_group_free_reply_scorer_provider")
+        self._original_model = conf().get("wechat_group_free_reply_scorer_model")
+        conf()["wechat_group_free_reply_scorer_provider"] = "custom:scorer"
+        conf()["wechat_group_free_reply_scorer_model"] = "scorer-model"
 
     def tearDown(self):
-        if self._original_key is None:
-            conf().pop("wechat_group_free_reply_scorer_api_key", None)
-        else:
-            conf()["wechat_group_free_reply_scorer_api_key"] = self._original_key
+        for key, value in (
+            ("wechat_group_free_reply_scorer_provider", self._original_provider),
+            ("wechat_group_free_reply_scorer_model", self._original_model),
+        ):
+            if value is None:
+                conf().pop(key, None)
+            else:
+                conf()[key] = value
 
     @staticmethod
     def config(**overrides):
         result = {
-            "scorer_provider": "openai_compatible",
-            "scorer_model": "scorer-model",
-            "scorer_api_base": "https://scorer.example/v1",
-            "scorer_timeout_seconds": 5,
             "scorer_context_limit": 12,
             "scorer_reply_threshold": 0.82,
             "scorer_soft_reply_threshold": 0.60,
-            "scorer_temperature": 0.0,
             "scorer_max_tokens": 256,
             "scorer_fallback_to_rules": True,
         }
@@ -283,81 +281,75 @@ class WechatGroupFreeReplyScorerTest(unittest.TestCase):
             },
         }
 
-    def test_score_calls_independent_client_with_explicit_settings(self):
-        client = Mock()
-        client.chat_completions.return_value = {
-            "choices": [{"message": {"content": scorer_json()}}]
+    def test_score_calls_shared_router_with_model_override(self):
+        router = Mock()
+        router.complete.return_value = {
+            "success": True,
+            "content": scorer_json(),
         }
-        scorer = WechatGroupFreeReplyScorer(client=client)
+        scorer = WechatGroupFreeReplyScorer(router=router)
 
         decision = scorer.score(self.task(), self.config())
 
         self.assertTrue(decision["approved"])
-        kwargs = client.chat_completions.call_args.kwargs
-        self.assertEqual("config-key", kwargs["api_key"])
-        self.assertEqual("https://scorer.example/v1", kwargs["api_base"])
+        args, kwargs = router.complete.call_args
+        self.assertEqual(2, len(args[0]))
+        self.assertEqual("wechat_group_free_reply_scorer", kwargs["purpose"])
+        self.assertEqual("custom:scorer", kwargs["provider"])
         self.assertEqual("scorer-model", kwargs["model"])
-        self.assertEqual(5, kwargs["timeout"])
-        self.assertEqual(0.0, kwargs["temperature"])
         self.assertEqual(256, kwargs["max_tokens"])
-        self.assertEqual("none", kwargs["reasoning_effort"])
-        self.assertEqual({"type": "json_object"}, kwargs["response_format"])
-
-    def test_score_retries_basic_payload_when_structured_options_are_unsupported(self):
-        client = Mock()
-        client.chat_completions.side_effect = [
-            OpenAIHTTPError(
-                400,
-                {"error": {"message": "Unsupported parameter: reasoning_effort"}},
-            ),
-            {"choices": [{"message": {"content": scorer_json()}}]},
-        ]
-
-        decision = WechatGroupFreeReplyScorer(client=client).score(
-            self.task(), self.config()
+        self.assertEqual(
+            {
+                "reasoning_effort": "none",
+                "response_format": {"type": "json_object"},
+            },
+            kwargs["request_options"],
         )
 
-        self.assertTrue(decision["approved"])
-        self.assertEqual(2, client.chat_completions.call_count)
-        first = client.chat_completions.call_args_list[0].kwargs
-        second = client.chat_completions.call_args_list[1].kwargs
-        self.assertEqual("none", first["reasoning_effort"])
-        self.assertEqual({"type": "json_object"}, first["response_format"])
-        self.assertNotIn("reasoning_effort", second)
-        self.assertNotIn("response_format", second)
+    def test_unconfigured_model_falls_back_without_calling_router(self):
+        conf()["wechat_group_free_reply_scorer_provider"] = ""
+        router = Mock()
+
+        decision = WechatGroupFreeReplyScorer(router=router).score(
+            self.task(),
+            self.config(scorer_fallback_to_rules=True),
+        )
+
+        self.assertFalse(decision["approved"])
+        self.assertEqual("scorer_model_unconfigured", decision["error"])
+        self.assertTrue(decision["fallback_to_rules"])
+        router.complete.assert_not_called()
 
     def test_non_bot_target_is_ignored(self):
-        client = Mock()
-        client.chat_completions.return_value = {
-            "choices": [{"message": {"content": scorer_json(target="user:bob")}}]
+        router = Mock()
+        router.complete.return_value = {
+            "success": True,
+            "content": scorer_json(target="user:bob"),
         }
 
-        decision = WechatGroupFreeReplyScorer(client=client).score(
+        decision = WechatGroupFreeReplyScorer(router=router).score(
             self.task(), self.config()
         )
 
         self.assertFalse(decision["approved"])
 
     def test_group_soft_reply_uses_task_group_size(self):
-        client = Mock()
-        client.chat_completions.return_value = {
-            "choices": [{
-                "message": {
-                    "content": scorer_json(
-                        target="group",
-                        followup=False,
-                        desirability=0.52,
-                        confidence=0.52,
-                        action="soft_reply",
-                    )
-                }
-            }]
+        router = Mock()
+        router.complete.return_value = {
+            "success": True,
+            "content": scorer_json(
+                target="group",
+                followup=False,
+                desirability=0.52,
+                confidence=0.52,
+                action="soft_reply",
+            ),
         }
         task = self.task()
         task["group_size"] = 6
         task["group_size_source"] = "room_member_cache"
 
-        decision = WechatGroupFreeReplyScorer(client=client).score(
+        decision = WechatGroupFreeReplyScorer(router=router).score(
             task,
             self.config(),
         )
@@ -368,11 +360,9 @@ class WechatGroupFreeReplyScorerTest(unittest.TestCase):
         self.assertEqual("room_member_cache", decision["group_size_source"])
 
     def test_invalid_json_falls_back_or_closes(self):
-        client = Mock()
-        client.chat_completions.return_value = {
-            "choices": [{"message": {"content": "invalid"}}]
-        }
-        scorer = WechatGroupFreeReplyScorer(client=client)
+        router = Mock()
+        router.complete.return_value = {"success": True, "content": "invalid"}
+        scorer = WechatGroupFreeReplyScorer(router=router)
 
         fallback = scorer.score(self.task(), self.config(scorer_fallback_to_rules=True))
         closed = scorer.score(self.task(), self.config(scorer_fallback_to_rules=False))
@@ -382,58 +372,44 @@ class WechatGroupFreeReplyScorerTest(unittest.TestCase):
         self.assertFalse(closed["approved"])
         self.assertEqual(2, scorer.status()["invalid_json"])
 
-    def test_timeout_and_exception_fail_closed(self):
-        timeout_client = Mock()
-        timeout_client.chat_completions.side_effect = OpenAIHTTPError(408, {})
-        timeout_scorer = WechatGroupFreeReplyScorer(client=timeout_client)
-        exception_client = Mock()
-        exception_client.chat_completions.side_effect = RuntimeError("offline")
+    def test_model_failure_and_exception_fail_closed(self):
+        failed_router = Mock()
+        failed_router.complete.return_value = {
+            "success": False,
+            "content": "temporarily unavailable",
+            "raw": {"error": True, "status_code": 503},
+        }
+        exception_router = Mock()
+        exception_router.complete.side_effect = RuntimeError("offline")
 
-        timeout = timeout_scorer.score(
+        failed = WechatGroupFreeReplyScorer(router=failed_router).score(
             self.task(), self.config(scorer_fallback_to_rules=False)
         )
-        exception = WechatGroupFreeReplyScorer(client=exception_client).score(
+        exception = WechatGroupFreeReplyScorer(router=exception_router).score(
             self.task(), self.config(scorer_fallback_to_rules=False)
         )
 
-        self.assertEqual("timeout", timeout["error"])
-        self.assertEqual(1, timeout_scorer.status()["timeout"])
+        self.assertEqual("model_error", failed["error"])
+        self.assertIn("temporarily unavailable", failed["reason"])
         self.assertEqual("exception", exception["error"])
         self.assertFalse(exception["approved"])
 
-    def test_credentials_prefer_environment_then_config_then_custom(self):
-        with patch.dict(os.environ, {"WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY": "env-key"}), \
-                patch(
-                    "channel.wechat_group.wechat_group_free_reply_scorer.resolve_custom_provider_config",
-                    return_value={
-                        "api_key": "custom-key",
-                        "api_base": "https://custom.example/v1",
-                        "model": "custom-model",
-                    },
-                ):
-            self.assertEqual(
-                ("env-key", "https://custom.example/v1", "custom-model"),
-                _resolve_scorer_credentials({"scorer_provider": "custom:p1"}),
-            )
+    def test_timeout_envelope_is_counted(self):
+        router = Mock()
+        router.complete.return_value = {
+            "success": False,
+            "content": "request timeout",
+            "raw": {"error": True, "status_code": 408},
+        }
+        scorer = WechatGroupFreeReplyScorer(router=router)
 
-        with patch.dict(os.environ, {}, clear=False), patch(
-            "channel.wechat_group.wechat_group_free_reply_scorer.resolve_custom_provider_config",
-            return_value={
-                "api_key": "custom-key",
-                "api_base": "https://custom.example/v1",
-                "model": "custom-model",
-            },
-        ):
-            os.environ.pop("WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY", None)
-            self.assertEqual(
-                ("config-key", "https://custom.example/v1", "custom-model"),
-                _resolve_scorer_credentials({"scorer_provider": "custom:p1"}),
-            )
-            conf()["wechat_group_free_reply_scorer_api_key"] = ""
-            self.assertEqual(
-                ("custom-key", "https://custom.example/v1", "custom-model"),
-                _resolve_scorer_credentials({"scorer_provider": "custom:p1"}),
-            )
+        decision = scorer.score(
+            self.task(),
+            self.config(scorer_fallback_to_rules=False),
+        )
+
+        self.assertEqual("timeout", decision["error"])
+        self.assertEqual(1, scorer.status()["timeout"])
 
 
 if __name__ == "__main__":

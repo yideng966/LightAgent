@@ -1,7 +1,5 @@
 import copy
-import os
 import unittest
-from unittest.mock import patch
 
 from config import conf
 from channel.wechat_group.wechat_group_free_reply import (
@@ -38,15 +36,9 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
                 "wechat_group_free_reply_profiles",
                 "wechat_group_free_reply_force_keywords",
                 "wechat_group_free_reply_scorer_enabled",
-                "wechat_group_free_reply_scorer_provider",
-                "wechat_group_free_reply_scorer_model",
-                "wechat_group_free_reply_scorer_api_base",
-                "wechat_group_free_reply_scorer_api_key",
-                "wechat_group_free_reply_scorer_timeout_seconds",
                 "wechat_group_free_reply_scorer_context_limit",
                 "wechat_group_free_reply_scorer_reply_threshold",
                 "wechat_group_free_reply_scorer_soft_reply_threshold",
-                "wechat_group_free_reply_scorer_temperature",
                 "wechat_group_free_reply_scorer_max_tokens",
                 "wechat_group_free_reply_scorer_fallback_to_rules",
             )
@@ -73,12 +65,10 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
         self.assertEqual(8, cfg["llm_judge_timeout_seconds"])
         self.assertEqual(0.6, cfg["llm_judge_min_confidence"])
         self.assertFalse(cfg["scorer_enabled"])
-        self.assertEqual(8, cfg["scorer_timeout_seconds"])
         self.assertEqual(12, cfg["scorer_context_limit"])
         self.assertEqual(0.82, cfg["scorer_reply_threshold"])
         self.assertEqual(0.60, cfg["scorer_soft_reply_threshold"])
         self.assertEqual(256, cfg["scorer_max_tokens"])
-        self.assertNotIn("scorer_api_key", cfg)
         self.assertEqual([], cfg["force_keywords"])
 
     def test_config_normalizes_force_keywords(self):
@@ -139,11 +129,9 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
         conf()["wechat_group_free_reply_worker_queue_size"] = 0
         conf()["wechat_group_free_reply_llm_judge_timeout_seconds"] = 999
         conf()["wechat_group_free_reply_llm_judge_min_confidence"] = 2
-        conf()["wechat_group_free_reply_scorer_timeout_seconds"] = 999
         conf()["wechat_group_free_reply_scorer_context_limit"] = 0
         conf()["wechat_group_free_reply_scorer_reply_threshold"] = 2
         conf()["wechat_group_free_reply_scorer_soft_reply_threshold"] = -1
-        conf()["wechat_group_free_reply_scorer_temperature"] = 3
         conf()["wechat_group_free_reply_scorer_max_tokens"] = 1
 
         cfg = get_wechat_group_free_reply_config()
@@ -155,43 +143,10 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
         self.assertEqual(1, cfg["worker_queue_size"])
         self.assertEqual(30, cfg["llm_judge_timeout_seconds"])
         self.assertEqual(1.0, cfg["llm_judge_min_confidence"])
-        self.assertEqual(60, cfg["scorer_timeout_seconds"])
         self.assertEqual(1, cfg["scorer_context_limit"])
         self.assertEqual(1.0, cfg["scorer_reply_threshold"])
         self.assertEqual(0.0, cfg["scorer_soft_reply_threshold"])
-        self.assertEqual(2.0, cfg["scorer_temperature"])
         self.assertEqual(16, cfg["scorer_max_tokens"])
-
-    def test_scorer_api_key_is_redacted_and_environment_has_priority(self):
-        conf()["wechat_group_free_reply_scorer_api_key"] = "config-secret"
-        with patch.dict(
-            os.environ,
-            {"WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY": "environment-secret"},
-        ):
-            environment_cfg = get_wechat_group_free_reply_config()
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("WECHAT_GROUP_FREE_REPLY_SCORER_API_KEY", None)
-            config_cfg = get_wechat_group_free_reply_config()
-
-        self.assertTrue(environment_cfg["scorer_api_key_configured"])
-        self.assertEqual("environment", environment_cfg["scorer_api_key_source"])
-        self.assertTrue(config_cfg["scorer_api_key_configured"])
-        self.assertEqual("config", config_cfg["scorer_api_key_source"])
-        self.assertNotIn("environment-secret", repr(environment_cfg))
-        self.assertNotIn("config-secret", repr(config_cfg))
-
-    def test_custom_scorer_provider_key_is_reported_as_configured_without_exposure(self):
-        conf()["wechat_group_free_reply_scorer_provider"] = "custom:p1"
-        conf()["wechat_group_free_reply_scorer_api_key"] = ""
-        with patch(
-            "channel.wechat_group.wechat_group_free_reply.resolve_custom_provider_config",
-            return_value={"api_key": "custom-secret"},
-        ):
-            cfg = get_wechat_group_free_reply_config()
-
-        self.assertTrue(cfg["scorer_api_key_configured"])
-        self.assertEqual("config", cfg["scorer_api_key_source"])
-        self.assertNotIn("custom-secret", repr(cfg))
 
 
 class WechatGroupFreeReplyDecisionTest(unittest.TestCase):

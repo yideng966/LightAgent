@@ -2,6 +2,33 @@
 
 ## 2026-07-25
 
+### 微信群自由回复 Scorer 复用模型管理
+
+- 将自由回复 LLM Scorer 从通道层独立 OpenAI-compatible HTTP 请求迁移到共享 `TextModelRouter.complete()`，通过单次 Provider/模型覆盖执行，且不修改主聊天模型配置或熔断状态。
+- Web 模型管理新增 LLM Scorer 能力卡，支持标准 Provider 和 `custom:<id>` 模型；群管理自由回复设置只保留开关、上下文长度、判定阈值、Token 上限、失败回落与统计。
+- 删除 Scorer 独立 API Base、API Key、超时和 Temperature 配置；共享路由通过仅作用于当前 Scorer 请求的 `reasoning_effort=none` 与 JSON Mode 禁用思考并约束结构化输出，主聊天模型及其他无状态文本任务不受影响。
+- 补充共享路由覆盖、Scorer、模型管理和 Web 设置回归，并同步配置模板、项目规则、实施计划与 Web 控制台文档。
+
+关键文件：
+
+- `bridge/agent_bridge.py`
+- `bridge/bridge.py`
+- `channel/wechat_group/wechat_group_free_reply_scorer.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `config.py`
+- `config-template.json`
+- `tests/test_text_model_router.py`
+- `tests/test_wechat_group_free_reply_scorer.py`
+- `tests/test_models_handler.py`
+
+验证记录：
+
+- Scorer、共享路由、OpenAI-compatible 请求参数隔离、模型管理、控制台、Judge 与自由回复定向回归 122 项通过；微信群消息、通道与 Web 规范三件套 234 项通过。
+- 本机 Ollama `qwen3.6:27b` 使用 256 最大输出 Token 完成真实 Scorer 请求，3.7 秒返回 `target=group + soft_reply`、`confidence=0.95`，无 `invalid_json` 或模型错误。
+- 全量 Python 回归运行 938 项，结果为 923 项通过、1 项失败、11 项错误、3 项跳过；错误来自缺少可选依赖和 Windows 符号链接权限，失败为既有 `chat.html` 预置缓存查询参数断言，与当前缓存时间戳注入规则冲突，均与本次改动无关。
+- Python 编译、JavaScript 语法、配置模板 JSON 与 `git diff --check` 通过。
+
 ### LightAgent Skill Hub 集成
 
 - 新增签名静态注册表客户端与最后一次验证通过的本地缓存，对索引执行 Ed25519 验签，对技能包和外部下载执行 SHA-256 校验。
