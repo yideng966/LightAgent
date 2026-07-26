@@ -75,10 +75,11 @@ class WechatGroupMemoryUiTest(unittest.TestCase):
         self.assertIn("String(nameRecords.length)", body)
         self.assertNotIn("String(roomSummaries.length)", body)
 
-    def test_groups_page_cache_buster_changes_for_memory_ui(self):
+    def test_groups_page_leaves_console_cache_busting_to_chat_handler(self):
         chat_html = (ROOT / "channel/web/chat.html").read_text(encoding="utf-8")
 
-        self.assertIn("console.js?v=20260720-room-profiles", chat_html)
+        self.assertIn('src="assets/js/console.js"', chat_html)
+        self.assertNotIn("assets/js/console.js?v=", chat_html)
 
     def test_groups_memory_rooms_use_saved_room_names_as_fallback(self):
         console_js = (ROOT / "channel/web/static/js/console.js").read_text(encoding="utf-8")

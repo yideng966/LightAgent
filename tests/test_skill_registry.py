@@ -2,13 +2,16 @@ import base64
 import json
 import os
 import tempfile
+import threading
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from agent.skills.registry import (
+    LegacySkillRegistryClient,
     REGISTRY_PUBLIC_KEYS,
     RegistrySecurityError,
     SkillRegistryClient,
@@ -96,6 +99,74 @@ class SkillRegistryClientTest(unittest.TestCase):
         client = SkillRegistryClient("https://example.test/registry.json", self.temp.name, _Session(document))
         with self.assertRaises(RegistrySecurityError):
             client.get_skill("sample")
+
+    def test_concurrent_cache_writes_keep_complete_verified_json(self):
+        document = self._document()
+        client = SkillRegistryClient(
+            "https://example.test/registry.json", self.temp.name, _Session(document)
+        )
+        threads = [
+            threading.Thread(target=client._write_cache, args=(document,))
+            for _ in range(12)
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        cached = client._read_cache()
+        self.assertEqual(document, cached)
+
+    def test_original_marketplace_catalog_is_normalized_and_cached(self):
+        document = {
+            "skills": [{
+                "name": "legacy-skill", "display_name": "Legacy", "version": "1.2.3",
+                "description": "old hub", "author": "tester", "status": "published",
+                "requires_env": ["TOKEN"], "requires_bins": ["curl"],
+            }],
+            "total": 1, "page": 1, "limit": 50,
+        }
+        client = LegacySkillRegistryClient(
+            "https://legacy.test/api", self.temp.name, _Session(document)
+        )
+        item = client.list_skills()[0]
+        self.assertEqual("cowagent-skillhub", item["registry_source"])
+        self.assertEqual("active", item["status"])
+        self.assertEqual(["TOKEN"], item["requirements"]["env"])
+        self.assertEqual("https://skills.cowagent.ai/legacy-skill", item["detail_url"])
+
+        offline = LegacySkillRegistryClient(
+            "https://legacy.test/api", self.temp.name, _Session(error=OSError("offline"))
+        )
+        cached_item = offline.list_skills()[0]
+        self.assertEqual("legacy-skill", cached_item["name"])
+        self.assertEqual("https://skills.cowagent.ai/legacy-skill", cached_item["detail_url"])
+
+    def test_original_marketplace_adds_reviewed_dependency_manifest(self):
+        document = {
+            "skills": [{
+                "name": "docx", "version": "1.0.0", "status": "published",
+                "requires_env": [], "requires_bins": [],
+            }],
+            "total": 1, "page": 1, "limit": 50,
+        }
+        client = LegacySkillRegistryClient(
+            "https://legacy.test/api", self.temp.name, _Session(document)
+        )
+        requirements = client.list_skills()[0]["requirements"]
+        self.assertEqual(["defusedxml>=0.7.1"], requirements["python"])
+        self.assertEqual(["docx@9.5.1"], requirements["npm"])
+
+        cached = json.loads((Path(self.temp.name) / "cowagent-catalog.last-good.json").read_text())
+        cached[0]["requirements"] = {
+            "env": [], "bins": [], "python": [], "npm": [], "downloads": [],
+        }
+        (Path(self.temp.name) / "cowagent-catalog.last-good.json").write_text(
+            json.dumps(cached), encoding="utf-8"
+        )
+        offline = LegacySkillRegistryClient(
+            "https://legacy.test/api", self.temp.name, _Session(error=OSError("offline"))
+        )
+        self.assertEqual(["docx@9.5.1"], offline.list_skills()[0]["requirements"]["npm"])
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ croniter>=2.0.0
 click>=8.0
 qrcode
 json-repair
+tzdata>=2024.1
 
 # wechatcom & wechatmp
 wechatpy

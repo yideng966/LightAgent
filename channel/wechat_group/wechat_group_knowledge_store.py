@@ -56,6 +56,45 @@ class WechatGroupKnowledgeStore:
                 )
         return self.get_group_memory(room_id, memory_id) or {}
 
+    def upsert_group_memory(self, room_id: str, content: str, **extra) -> Dict[str, Any]:
+        """Create or replace a deterministic room-scoped memory by memory_id."""
+        room_id = _require_text("room_id", room_id)
+        content = _require_text("content", content)
+        memory_id = _require_text("memory_id", extra.get("memory_id"))
+        now = int(time.time())
+        evidence_message_ids = _normalize_list(extra.get("evidence_message_ids"))
+        with self._lock, closing(self._connect()) as conn:
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO wechat_group_group_memories (
+                        memory_id, room_id, content, source_kind,
+                        evidence_message_ids_json, evidence_text, status,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(memory_id) DO UPDATE SET
+                        room_id = excluded.room_id,
+                        content = excluded.content,
+                        source_kind = excluded.source_kind,
+                        evidence_message_ids_json = excluded.evidence_message_ids_json,
+                        evidence_text = excluded.evidence_text,
+                        status = excluded.status,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        memory_id,
+                        room_id,
+                        content,
+                        str(extra.get("source_kind") or "learning"),
+                        json.dumps(evidence_message_ids, ensure_ascii=False),
+                        str(extra.get("evidence_text") or ""),
+                        str(extra.get("status") or "active"),
+                        int(extra.get("created_at") or now),
+                        int(extra.get("updated_at") or now),
+                    ),
+                )
+        return self.get_group_memory(room_id, memory_id) or {}
+
     def get_group_memory(self, room_id: str, memory_id: str) -> Optional[Dict[str, Any]]:
         if not room_id or not memory_id:
             return None

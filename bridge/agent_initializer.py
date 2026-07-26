@@ -349,8 +349,12 @@ class AgentInitializer:
         tools = []
         file_config = {
             "cwd": workspace_root,
+            "skill_workspace": workspace_root,
             "memory_manager": memory_manager
-        } if memory_manager else {"cwd": workspace_root}
+        } if memory_manager else {
+            "cwd": workspace_root,
+            "skill_workspace": workspace_root,
+        }
         
         for tool_name in tool_manager.tool_classes.keys():
             try:

@@ -177,10 +177,12 @@ const I18N = {
         config_password_changed: '密码已更新，请重新登录',
         config_password_cleared: '密码已清除',
         skills_title: '技能管理', skills_desc: '查看、启用或禁用 Agent 工具和技能', skills_hub_btn: '获取在线技能',
-        skill_hub_title: '在线技能库', skill_hub_desc: '从 LightAgent Skill Hub 获取经过签名校验的技能，点击安装后即可使用。',
+        skill_hub_title: '在线技能库', skill_hub_desc: '同时浏览 LightAgent Skill Hub 和原技能广场，点击安装后即可使用。',
         skill_hub_search_placeholder: '搜索名称、描述、作者或标签',
         skill_hub_all_categories: '全部分类', skill_hub_refresh: '刷新', skill_hub_empty: '没有匹配的在线技能',
         skill_hub_empty_hint: '尝试调整搜索词或筛选条件。', skill_hub_prev: '上一页', skill_hub_next: '下一页',
+        skill_hub_select_page: '选择当前页', skill_hub_clear_selection: '清空选择',
+        skill_hub_batch_install: '批量安装', skill_hub_batch_update: '批量更新', skill_hub_batch_uninstall: '批量卸载',
         skills_loading: '加载技能中...', skills_loading_desc: '技能加载后将显示在此处',
         tools_section_title: '内置工具', tools_loading: '加载工具中...',
         skills_section_title: '技能', skill_enable: '启用', skill_disable: '禁用',
@@ -238,6 +240,45 @@ const I18N = {
         groups_nav_humanization_hint: '上下文与语气',
         groups_nav_rooms: '群与管理员',
         groups_nav_rooms_hint: '目标群与管理员',
+        groups_nav_report: '群聊报告',
+        groups_nav_report_hint: '统计、模板与定时发送',
+        groups_report_title: '群聊报告',
+        groups_report_desc: '按稳定群隔离配置统计范围、报告模板和定时发送。',
+        groups_report_no_rooms: '请先在“群与管理员”中选择并确认至少一个目标群。',
+        groups_report_room: '目标群',
+        groups_report_enabled: '启用当前群报告',
+        groups_report_enabled_hint: '关闭后保留历史快照，但暂停群内请求、定时发送和日报话题记忆。',
+        groups_report_save: '保存报告设置',
+        groups_report_saved: '报告设置已保存',
+        groups_report_unsaved: '有未保存修改',
+        groups_report_archive: '归档覆盖',
+        groups_report_latest: '最近报告',
+        groups_report_delivery: '最近投递',
+        groups_report_scheduler: '调度同步',
+        groups_report_schedules: '定时报告',
+        groups_report_daily: '日报', groups_report_weekly: '周报', groups_report_monthly: '月报',
+        groups_report_schedule_enabled: '启用定时发送',
+        groups_report_send_time: '发送时间',
+        groups_report_timezone: '报告时区',
+        groups_report_manual_admin: '仅管理员可在群内手动生成',
+        groups_report_daily_memory: '日报话题写入当前群记忆',
+        groups_report_output: '报告输出形式',
+        groups_report_mode_text: '纯文本', groups_report_mode_image: '图片', groups_report_mode_preferred: '图片优先，失败转纯文本',
+        groups_report_text_template: '文字模板', groups_report_custom_template: '自定义模板', groups_report_builtin_template: '内置模板',
+        groups_report_text_template_standard: '标准完整', groups_report_text_template_compact: '精简快报',
+        groups_report_template_fields: '可用字段', groups_report_restore: '恢复内置模板',
+        groups_report_image_template: '图片模板', groups_report_template_unavailable: '不可用',
+        groups_report_preview: '生成预览', groups_report_send: '立即发送', groups_report_period: '统计周期',
+        groups_report_period_daily: '上一自然日', groups_report_period_weekly: '上一自然周', groups_report_period_monthly: '上一自然月', groups_report_period_custom: '自定义范围',
+        groups_report_custom_start: '开始时间', groups_report_custom_end: '结束时间',
+        groups_report_generating: '报告生成中', groups_report_ready: '预览已就绪', groups_report_send_confirm: '确认向当前群发送该报告？',
+        groups_report_channel_offline: '当前连接状态未就绪，发送时会再次实时校验。',
+        groups_report_preview_required: '请先完成预览；发送将复用当前预览的正式输出。',
+        groups_report_status_unknown: '发送结果未知，请勿直接重发。', groups_report_status_partial: '部分分片已发送，可重试未完成分片。',
+        groups_report_retry: '重试未完成分片', groups_report_text_preview: '文字预览', groups_report_image_preview: '图片预览',
+        groups_report_rendered_preview: '正式输出预览', groups_report_preview_rendering: '正在渲染正式预览…', groups_report_preview_failed: '预览渲染失败，当前输出形式不可发送。', groups_report_preview_fallback: '图片预览不可用，已展示纯文本兜底。',
+        groups_report_discard_warning: '切换将放弃当前草稿。', groups_report_template_empty: '自定义模板不能为空。', groups_report_template_missing: '自定义模板缺少必需字段。', groups_report_invalid_range: '请填写有效的自定义时间范围。',
+        groups_report_ranking: '发言排行榜', groups_report_topics: '重点话题', groups_report_highlights: '精彩发言', groups_report_links: '群聊链接收集',
         groups_nav_free_reply: '自由回复',
         groups_nav_free_reply_hint: '普通群聊接话',
         groups_nav_voice_interaction: '语音交互',
@@ -412,6 +453,7 @@ const I18N = {
         wechat_group_free_reply_worker_queue_size: '队列长度上限',
         wechat_group_free_reply_llm_title: '大模型二次判定',
         wechat_group_free_reply_llm_enabled: '启用大模型二次判定',
+        wechat_group_free_reply_llm_hint: '候选消息会先通过群范围、抑制、冷却和评分筛选，再进入后台队列。大模型只判断“是否适合接话”，不生成最终回复；仅返回 should_reply=true 且置信度达到下方阈值才放行。模型失败或 JSON 无效时默认不回复。关闭后，本地初筛通过的候选直接放行；3 人及以上复读同一句且未命中抑制时也由本地规则直接放行。',
         wechat_group_free_reply_llm_timeout: '判定超时（秒）',
         wechat_group_free_reply_llm_confidence: '最低置信度',
         wechat_group_free_reply_scorer_title: 'LLM Scorer',
@@ -1045,10 +1087,12 @@ const I18N = {
         config_password_changed: 'Password updated, please re-login',
         config_password_cleared: 'Password cleared',
         skills_title: 'Skills', skills_desc: 'View, enable, or disable agent tools and skills', skills_hub_btn: 'Get online skills',
-        skill_hub_title: 'Online Skill Library', skill_hub_desc: 'Get signed skills from LightAgent Skill Hub and use them immediately after installation.',
+        skill_hub_title: 'Online Skill Library', skill_hub_desc: 'Browse LightAgent Skill Hub and the original skill marketplace in one place.',
         skill_hub_search_placeholder: 'Search name, description, author, or tag',
         skill_hub_all_categories: 'All categories', skill_hub_refresh: 'Refresh', skill_hub_empty: 'No matching online skills',
         skill_hub_empty_hint: 'Try another search term or filter.', skill_hub_prev: 'Previous', skill_hub_next: 'Next',
+        skill_hub_select_page: 'Select current page', skill_hub_clear_selection: 'Clear selection',
+        skill_hub_batch_install: 'Batch install', skill_hub_batch_update: 'Batch update', skill_hub_batch_uninstall: 'Batch uninstall',
         skills_loading: 'Loading skills...', skills_loading_desc: 'Skills will be displayed here after loading',
         tools_section_title: 'Built-in Tools', tools_loading: 'Loading tools...',
         skills_section_title: 'Skills', skill_enable: 'Enable', skill_disable: 'Disable',
@@ -1106,6 +1150,45 @@ const I18N = {
         groups_nav_humanization_hint: 'Context and tone',
         groups_nav_rooms: 'Groups & admins',
         groups_nav_rooms_hint: 'Target groups and admins',
+        groups_nav_report: 'Group reports',
+        groups_nav_report_hint: 'Statistics, templates, and schedules',
+        groups_report_title: 'Group reports',
+        groups_report_desc: 'Configure scoped statistics, report templates, and scheduled delivery.',
+        groups_report_no_rooms: 'Select and confirm at least one target group in Groups & admins first.',
+        groups_report_room: 'Target group',
+        groups_report_enabled: 'Enable reports for this group',
+        groups_report_enabled_hint: 'Keeps snapshots but pauses group requests, schedules, and daily topic memory.',
+        groups_report_save: 'Save report settings',
+        groups_report_saved: 'Report settings saved',
+        groups_report_unsaved: 'Unsaved changes',
+        groups_report_archive: 'Archive coverage',
+        groups_report_latest: 'Latest report',
+        groups_report_delivery: 'Latest delivery',
+        groups_report_scheduler: 'Schedule sync',
+        groups_report_schedules: 'Scheduled reports',
+        groups_report_daily: 'Daily', groups_report_weekly: 'Weekly', groups_report_monthly: 'Monthly',
+        groups_report_schedule_enabled: 'Enable scheduled delivery',
+        groups_report_send_time: 'Send time',
+        groups_report_timezone: 'Report timezone',
+        groups_report_manual_admin: 'Only admins can generate from the group',
+        groups_report_daily_memory: 'Save daily topics to current-group memory',
+        groups_report_output: 'Report output',
+        groups_report_mode_text: 'Text', groups_report_mode_image: 'Image', groups_report_mode_preferred: 'Image, fallback to text',
+        groups_report_text_template: 'Text template', groups_report_custom_template: 'Custom template', groups_report_builtin_template: 'Built-in template',
+        groups_report_text_template_standard: 'Standard full', groups_report_text_template_compact: 'Compact digest',
+        groups_report_template_fields: 'Available fields', groups_report_restore: 'Restore built-in template',
+        groups_report_image_template: 'Image template', groups_report_template_unavailable: 'Unavailable',
+        groups_report_preview: 'Generate preview', groups_report_send: 'Send now', groups_report_period: 'Period',
+        groups_report_period_daily: 'Previous day', groups_report_period_weekly: 'Previous week', groups_report_period_monthly: 'Previous month', groups_report_period_custom: 'Custom range',
+        groups_report_custom_start: 'Start time', groups_report_custom_end: 'End time',
+        groups_report_generating: 'Generating report', groups_report_ready: 'Preview ready', groups_report_send_confirm: 'Send this report to the current group?',
+        groups_report_channel_offline: 'The last connection status is not ready. Sending checks the live status again.',
+        groups_report_preview_required: 'Finish a preview first. Sending reuses that preview’s final output.',
+        groups_report_status_unknown: 'Delivery outcome is unknown. Do not resend blindly.', groups_report_status_partial: 'Some parts were sent. Retry incomplete parts only.',
+        groups_report_retry: 'Retry incomplete parts', groups_report_text_preview: 'Text preview', groups_report_image_preview: 'Image preview',
+        groups_report_rendered_preview: 'Final output preview', groups_report_preview_rendering: 'Rendering final preview...', groups_report_preview_failed: 'Preview rendering failed. The current output mode cannot be sent.', groups_report_preview_fallback: 'Image preview is unavailable. The text fallback is shown.',
+        groups_report_discard_warning: 'Switching discards the current draft.', groups_report_template_empty: 'Custom template cannot be empty.', groups_report_template_missing: 'Custom template misses required fields.', groups_report_invalid_range: 'Enter a valid custom range.',
+        groups_report_ranking: 'Speaker ranking', groups_report_topics: 'Topics', groups_report_highlights: 'Highlights', groups_report_links: 'Collected links',
         groups_nav_free_reply: 'Free reply',
         groups_nav_free_reply_hint: 'Ambient group replies',
         groups_nav_voice_interaction: 'Voice interaction',
@@ -1280,6 +1363,7 @@ const I18N = {
         wechat_group_free_reply_worker_queue_size: 'Queue size limit',
         wechat_group_free_reply_llm_title: 'LLM decision',
         wechat_group_free_reply_llm_enabled: 'Enable LLM decision',
+        wechat_group_free_reply_llm_hint: 'Candidates first pass group scope, suppression, cooldown, and score checks, then enter the worker queue. The LLM only decides whether it is appropriate to join the conversation; it does not generate the final reply. A candidate is released only when it returns should_reply=true and reaches the threshold below. Model failures or invalid JSON default to no reply. With this switch off, locally qualified candidates pass directly; a message repeated by at least three distinct members without a suppression also passes locally without calling the LLM.',
         wechat_group_free_reply_llm_timeout: 'Decision timeout (seconds)',
         wechat_group_free_reply_llm_confidence: 'Minimum confidence',
         wechat_group_free_reply_scorer_title: 'LLM scorer',
@@ -5861,25 +5945,100 @@ function getToolIcon(name) {
 function loadSkillsView() {
     loadToolsSection();
     loadSkillsSection();
+    syncSkillUpdateStatus();
 }
 
 let skillHubSearchTimer = null;
 const skillHubState = {
+    source: 'lightagent-skillhub',
     page: 1,
     pageSize: 12,
     total: 0,
     totalPages: 1,
     skills: [],
     loaded: false,
+    selected: new Map(),
+    updateState: {},
+    catalogSources: {},
 };
+
+const SKILL_CATEGORY_LABELS = {
+    community: {zh: '社区技能', en: 'Community'},
+    diagnostics: {zh: '诊断工具', en: 'Diagnostics'},
+    external: {zh: '外部服务', en: 'External services'},
+    media: {zh: '媒体处理', en: 'Media'},
+    office: {zh: '办公效率', en: 'Office'},
+    coding: {zh: '编程开发', en: 'Coding'},
+    developer: {zh: '开发工具', en: 'Developer tools'},
+    data: {zh: '数据分析', en: 'Data analysis'},
+    content: {zh: '内容创作', en: 'Content creation'},
+    search: {zh: '搜索查询', en: 'Search'},
+};
+
+function formatSkillCategory(category) {
+    const value = String(category || '').trim();
+    const labels = SKILL_CATEGORY_LABELS[value.toLowerCase()];
+    return labels ? labels[currentLang === 'zh' ? 'zh' : 'en'] : value;
+}
+
+function isSafeSkillExternalUrl(value) {
+    try {
+        return new URL(String(value || '')).protocol === 'https:';
+    } catch (_) {
+        return false;
+    }
+}
+
+function updateSkillHubSourceTabs() {
+    document.querySelectorAll('[data-skill-hub-source]').forEach(button => {
+        const active = button.dataset.skillHubSource === skillHubState.source;
+        button.setAttribute('aria-selected', active ? 'true' : 'false');
+        button.classList.toggle('border-primary-500', active);
+        button.classList.toggle('text-primary-600', active);
+        button.classList.toggle('dark:text-primary-400', active);
+        button.classList.toggle('border-transparent', !active);
+        button.classList.toggle('text-slate-500', !active);
+        button.classList.toggle('dark:text-slate-400', !active);
+    });
+    const officialCount = document.getElementById('skill-hub-source-count-official');
+    const cowagentCount = document.getElementById('skill-hub-source-count-cowagent');
+    if (officialCount) officialCount.textContent = Number(skillHubState.catalogSources['lightagent-skillhub'] || 0);
+    if (cowagentCount) cowagentCount.textContent = Number(skillHubState.catalogSources['cowagent-skillhub'] || 0);
+    const sourceLink = document.getElementById('skill-hub-source-link');
+    if (sourceLink) {
+        const legacy = skillHubState.source === 'cowagent-skillhub';
+        sourceLink.href = legacy ? 'https://skills.cowagent.ai/' : 'https://xiaoguiwucan.github.io/LightAgent-SkillHub/';
+        sourceLink.title = legacy ? '在新窗口打开原技能广场' : '在新窗口打开 LightAgent Skill Hub';
+    }
+}
 
 function openSkillHubModal() {
     const modal = document.getElementById('skill-hub-modal');
     if (!modal) return;
+    skillHubState.source = 'lightagent-skillhub';
+    skillHubState.page = 1;
+    skillHubState.selected.clear();
+    const search = document.getElementById('skill-hub-search');
+    if (search) search.value = '';
+    const category = document.getElementById('skill-hub-category');
+    if (category) category.value = '';
+    updateSkillHubSourceTabs();
     modal.classList.remove('hidden');
     document.body.classList.add('overflow-hidden');
     document.getElementById('skill-hub-search')?.focus();
-    if (!skillHubState.loaded) loadSkillHub();
+    loadSkillHub({refresh: true});
+}
+
+function switchSkillHubSource(source) {
+    if (!['lightagent-skillhub', 'cowagent-skillhub'].includes(source) || skillHubState.source === source) return;
+    skillHubState.source = source;
+    skillHubState.page = 1;
+    skillHubState.selected.clear();
+    const category = document.getElementById('skill-hub-category');
+    if (category) category.value = '';
+    updateSkillHubSourceTabs();
+    updateSkillHubBatchToolbar();
+    loadSkillHub({refresh: true});
 }
 
 function closeSkillHubModal() {
@@ -5909,7 +6068,7 @@ function changeSkillHubPage(delta) {
     document.getElementById('skill-hub-scroll')?.scrollTo({top: 0, behavior: 'smooth'});
 }
 
-function loadSkillHub() {
+function loadSkillHub(options = {}) {
     const listEl = document.getElementById('skill-hub-list');
     const statusEl = document.getElementById('skill-hub-status');
     const searchEl = document.getElementById('skill-hub-search');
@@ -5927,11 +6086,13 @@ function loadSkillHub() {
 
     const params = new URLSearchParams({
         q: searchEl?.value.trim() || '',
+        source: skillHubState.source,
         category: categoryEl?.value || '',
         page: String(skillHubState.page),
         page_size: String(skillHubState.pageSize),
+        refresh: options.refresh ? '1' : '0',
     });
-    fetch('/api/skill-hub?' + params.toString()).then(r => r.json()).then(data => {
+    return fetch('/api/skill-hub?' + params.toString()).then(r => r.json()).then(data => {
         if (data.status !== 'success') throw new Error(data.message || 'Request failed');
         const skills = data.skills || [];
         const pagination = data.pagination || {};
@@ -5940,6 +6101,13 @@ function loadSkillHub() {
         skillHubState.total = Number(pagination.total || skills.length);
         skillHubState.totalPages = Math.max(1, Number(pagination.total_pages || 1));
         skillHubState.loaded = true;
+        skillHubState.updateState = data.update_state || {};
+        skillHubState.catalogSources = data.catalog_sources || {};
+        updateSkillHubSourceTabs();
+        skills.forEach(skill => {
+            const key = `${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`;
+            if (skillHubState.selected.has(key)) skillHubState.selected.set(key, skill);
+        });
         updateSkillHubCategories(data.categories || []);
         listEl.innerHTML = '';
         skills.forEach(skill => listEl.appendChild(renderSkillHubCard(skill)));
@@ -5950,6 +6118,7 @@ function loadSkillHub() {
             emptyEl?.classList.remove('hidden');
         }
         updateSkillHubPagination();
+        updateSkillHubBatchToolbar();
     }).catch(error => {
         loadingEl?.classList.add('hidden');
         listEl.innerHTML = '';
@@ -5960,13 +6129,19 @@ function loadSkillHub() {
     });
 }
 
+function formatSkillCheckedAt(value) {
+    if (!value) return currentLang === 'zh' ? '尚未检查' : 'Not checked yet';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : date.toLocaleString(currentLang === 'zh' ? 'zh-CN' : 'en-US');
+}
+
 function updateSkillHubCategories(categories) {
     const select = document.getElementById('skill-hub-category');
     if (!select) return;
     const selected = select.value;
     if (selected && !categories.includes(selected)) categories = [selected, ...categories];
     const label = currentLang === 'zh' ? '全部分类' : 'All categories';
-    select.innerHTML = `<option value="">${label}</option>` + categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join('');
+    select.innerHTML = `<option value="">${label}</option>` + categories.map(category => `<option value="${escapeHtml(category)}">${escapeHtml(formatSkillCategory(category))}</option>`).join('');
     if (categories.includes(selected)) select.value = selected;
 }
 
@@ -5978,9 +6153,17 @@ function updateSkillHubPagination() {
     if (status && skillHubState.loaded) {
         const first = skillHubState.total ? (skillHubState.page - 1) * skillHubState.pageSize + 1 : 0;
         const last = Math.min(skillHubState.total, skillHubState.page * skillHubState.pageSize);
-        status.textContent = currentLang === 'zh'
-            ? `共 ${skillHubState.total} 个技能，当前显示 ${first}-${last}`
-            : `${skillHubState.total} skills, showing ${first}-${last}`;
+        const state = skillHubState.updateState || {};
+        const sourceLabel = skillHubState.source === 'cowagent-skillhub'
+            ? (currentLang === 'zh' ? '原技能广场' : 'Original marketplace')
+            : 'LightAgent Skill Hub';
+        const suffix = currentLang === 'zh'
+            ? ` · 检查于 ${formatSkillCheckedAt(state.checked_at)}${state.cached ? ' · 离线缓存' : ''}${state.error ? ' · 刷新失败，保留上次结果' : ''}`
+            : ` · Checked ${formatSkillCheckedAt(state.checked_at)}${state.cached ? ' · Offline cache' : ''}${state.error ? ' · Refresh failed; previous results kept' : ''}`;
+        status.textContent = (currentLang === 'zh'
+            ? `${sourceLabel} · 共 ${skillHubState.total} 个技能，当前显示 ${first}-${last}`
+            : `${sourceLabel} · ${skillHubState.total} skills, showing ${first}-${last}`) + suffix;
+        status.title = state.error || '';
     }
     if (page) page.textContent = `${skillHubState.page} / ${skillHubState.totalPages}`;
     if (prev) prev.disabled = skillHubState.page <= 1;
@@ -5990,26 +6173,165 @@ function updateSkillHubPagination() {
 function renderSkillHubCard(skill) {
     const card = document.createElement('article');
     card.className = 'flex min-h-[220px] min-w-0 flex-col rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-primary-300 dark:border-white/10 dark:bg-[#1A1A1A] dark:hover:border-primary-700';
-    const action = skill.installed ? (skill.update_available ? 'update' : 'verify') : 'install';
-    const actionLabel = action === 'install' ? (currentLang === 'zh' ? '安装' : 'Install') : (action === 'update' ? (currentLang === 'zh' ? '更新' : 'Update') : (currentLang === 'zh' ? '校验' : 'Verify'));
     const tags = (skill.tags || []).slice(0, 3);
+    const selectionKey = `${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`;
+    const selected = skillHubState.selected.has(selectionKey);
+    const stateLabel = !skill.installed
+        ? (currentLang === 'zh' ? '未安装' : 'Not installed')
+        : (skill.update_available
+            ? (currentLang === 'zh' ? '可更新' : 'Update available')
+            : (currentLang === 'zh' ? '已是最新' : 'Up to date'));
+    const stateClass = skill.update_available
+        ? 'bg-amber-50 text-amber-600 dark:bg-amber-900/20'
+        : (skill.installed ? 'bg-green-50 text-green-600 dark:bg-green-900/20' : 'bg-slate-100 text-slate-500 dark:bg-white/10');
+    const primaryAction = !skill.installed ? 'install' : (skill.update_available ? 'update' : 'check');
+    const primaryLabel = primaryAction === 'install'
+        ? (currentLang === 'zh' ? '安装' : 'Install')
+        : (primaryAction === 'update' ? (currentLang === 'zh' ? '更新' : 'Update') : (currentLang === 'zh' ? '检查更新' : 'Check updates'));
+    const detailUrl = isSafeSkillExternalUrl(skill.detail_url) ? skill.detail_url : '';
     card.innerHTML = `
         <div class="flex items-start gap-2">
+            <input type="checkbox" data-skill-hub-select class="mt-0.5 shrink-0 accent-primary-500" ${selected ? 'checked' : ''} aria-label="${currentLang === 'zh' ? '选择技能' : 'Select skill'} ${escapeHtml(skill.name)}">
             <div class="min-w-0 flex-1">
                 <h4 class="break-words text-sm font-semibold text-slate-800 dark:text-slate-100">${escapeHtml(skill.name)}</h4>
-                <p class="mt-1 text-[11px] text-slate-400">v${escapeHtml(skill.version || '--')} · ${escapeHtml(skill.publisher || 'community')}</p>
+                <p class="mt-1 break-words text-[11px] text-slate-400">${currentLang === 'zh' ? '最新版本' : 'Latest'} v${escapeHtml(skill.version || '--')} · ${escapeHtml(skill.publisher || skill.author || 'community')}</p>
+                <span class="mt-1 inline-flex rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">${escapeHtml(skill.registry_label || 'LightAgent Skill Hub')}</span>
             </div>
+            <span class="shrink-0 rounded px-2 py-1 text-[10px] font-medium ${stateClass}">${stateLabel}</span>
         </div>
         <p class="my-3 line-clamp-3 flex-1 text-xs leading-5 text-slate-500 dark:text-slate-400">${escapeHtml(skill.description || '--')}</p>
         <div class="mb-3 flex min-h-5 flex-wrap gap-1">${tags.map(tag => `<span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/5 dark:text-slate-400">${escapeHtml(tag)}</span>`).join('')}</div>
         <div class="flex items-center gap-2 border-t border-slate-100 pt-3 dark:border-white/5">
-            <button type="button" data-skill-action class="rounded-md bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60">${actionLabel}</button>
+            <button type="button" data-skill-action class="rounded-md bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-60">${primaryLabel}</button>
             <button type="button" data-skill-details class="rounded-md border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">${currentLang === 'zh' ? '详情' : 'Details'}</button>
-            <span class="ml-auto truncate text-[11px] text-slate-400">${skill.installed_version ? `${escapeHtml(skill.installed_version)} ${currentLang === 'zh' ? '已安装' : 'installed'}` : escapeHtml(skill.category || '')}</span>
+            ${detailUrl ? `<a href="${escapeHtml(detailUrl)}" target="_blank" rel="noopener noreferrer" title="${currentLang === 'zh' ? '在原技能广场查看介绍' : 'View on original marketplace'}" class="flex h-7 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5"><i class="fas fa-arrow-up-right-from-square text-[10px]"></i><span>${currentLang === 'zh' ? '技能介绍' : 'Website'}</span></a>` : ''}
+            ${skill.can_uninstall ? `<button type="button" data-skill-uninstall title="${currentLang === 'zh' ? '彻底卸载' : 'Completely uninstall'}" class="flex h-7 w-7 items-center justify-center rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10"><i class="fas fa-trash-can text-[11px]"></i></button>` : ''}
+            <span class="ml-auto min-w-0 truncate text-[11px] text-slate-400">${skill.installed_version ? `${currentLang === 'zh' ? '已安装' : 'Installed'} v${escapeHtml(skill.installed_version)}` : escapeHtml(formatSkillCategory(skill.category))}</span>
         </div>`;
-    card.querySelector('[data-skill-action]')?.addEventListener('click', event => runSkillHubAction(action, skill.name, skill.version || '', event.currentTarget));
+    card.querySelector('[data-skill-hub-select]')?.addEventListener('change', event => toggleSkillHubSelection(skill, event.currentTarget.checked));
+    card.querySelector('[data-skill-action]')?.addEventListener('click', event => {
+        if (primaryAction === 'check') checkSkillHubUpdate(skill.name, event.currentTarget);
+        else runSkillHubAction(primaryAction, skill.name, skill.version || '', event.currentTarget, skill.registry_source);
+    });
+    card.querySelector('[data-skill-uninstall]')?.addEventListener('click', event => runSkillHubAction('uninstall', skill.name, '', event.currentTarget, skill.registry_source));
     card.querySelector('[data-skill-details]')?.addEventListener('click', () => openSkillHubDetail(skill));
     return card;
+}
+
+function toggleSkillHubSelection(skill, checked) {
+    const key = `${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`;
+    if (checked) skillHubState.selected.set(key, skill);
+    else skillHubState.selected.delete(key);
+    updateSkillHubBatchToolbar();
+}
+
+function selectSkillHubCurrentPage(checked) {
+    skillHubState.skills.forEach(skill => {
+        const key = `${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`;
+        if (checked) skillHubState.selected.set(key, skill);
+        else skillHubState.selected.delete(key);
+    });
+    document.querySelectorAll('[data-skill-hub-select]').forEach(input => { input.checked = checked; });
+    updateSkillHubBatchToolbar();
+}
+
+function clearSkillHubSelection() {
+    skillHubState.selected.clear();
+    document.querySelectorAll('[data-skill-hub-select]').forEach(input => { input.checked = false; });
+    updateSkillHubBatchToolbar();
+}
+
+function updateSkillHubBatchToolbar() {
+    const selected = Array.from(skillHubState.selected.values());
+    const count = document.getElementById('skill-hub-selected-count');
+    if (count) count.textContent = currentLang === 'zh' ? `已选 ${selected.length} 项` : `${selected.length} selected`;
+    const pageToggle = document.getElementById('skill-hub-select-page');
+    if (pageToggle) {
+        const selectedOnPage = skillHubState.skills.filter(skill => skillHubState.selected.has(`${skill.registry_source || 'lightagent-skillhub'}:${skill.name}`)).length;
+        pageToggle.checked = skillHubState.skills.length > 0 && selectedOnPage === skillHubState.skills.length;
+        pageToggle.indeterminate = selectedOnPage > 0 && selectedOnPage < skillHubState.skills.length;
+    }
+    const available = {
+        install: selected.some(skill => !skill.installed),
+        update: selected.some(skill => skill.update_available),
+        uninstall: selected.some(skill => skill.can_uninstall),
+    };
+    document.querySelectorAll('[data-batch-operation]').forEach(button => {
+        button.disabled = !available[button.dataset.batchOperation];
+    });
+}
+
+async function runSkillHubBatch(operation) {
+    const selected = Array.from(skillHubState.selected.values());
+    if (!selected.length) return;
+    const labels = currentLang === 'zh'
+        ? {install:'安装', update:'更新', uninstall:'彻底卸载'}
+        : {install:'install', update:'update', uninstall:'completely uninstall'};
+    const warning = operation === 'uninstall'
+        ? (currentLang === 'zh' ? '\n\n配置、密钥、用户数据和所有回滚版本将永久删除，且无法恢复。' : '\n\nConfiguration, secrets, user data, and rollback versions will be permanently deleted and cannot be recovered.')
+        : '';
+    if (!confirm(currentLang === 'zh' ? `确认批量${labels[operation]}已选的 ${selected.length} 个技能？${warning}` : `Confirm ${labels[operation]} for ${selected.length} selected skills?${warning}`)) return;
+    const resultEl = document.getElementById('skill-hub-batch-result');
+    if (resultEl) {
+        resultEl.className = 'border-b border-slate-200 px-4 py-3 text-xs text-slate-500 dark:border-white/10 sm:px-6';
+        resultEl.innerHTML = `<i class="fas fa-spinner fa-spin mr-1.5"></i>${currentLang === 'zh' ? '正在逐项处理...' : 'Processing skills...'}`;
+    }
+    document.querySelectorAll('[data-batch-operation]').forEach(button => { button.disabled = true; });
+    try {
+        const response = await fetch('/api/skill-hub', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({action:'batch', operation, skills:selected.map(skill => ({name:skill.name, version:skill.version || '', source:skill.registry_source || 'lightagent-skillhub'}))}),
+        });
+        const data = await response.json();
+        if (data.status !== 'success') throw new Error(data.message || 'Request failed');
+        const summary = data.summary || {};
+        const failures = (data.results || []).filter(item => item.status === 'failed');
+        const skipped = (data.results || []).filter(item => item.status === 'skipped');
+        if (resultEl) {
+            resultEl.className = 'border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600 dark:border-white/10 dark:bg-white/[0.02] dark:text-slate-300 sm:px-6';
+            resultEl.innerHTML = `<div class="font-medium">${currentLang === 'zh' ? `完成：成功 ${summary.success || 0}，跳过 ${summary.skipped || 0}，失败 ${summary.failed || 0}` : `Done: ${summary.success || 0} succeeded, ${summary.skipped || 0} skipped, ${summary.failed || 0} failed`}</div>`
+                + [...skipped, ...failures].map(item => `<div class="mt-1 break-words ${item.status === 'failed' ? 'text-red-500' : 'text-slate-400'}">${escapeHtml(item.name)}: ${escapeHtml(formatSkillBatchReason(item.reason))}</div>`).join('');
+        }
+        clearSkillHubSelection();
+        await loadSkillHub({refresh:true});
+        loadSkillsSection();
+    } catch (error) {
+        if (resultEl) {
+            resultEl.className = 'border-b border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600 dark:border-red-900/40 dark:bg-red-900/10 sm:px-6';
+            resultEl.textContent = (currentLang === 'zh' ? '批量操作失败：' : 'Batch operation failed: ') + error.message;
+        }
+        updateSkillHubBatchToolbar();
+    }
+}
+
+function formatSkillBatchReason(reason) {
+    const labels = currentLang === 'zh'
+        ? {already_installed:'已安装', not_installed:'未安装', already_latest:'已是最新版本'}
+        : {already_installed:'Already installed', not_installed:'Not installed', already_latest:'Already up to date'};
+    return labels[reason] || reason || (currentLang === 'zh' ? '未知原因' : 'Unknown reason');
+}
+
+async function checkSkillHubUpdate(name, button = null) {
+    const original = button?.innerHTML;
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = `<i class="fas fa-spinner fa-spin mr-1"></i>${currentLang === 'zh' ? '检查中' : 'Checking'}`;
+    }
+    try {
+        const params = new URLSearchParams({action:'update_status', name, refresh:'1'});
+        const response = await fetch('/api/skill-hub?' + params.toString());
+        const data = await response.json();
+        if (data.status !== 'success' || data.update_state?.error) throw new Error(data.message || data.update_state?.error || 'Request failed');
+        await loadSkillHub();
+        loadSkillsSection();
+    } catch (error) {
+        alert((currentLang === 'zh' ? '检查更新失败：' : 'Update check failed: ') + error.message);
+    } finally {
+        if (button?.isConnected) {
+            button.disabled = false;
+            button.innerHTML = original;
+        }
+    }
 }
 
 function openSkillHubDetail(skill) {
@@ -6024,7 +6346,7 @@ function openSkillHubDetail(skill) {
         [currentLang === 'zh' ? '工具权限' : 'Tools', skill.lightagent?.tools || []],
     ];
     document.getElementById('skill-hub-detail-title').textContent = skill.name || '';
-    document.getElementById('skill-hub-detail-meta').textContent = `v${skill.version || '--'} · ${skill.publisher || 'community'}`;
+    document.getElementById('skill-hub-detail-meta').textContent = `v${skill.version || '--'} · ${skill.publisher || skill.author || 'community'} · ${skill.registry_label || 'LightAgent Skill Hub'}`;
     content.innerHTML = `
         <p class="text-sm leading-6 text-slate-600 dark:text-slate-300">${escapeHtml(skill.description || '--')}</p>
         <div class="mt-5 grid gap-4 sm:grid-cols-2">
@@ -6035,18 +6357,30 @@ function openSkillHubDetail(skill) {
         <section class="mt-5 rounded-md border border-slate-200 p-3 dark:border-white/10"><h4 class="text-xs font-semibold text-slate-600 dark:text-slate-300"><i class="fas fa-box mr-1.5 text-slate-400"></i>Docker</h4><p class="mt-1 break-words text-xs leading-5 text-slate-500 dark:text-slate-400">${escapeHtml(skill.lightagent?.docker_notes || '--')}</p></section>`;
 
     actions.innerHTML = '';
-    const action = skill.installed ? (skill.update_available ? 'update' : 'verify') : 'install';
-    const labels = {install: currentLang === 'zh' ? '安装技能' : 'Install', update: currentLang === 'zh' ? '更新技能' : 'Update', verify: currentLang === 'zh' ? '校验安装' : 'Verify'};
+    const action = skill.installed ? (skill.update_available ? 'update' : 'check') : 'install';
+    const labels = {install: currentLang === 'zh' ? '安装技能' : 'Install', update: currentLang === 'zh' ? '更新技能' : 'Update', check: currentLang === 'zh' ? '检查更新' : 'Check updates'};
     const closeButton = document.createElement('button');
     closeButton.type = 'button';
     closeButton.className = 'rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5';
     closeButton.textContent = currentLang === 'zh' ? '关闭' : 'Close';
     closeButton.addEventListener('click', closeSkillHubDetail);
+    if (isSafeSkillExternalUrl(skill.detail_url)) {
+        const websiteLink = document.createElement('a');
+        websiteLink.href = skill.detail_url;
+        websiteLink.target = '_blank';
+        websiteLink.rel = 'noopener noreferrer';
+        websiteLink.className = 'mr-auto inline-flex items-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5';
+        websiteLink.innerHTML = `<i class="fas fa-arrow-up-right-from-square text-xs"></i>${currentLang === 'zh' ? '访问原技能广场' : 'Visit marketplace'}`;
+        actions.append(websiteLink);
+    }
     const actionButton = document.createElement('button');
     actionButton.type = 'button';
     actionButton.className = 'rounded-md bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-60';
     actionButton.textContent = labels[action];
-    actionButton.addEventListener('click', event => runSkillHubAction(action, skill.name, skill.version || '', event.currentTarget));
+    actionButton.addEventListener('click', event => {
+        if (action === 'check') checkSkillHubUpdate(skill.name, event.currentTarget);
+        else runSkillHubAction(action, skill.name, skill.version || '', event.currentTarget, skill.registry_source);
+    });
     actions.append(closeButton);
     if (skill.installed) {
         if (skill.rollback_available) {
@@ -6072,21 +6406,26 @@ function closeSkillHubDetail() {
     document.getElementById('skill-hub-detail-modal')?.classList.add('hidden');
 }
 
-async function runSkillHubAction(action, name, version, button = null) {
+async function runSkillHubAction(action, name, version, button = null, source = '') {
     const destructive = action === 'update' || action === 'rollback' || action === 'uninstall';
-    if (destructive && !confirm(currentLang === 'zh' ? `确认对技能 ${name} 执行${{update:'更新',rollback:'回滚',uninstall:'卸载'}[action]}？` : `Confirm ${action} for ${name}?`)) return;
+    const uninstallWarning = action === 'uninstall'
+        ? (currentLang === 'zh'
+            ? '\n\n技能包、依赖环境、配置、密钥、用户数据和所有回滚版本将永久删除，且无法恢复。'
+            : '\n\nThe skill package, dependency environment, configuration, secrets, user data, and rollback versions will be permanently deleted and cannot be recovered.')
+        : '';
+    if (destructive && !confirm((currentLang === 'zh' ? `确认对技能 ${name} 执行${{update:'更新',rollback:'回滚',uninstall:'彻底卸载'}[action]}？` : `Confirm ${action} for ${name}?`) + uninstallWarning)) return;
     const originalButton = button?.innerHTML;
     if (button) {
         button.disabled = true;
         button.innerHTML = `<i class="fas fa-spinner fa-spin mr-1.5"></i>${currentLang === 'zh' ? '处理中' : 'Working'}`;
     }
     try {
-        const response = await fetch('/api/skill-hub', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action,name,version})});
+        const response = await fetch('/api/skill-hub', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({action,name,version,source})});
         const data = await response.json();
         if (data.status !== 'success') throw new Error(data.message || 'Request failed');
         alert(currentLang === 'zh' ? '操作完成' : 'Operation completed');
         closeSkillHubDetail();
-        loadSkillHub();
+        loadSkillHub({refresh:true});
         loadSkillsSection();
     } catch (error) {
         alert((currentLang === 'zh' ? '操作失败：' : 'Operation failed: ') + error.message);
@@ -6164,7 +6503,12 @@ function loadSkillsSection() {
     fetch('/api/skills').then(r => r.json()).then(data => {
         if (data.status !== 'success') return;
         const skills = data.skills || [];
+        const updateCount = skills.filter(skill => skill.hub_managed && skill.update_available).length;
+        updateSkillUpdateBadge(updateCount);
         if (skills.length === 0) {
+            listEl.innerHTML = '';
+            badge.classList.add('hidden');
+            emptyEl.classList.remove('hidden');
             const p = emptyEl.querySelector('p');
             if (p) p.textContent = currentLang === 'zh' ? '暂无技能' : 'No skills found';
             return;
@@ -6204,6 +6548,17 @@ function renderSkillCard(card, sk) {
         : (sk.access_mode === 'disabled_for_wechat_group'
             ? 'bg-slate-100 text-slate-500 dark:bg-white/10'
             : 'bg-amber-50 text-amber-600 dark:bg-amber-900/20');
+    const sourceLabel = sk.hub_managed
+        ? (sk.source === 'cowagent-skillhub' ? (currentLang === 'zh' ? '原技能广场' : 'Original marketplace') : 'Skill Hub')
+        : (sk.source === 'builtin' ? (currentLang === 'zh' ? '内置' : 'Built-in') : (currentLang === 'zh' ? '本地' : 'Local'));
+    const versionLabel = sk.version
+        ? `v${escapeHtml(sk.version)}`
+        : (currentLang === 'zh' ? '未声明版本' : 'Version not declared');
+    const updateMessage = sk.hub_managed
+        ? (sk.update_available
+            ? `${currentLang === 'zh' ? '发现新版本' : 'New version'} v${escapeHtml(sk.available_version || '--')}`
+            : (sk.update_status === 'latest' ? (currentLang === 'zh' ? '当前已是最新版本' : 'Up to date') : (currentLang === 'zh' ? '等待更新检查' : 'Waiting for update check')))
+        : '';
     card.innerHTML = `
         <input type="checkbox" data-skill-bulk-select value="${escapeHtml(sk.name)}"
             class="mt-2 accent-primary-500" title="${currentLang === 'zh' ? '选择用于批量授权' : 'Select for bulk access'}">
@@ -6211,8 +6566,14 @@ function renderSkillCard(card, sk) {
             <i class="fas fa-bolt ${iconColor} text-sm"></i>
         </div>
         <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-                <span class="font-medium text-sm text-slate-700 dark:text-slate-200 truncate flex-1">${escapeHtml(sk.display_name || sk.name)}</span>
+            <div class="flex items-start gap-2 mb-1">
+                <div class="min-w-0 flex-1">
+                    <span class="block break-words font-medium text-sm text-slate-700 dark:text-slate-200">${escapeHtml(sk.display_name || sk.name)}</span>
+                    <div class="mt-1 flex flex-wrap items-center gap-1.5">
+                        <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/10 dark:text-slate-400">${versionLabel}</span>
+                        <span class="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-600 dark:bg-blue-900/20 dark:text-blue-400">${sourceLabel}</span>
+                    </div>
+                </div>
                 <button
                     role="switch"
                     aria-checked="${enabled}"
@@ -6224,6 +6585,12 @@ function renderSkillCard(card, sk) {
                 </button>
             </div>
             <p class="text-xs text-slate-400 dark:text-slate-500 line-clamp-2">${escapeHtml(sk.description || '--')}</p>
+            ${sk.hub_managed ? `<div class="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-slate-50 px-2.5 py-2 dark:bg-white/[0.03]">
+                <span class="min-w-0 flex-1 break-words text-[11px] ${sk.update_available ? 'font-medium text-amber-600' : 'text-slate-400'}">${updateMessage}</span>
+                <button type="button" data-local-skill-check class="rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-white dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">${currentLang === 'zh' ? '检查更新' : 'Check updates'}</button>
+                ${sk.update_available ? `<button type="button" data-local-skill-update class="rounded-md bg-primary-500 px-2 py-1 text-[11px] font-medium text-white hover:bg-primary-600">${currentLang === 'zh' ? '更新' : 'Update'}</button>` : ''}
+                <button type="button" data-local-skill-uninstall title="${currentLang === 'zh' ? '彻底卸载' : 'Completely uninstall'}" class="flex h-6 w-6 items-center justify-center rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10"><i class="fas fa-trash-can text-[10px]"></i></button>
+            </div>` : ''}
             <div class="flex flex-wrap items-center gap-2 mt-3">
                 <span class="px-2 py-1 rounded-md text-[11px] ${statusClass}">${escapeHtml(modeLabels[sk.access_mode] || modeLabels.restricted)}</span>
                 <span class="text-[11px] text-slate-400">${currentLang === 'zh' ? '群' : 'rooms'} ${Number(sk.authorized_room_count || 0)} · ${currentLang === 'zh' ? '成员' : 'members'} ${Number(sk.authorized_member_count || 0)}</span>
@@ -6235,7 +6602,32 @@ function renderSkillCard(card, sk) {
             </div>
         </div>`;
     card._skillData = sk;
+    card.querySelector('[data-local-skill-check]')?.addEventListener('click', event => checkSkillHubUpdate(sk.name, event.currentTarget));
+    card.querySelector('[data-local-skill-update]')?.addEventListener('click', event => runSkillHubAction('update', sk.name, sk.available_version || '', event.currentTarget));
+    card.querySelector('[data-local-skill-uninstall]')?.addEventListener('click', event => runSkillHubAction('uninstall', sk.name, '', event.currentTarget));
 }
+
+function updateSkillUpdateBadge(count) {
+    const badge = document.getElementById('skill-update-count-badge');
+    if (!badge) return;
+    const value = Number(count || 0);
+    badge.textContent = String(value);
+    badge.classList.toggle('hidden', value <= 0);
+}
+
+function syncSkillUpdateStatus(refreshCards = false) {
+    const params = new URLSearchParams({action:'update_status', refresh:'0'});
+    return fetch('/api/skill-hub?' + params.toString()).then(response => response.json()).then(data => {
+        if (data.status !== 'success') return;
+        updateSkillUpdateBadge(data.update_state?.update_count || 0);
+        if (refreshCards && currentView === 'skills') loadSkillsSection();
+    }).catch(() => {});
+}
+
+setInterval(() => syncSkillUpdateStatus(true), 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && currentView === 'skills') syncSkillUpdateStatus(true);
+});
 
 function toggleSkill(name, currentlyEnabled) {
     const action = currentlyEnabled ? 'close' : 'open';
@@ -8830,6 +9222,27 @@ let groupsStickerState = {
     editError: '',
 };
 let groupsStickerDescriptionPollTimer = null;
+let groupsReportState = {
+    selectedRoomId: '',
+    loadedRoomId: '',
+    loading: false,
+    saving: false,
+    generating: false,
+    settings: null,
+    draft: null,
+    templates: [],
+    archive: null,
+    overview: null,
+    connection: null,
+    job: null,
+    report: null,
+    preview: null,
+    previewId: '',
+    confirmationToken: '',
+    delivery: null,
+    error: '',
+    pollTimer: null,
+};
 let groupsAdminState = {
     roomId: '',
     query: '',
@@ -8961,6 +9374,7 @@ function buildGroupsMobileSectionSelect() {
     const sections = [
         ['basic', 'groups_nav_basic'],
         ['rooms', 'groups_nav_rooms'],
+        ['report', 'groups_nav_report'],
         ['humanization', 'groups_nav_humanization'],
         ['free_reply', 'groups_nav_free_reply'],
         ['voice_interaction', 'groups_nav_voice_interaction'],
@@ -8984,9 +9398,11 @@ function buildGroupsMobileSectionSelect() {
     </div>`;
 }
 
-function renderGroupsView() {
+function renderGroupsView(options = {}) {
     const container = document.getElementById('groups-content');
     if (!container) return;
+    const previousMain = container.querySelector('main');
+    const savedScrollTop = options.preserveScroll && previousMain ? previousMain.scrollTop : null;
     captureGroupsStickerConfigDraft();
     const ch = getWechatGroupChannel();
     const extra = ch?.extra || {};
@@ -8995,6 +9411,7 @@ function renderGroupsView() {
         <aside class="hidden md:block w-56 flex-shrink-0 border-r border-slate-200 dark:border-white/10 p-3 space-y-1 overflow-y-auto">
             ${buildGroupsSectionButton('basic', 'fa-sliders', 'groups_nav_basic', 'groups_nav_basic_hint')}
             ${buildGroupsSectionButton('rooms', 'fa-comments', 'groups_nav_rooms', 'groups_nav_rooms_hint')}
+            ${buildGroupsSectionButton('report', 'fa-chart-column', 'groups_nav_report', 'groups_nav_report_hint')}
             ${buildGroupsSectionButton('humanization', 'fa-user-check', 'groups_nav_humanization', 'groups_nav_humanization_hint')}
             ${buildGroupsSectionButton('free_reply', 'fa-comment-dots', 'groups_nav_free_reply', 'groups_nav_free_reply_hint')}
             ${buildGroupsSectionButton('voice_interaction', 'fa-microphone-lines', 'groups_nav_voice_interaction', 'groups_nav_voice_interaction_hint')}
@@ -9019,6 +9436,7 @@ function renderGroupsView() {
         <main class="flex-1 min-w-0 min-h-0 overflow-y-auto p-3 md:p-5">
             ${groupsActiveSection === 'basic' ? buildGroupsBasicPanel(extra) : ''}
             ${groupsActiveSection === 'rooms' ? buildGroupsRoomsPanel(extra) : ''}
+            ${groupsActiveSection === 'report' ? buildGroupsReportPanel(extra) : ''}
             ${groupsActiveSection === 'humanization' ? buildGroupsHumanizationPanel(extra) : ''}
             ${groupsActiveSection === 'free_reply' ? renderWechatGroupFreeReplySettings(extra) : ''}
             ${groupsActiveSection === 'voice_interaction' ? buildGroupsVoiceInteractionPanel(extra) : ''}
@@ -9053,6 +9471,26 @@ function renderGroupsView() {
     if (groupsActiveSection === 'sticker') {
         ensureGroupsStickerLoaded(extra);
     }
+    if (groupsActiveSection === 'report') {
+        ensureGroupsReportLoaded(extra);
+    }
+    syncGroupsPrimarySaveButton();
+    if (savedScrollTop !== null) {
+        requestAnimationFrame(() => {
+            const currentMain = container.querySelector('main');
+            if (currentMain) currentMain.scrollTop = savedScrollTop;
+        });
+    }
+}
+
+function renderGroupsReportView() {
+    renderGroupsView({ preserveScroll: true });
+}
+
+function syncGroupsPrimarySaveButton() {
+    const saveButton = document.getElementById('groups-save-btn');
+    if (!saveButton) return;
+    saveButton.classList.toggle('hidden', groupsActiveSection === 'report');
 }
 
 function buildGroupsSectionButton(section, icon, labelKey, hintKey) {
@@ -9065,6 +9503,7 @@ function buildGroupsSectionButton(section, icon, labelKey, hintKey) {
 }
 
 function switchGroupsSection(section) {
+    if (groupsActiveSection === 'report' && section !== 'report') captureGroupsReportDraft();
     if (section !== 'sticker') {
         groupsStickerState.configDraft = null;
     }
@@ -9501,6 +9940,511 @@ function getGroupsManagedRooms(extra) {
         id: String(room.id || ''),
         name: String(room.name || room.id || ''),
     })).filter(item => item.id);
+}
+
+function getGroupsReportRooms(extra = {}) {
+    const rooms = Array.isArray(extra.rooms) ? extra.rooms : [];
+    const selectedIds = Array.isArray(extra.selected_room_ids) ? extra.selected_room_ids : [];
+    const selectedNames = Array.isArray(extra.selected_room_names) ? extra.selected_room_names : [];
+    const byAnyId = new Map();
+    rooms.forEach(room => {
+        const stableId = String(room.stable_room_id || '').trim();
+        if (!stableId) return;
+        const item = { id: stableId, name: String(room.name || room.topic || stableId), connected: true };
+        [room.stable_room_id, room.id, room.runtime_room_id].forEach(value => {
+            const key = String(value || '').trim();
+            if (key) byAnyId.set(key, item);
+        });
+    });
+    const result = [];
+    selectedIds.forEach((value, index) => {
+        const selected = String(value || '').trim();
+        const resolved = byAnyId.get(selected);
+        if (resolved && !result.some(item => item.id === resolved.id)) result.push(resolved);
+        else if (selected.startsWith('wgr_')) result.push({ id: selected, name: selectedNames[index] || t('groups_room_saved').replace('{n}', String(index + 1)), connected: false });
+    });
+    return result;
+}
+
+function defaultGroupsReportSettings() {
+    return {
+        version: 0,
+        enabled: false,
+        timezone: 'Asia/Shanghai',
+        manual_admin_only: true,
+        save_daily_topics_to_group_memory: false,
+        schedules: {
+            daily: { enabled: false, send_time: '09:00' },
+            weekly: { enabled: false, send_time: '09:00' },
+            monthly: { enabled: false, send_time: '09:00' },
+        },
+        output: {
+            mode: 'image_preferred', text_template_source: 'builtin', builtin_text_template_id: 'standard_text',
+            custom_text_template: '', image_template_source: 'skill', builtin_image_template_id: '',
+            skill_image_template_name: 'wechat-group-report-cyber-intelligence',
+        },
+    };
+}
+
+function ensureGroupsReportLoaded(extra = {}) {
+    const rooms = getGroupsReportRooms(extra);
+    if (!rooms.length) return;
+    if (!groupsReportState.selectedRoomId || !rooms.some(item => item.id === groupsReportState.selectedRoomId)) {
+        groupsReportState.selectedRoomId = rooms[0].id;
+        groupsReportState.loadedRoomId = '';
+        groupsReportState.settings = null;
+        groupsReportState.draft = null;
+        groupsReportState.job = null;
+        groupsReportState.report = null;
+        groupsReportState.preview = null;
+        groupsReportState.previewId = '';
+        groupsReportState.confirmationToken = '';
+        groupsReportState.delivery = null;
+    }
+    if (!groupsReportState.loading && groupsReportState.loadedRoomId !== groupsReportState.selectedRoomId) {
+        loadGroupsReportSettings(groupsReportState.selectedRoomId);
+    }
+}
+
+function loadGroupsReportSettings(roomId) {
+    const targetRoomId = String(roomId || '').trim();
+    if (!targetRoomId) return;
+    groupsReportState.loading = true;
+    groupsReportState.error = '';
+    renderGroupsReportView();
+    fetch(`/api/wechat-group/reports/settings?stable_room_id=${encodeURIComponent(targetRoomId)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'groups_load_failed');
+            if (groupsReportState.selectedRoomId !== targetRoomId) return;
+            groupsReportState.settings = data.settings || defaultGroupsReportSettings();
+            groupsReportState.draft = null;
+            groupsReportState.templates = Array.isArray(data.templates) ? data.templates : [];
+            groupsReportState.archive = data.archive || null;
+            groupsReportState.overview = data.overview || null;
+            groupsReportState.connection = data.connection || null;
+            groupsReportState.loadedRoomId = targetRoomId;
+        })
+        .catch(error => {
+            if (groupsReportState.selectedRoomId === targetRoomId) groupsReportState.error = error.message || 'groups_load_failed';
+        })
+        .finally(() => {
+            if (groupsReportState.selectedRoomId === targetRoomId) groupsReportState.loading = false;
+            renderGroupsReportView();
+        });
+}
+
+function captureGroupsReportDraft() {
+    if (groupsActiveSection !== 'report' || !document.getElementById('groups-report-enabled')) return;
+    groupsReportState.draft = readGroupsReportSettings(groupsReportState.settings || defaultGroupsReportSettings());
+}
+
+function readGroupsReportSettings(saved = {}) {
+    const output = saved.output || {};
+    const scheduleValue = (type, key, fallback) => {
+        const element = document.getElementById(`groups-report-${type}-${key}`);
+        return element ? (key === 'enabled' ? !!element.checked : String(element.value || fallback)) : fallback;
+    };
+    const checked = selector => !!document.querySelector(selector)?.checked;
+    const value = (id, fallback = '') => document.getElementById(id) ? String(document.getElementById(id).value || '') : String(fallback || '');
+    const mode = document.querySelector('input[name="groups-report-output-mode"]:checked')?.value || output.mode || 'image_preferred';
+    const textSource = document.querySelector('input[name="groups-report-text-source"]:checked')?.value || output.text_template_source || 'builtin';
+    return {
+        version: Number(saved.version || 0),
+        enabled: !!document.getElementById('groups-report-enabled')?.checked,
+        timezone: value('groups-report-timezone', saved.timezone || 'Asia/Shanghai').trim() || 'Asia/Shanghai',
+        manual_admin_only: !!document.getElementById('groups-report-manual-admin')?.checked,
+        save_daily_topics_to_group_memory: !!document.getElementById('groups-report-daily-memory')?.checked,
+        schedules: {
+            daily: { enabled: scheduleValue('daily', 'enabled', !!saved.schedules?.daily?.enabled), send_time: scheduleValue('daily', 'time', saved.schedules?.daily?.send_time || '09:00') },
+            weekly: { enabled: scheduleValue('weekly', 'enabled', !!saved.schedules?.weekly?.enabled), send_time: scheduleValue('weekly', 'time', saved.schedules?.weekly?.send_time || '09:00') },
+            monthly: { enabled: scheduleValue('monthly', 'enabled', !!saved.schedules?.monthly?.enabled), send_time: scheduleValue('monthly', 'time', saved.schedules?.monthly?.send_time || '09:00') },
+        },
+        output: {
+            mode,
+            text_template_source: textSource,
+            builtin_text_template_id: value('groups-report-builtin-text-template', output.builtin_text_template_id || 'standard_text').trim() || 'standard_text',
+            custom_text_template: value('groups-report-custom-template', output.custom_text_template || ''),
+            image_template_source: 'skill',
+            builtin_image_template_id: '',
+            skill_image_template_name: value('groups-report-image-template', output.skill_image_template_name || 'wechat-group-report-cyber-intelligence'),
+        },
+    };
+}
+
+function isGroupsReportDirty() {
+    if (!groupsReportState.settings || !groupsReportState.draft) return false;
+    const comparable = settings => ({
+        version: Number(settings?.version || 0),
+        enabled: !!settings?.enabled,
+        timezone: String(settings?.timezone || 'Asia/Shanghai'),
+        manual_admin_only: settings?.manual_admin_only !== false,
+        save_daily_topics_to_group_memory: !!settings?.save_daily_topics_to_group_memory,
+        schedules: settings?.schedules || {},
+        output: settings?.output || {},
+    });
+    return JSON.stringify(comparable(groupsReportState.settings)) !== JSON.stringify(comparable(groupsReportState.draft));
+}
+
+function markGroupsReportDirty() {
+    captureGroupsReportDraft();
+    const status = document.getElementById('groups-report-unsaved');
+    if (status) status.classList.toggle('hidden', !isGroupsReportDirty());
+}
+
+function selectGroupsReportRoom(roomId) {
+    const nextRoomId = String(roomId || '').trim();
+    if (!nextRoomId || nextRoomId === groupsReportState.selectedRoomId) return;
+    captureGroupsReportDraft();
+    if (isGroupsReportDirty() && !window.confirm(`${t('groups_report_unsaved')}\n${t('groups_report_discard_warning')}`)) {
+        renderGroupsView();
+        return;
+    }
+    groupsReportState.selectedRoomId = nextRoomId;
+    groupsReportState.loadedRoomId = '';
+    groupsReportState.settings = null;
+    groupsReportState.draft = null;
+    groupsReportState.job = null;
+    groupsReportState.report = null;
+    groupsReportState.preview = null;
+    groupsReportState.previewId = '';
+    groupsReportState.confirmationToken = '';
+    groupsReportState.delivery = null;
+    renderGroupsView();
+    loadGroupsReportSettings(nextRoomId);
+}
+
+function saveGroupsReportSettings() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    if (!roomId || groupsReportState.saving) return;
+    const settings = readGroupsReportSettings(groupsReportState.settings || defaultGroupsReportSettings());
+    if (settings.output.text_template_source === 'custom' && !validateGroupsReportTemplate(settings.output.custom_text_template)) {
+        return;
+    }
+    groupsReportState.saving = true;
+    renderGroupsReportView();
+    fetch('/api/wechat-group/reports/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, expected_version: settings.version, settings }),
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'success') throw new Error(data.message || 'save failed');
+        groupsReportState.settings = data.settings || settings;
+        groupsReportState.draft = null;
+        showGroupsStatus('groups_report_saved', false);
+    }).catch(error => {
+        showGroupsStatus(error.message || 'groups_load_failed', true);
+    }).finally(() => {
+        groupsReportState.saving = false;
+        renderGroupsReportView();
+    });
+}
+
+function validateGroupsReportTemplate(template) {
+    const required = ['{room_name}', '{period_start}', '{period_end}', '{active_speaker_count}', '{total_messages}', '{top_speaker_name}', '{topic_count}', '{ranking_block}', '{topics_block}', '{highlights_block}', '{links_block}', '{archive_message_count}', '{unresolved_message_count}', '{generated_at}'];
+    const error = !String(template || '').trim() ? t('groups_report_template_empty')
+        : required.find(field => !String(template).includes(field)) ? t('groups_report_template_missing') : '';
+    const target = document.getElementById('groups-report-template-error');
+    if (target) {
+        target.textContent = error;
+        target.classList.toggle('hidden', !error);
+    }
+    return !error;
+}
+
+function changeGroupsReportLayout() {
+    captureGroupsReportDraft();
+    renderGroupsReportView();
+}
+
+function restoreGroupsReportTemplate() {
+    const textarea = document.getElementById('groups-report-custom-template');
+    if (textarea) textarea.value = '';
+    const builtin = document.querySelector('input[name="groups-report-text-source"][value="builtin"]');
+    if (builtin) builtin.checked = true;
+    const builtinSelect = document.getElementById('groups-report-builtin-text-template');
+    if (builtinSelect) builtinSelect.value = 'standard_text';
+    changeGroupsReportLayout();
+}
+
+function insertGroupsReportTemplateField(field) {
+    const textarea = document.getElementById('groups-report-custom-template');
+    if (!textarea || !field) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || start;
+    textarea.value = `${textarea.value.slice(0, start)}${field}${textarea.value.slice(end)}`;
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = start + field.length;
+    markGroupsReportDirty();
+}
+
+function startGroupsReportPreview() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    if (!roomId || groupsReportState.generating) return;
+    const settings = readGroupsReportSettings(groupsReportState.settings || defaultGroupsReportSettings());
+    const reportType = document.getElementById('groups-report-period')?.value || 'daily';
+    const customStart = document.getElementById('groups-report-custom-start')?.value || '';
+    const customEnd = document.getElementById('groups-report-custom-end')?.value || '';
+    if (reportType === 'custom' && (!customStart || !customEnd || customEnd <= customStart)) {
+        showGroupsStatus(t('groups_report_invalid_range'), true);
+        return;
+    }
+    groupsReportState.generating = true;
+    groupsReportState.report = null;
+    groupsReportState.preview = null;
+    groupsReportState.previewId = '';
+    groupsReportState.confirmationToken = '';
+    renderGroupsReportView();
+    fetch('/api/wechat-group/reports/preview', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, report_type: reportType, custom_start: customStart, custom_end: customEnd, draft_settings: settings }),
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'accepted') throw new Error(data.message || 'preview failed');
+        groupsReportState.job = { job_id: data.job_id, state: data.state };
+        groupsReportState.previewId = String(data.preview_id || '');
+        pollGroupsReportJob();
+    }).catch(error => {
+        groupsReportState.generating = false;
+        showGroupsStatus(error.message || 'groups_load_failed', true);
+        renderGroupsReportView();
+    });
+}
+
+function pollGroupsReportJob() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const jobId = String(groupsReportState.job?.job_id || '').trim();
+    if (!roomId || !jobId) return;
+    clearTimeout(groupsReportState.pollTimer);
+    const previewId = String(groupsReportState.previewId || '').trim();
+    const previewQuery = previewId ? `&preview_id=${encodeURIComponent(previewId)}` : '';
+    fetch(`/api/wechat-group/reports/status?stable_room_id=${encodeURIComponent(roomId)}&job_id=${encodeURIComponent(jobId)}${previewQuery}`)
+        .then(response => response.json()).then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'status failed');
+            if (data.connection) groupsReportState.connection = data.connection;
+            groupsReportState.job = data.job || groupsReportState.job;
+            if (data.job?.preview) groupsReportState.preview = data.job.preview;
+            if (data.job?.state === 'ready' && data.job.report) {
+                groupsReportState.report = data.job.report;
+                const previewState = String(groupsReportState.preview?.state || 'pending');
+                if (['ready', 'text_ready'].includes(previewState)) {
+                    groupsReportState.confirmationToken = data.job.send_confirmation_token || '';
+                    groupsReportState.generating = false;
+                    showGroupsStatus('groups_report_ready', false);
+                    renderGroupsReportView();
+                    return;
+                }
+                if (previewState === 'failed') {
+                    groupsReportState.confirmationToken = '';
+                    groupsReportState.generating = false;
+                    showGroupsStatus(groupsReportState.preview?.error_code || 'groups_report_preview_failed', true);
+                    renderGroupsReportView();
+                    return;
+                }
+                renderGroupsReportView();
+                groupsReportState.pollTimer = setTimeout(pollGroupsReportJob, 1000);
+                return;
+            }
+            if (data.job?.state === 'failed') {
+                groupsReportState.generating = false;
+                showGroupsStatus(data.job.error_code || 'groups_load_failed', true);
+                renderGroupsReportView();
+                return;
+            }
+            renderGroupsReportView();
+            groupsReportState.pollTimer = setTimeout(pollGroupsReportJob, 1000);
+        }).catch(error => {
+            groupsReportState.generating = false;
+            showGroupsStatus(error.message || 'groups_load_failed', true);
+            renderGroupsReportView();
+        });
+}
+
+function sendGroupsReport() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const reportId = String(groupsReportState.job?.report_id || groupsReportState.report?.report_id || '').trim();
+    const previewId = String(groupsReportState.previewId || '').trim();
+    if (!roomId || !reportId || !groupsReportState.confirmationToken || !previewId) {
+        showGroupsStatus('groups_report_preview_required', true);
+        return;
+    }
+    if (!window.confirm(t('groups_report_send_confirm'))) return;
+    fetch('/api/wechat-group/reports/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, report_id: reportId, preview_id: previewId, confirmation_token: groupsReportState.confirmationToken }),
+    }).then(response => response.json()).then(data => {
+        if (data.connection) groupsReportState.connection = data.connection;
+        if (data.status !== 'accepted') throw new Error(data.message || 'send failed');
+        groupsReportState.delivery = { delivery_id: data.delivery_id, state: 'pending' };
+        groupsReportState.confirmationToken = '';
+        pollGroupsReportDelivery();
+        renderGroupsReportView();
+    }).catch(error => {
+        showGroupsStatus(error.message || 'groups_load_failed', true);
+        renderGroupsReportView();
+    });
+}
+
+function pollGroupsReportDelivery() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const deliveryId = String(groupsReportState.delivery?.delivery_id || '').trim();
+    if (!roomId || !deliveryId) return;
+    fetch(`/api/wechat-group/reports/status?stable_room_id=${encodeURIComponent(roomId)}&delivery_id=${encodeURIComponent(deliveryId)}`)
+        .then(response => response.json()).then(data => {
+            if (data.status !== 'success') throw new Error(data.message || 'delivery status failed');
+            if (data.connection) groupsReportState.connection = data.connection;
+            groupsReportState.delivery = data.delivery || groupsReportState.delivery;
+            renderGroupsReportView();
+            if (['pending', 'rendering', 'sending', 'fallback_sending'].includes(String(groupsReportState.delivery?.state || ''))) {
+                groupsReportState.pollTimer = setTimeout(pollGroupsReportDelivery, 1000);
+            }
+        }).catch(error => showGroupsStatus(error.message || 'groups_load_failed', true));
+}
+
+function retryGroupsReportDelivery() {
+    const roomId = String(groupsReportState.selectedRoomId || '').trim();
+    const deliveryId = String(groupsReportState.delivery?.delivery_id || '').trim();
+    if (!roomId || !deliveryId) return;
+    fetch('/api/wechat-group/reports/retry', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stable_room_id: roomId, delivery_id: deliveryId }),
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'accepted') throw new Error(data.message || 'retry failed');
+        pollGroupsReportDelivery();
+    }).catch(error => showGroupsStatus(error.message || 'groups_load_failed', true));
+}
+
+function buildGroupsReportPanel(extra = {}) {
+    const rooms = getGroupsReportRooms(extra);
+    if (!rooms.length) {
+        return `<div class="h-full w-full">${buildGroupsPanelTitle('fa-chart-column', 'groups_report_title', 'groups_report_desc')}<p class="text-sm text-slate-500 dark:text-slate-400">${t('groups_report_no_rooms')}</p></div>`;
+    }
+    const settings = groupsReportState.draft || groupsReportState.settings || defaultGroupsReportSettings();
+    const output = settings.output || {};
+    const loading = groupsReportState.loading || !groupsReportState.settings;
+    if (loading) {
+        return `<div class="h-full w-full">${buildGroupsPanelTitle('fa-chart-column', 'groups_report_title', 'groups_report_desc')}<div class="min-h-40 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400" aria-live="polite"><i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>${t('groups_loading')}</div></div>`;
+    }
+    const roomOptions = rooms.map(room => `<option value="${escapeHtml(room.id)}" ${room.id === groupsReportState.selectedRoomId ? 'selected' : ''}>${escapeHtml(room.name)}</option>`).join('');
+    const archive = groupsReportState.archive || {};
+    const overview = groupsReportState.overview || {};
+    const syncStatus = settings.schedule_sync_status || 'not_saved';
+    const imageTemplates = (groupsReportState.templates || []).map(template => `<option value="${escapeHtml(template.skill_name || '')}" ${template.skill_name === output.skill_image_template_name ? 'selected' : ''} ${template.valid ? '' : 'disabled'}>${escapeHtml(template.display_name || template.skill_name || '')}${template.valid ? '' : ` (${t('groups_report_template_unavailable')})`}</option>`).join('');
+    const builtinTextTemplateId = String(output.builtin_text_template_id || 'standard_text');
+    const builtinTextTemplates = [
+        ['standard_text', 'groups_report_text_template_standard'],
+        ['compact_text', 'groups_report_text_template_compact'],
+    ];
+    const builtinTextTemplateOptions = builtinTextTemplates.map(([id, labelKey]) => (
+        `<option value="${id}" ${id === builtinTextTemplateId ? 'selected' : ''}>${escapeHtml(t(labelKey))}</option>`
+    )).join('');
+    const mode = output.mode || 'image_preferred';
+    const showText = mode !== 'image';
+    const showImage = mode !== 'text';
+    const scheduleRows = ['daily', 'weekly', 'monthly'].map(type => {
+        const schedule = settings.schedules?.[type] || { enabled: false, send_time: '09:00' };
+        return `<div class="grid grid-cols-1 sm:grid-cols-[minmax(130px,1fr)_auto_auto] gap-3 items-center border-t border-slate-200 dark:border-white/10 py-3 first:border-t-0 first:pt-0">
+            <div><h4 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(`groups_report_${type}`)}</h4><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${type === 'daily' ? t('groups_report_period_daily') : type === 'weekly' ? t('groups_report_period_weekly') : t('groups_report_period_monthly')}</p></div>
+            <label class="inline-flex min-h-11 items-center gap-2 text-xs text-slate-700 dark:text-slate-200"><input id="groups-report-${type}-enabled" type="checkbox" ${schedule.enabled ? 'checked' : ''} onchange="markGroupsReportDirty()">${t('groups_report_schedule_enabled')}</label>
+            <label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_send_time')}<input id="groups-report-${type}-time" type="time" value="${escapeHtml(schedule.send_time || '09:00')}" onchange="markGroupsReportDirty()" class="block mt-1 min-h-11 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label>
+        </div>`;
+    }).join('');
+    return `<div class="h-full w-full space-y-5 pb-8">
+        <div class="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+            ${buildGroupsPanelTitle('fa-chart-column', 'groups_report_title', 'groups_report_desc')}
+            <div class="flex flex-wrap items-center gap-2">
+                <span id="groups-report-unsaved" class="${isGroupsReportDirty() ? '' : 'hidden'} text-xs text-amber-700 dark:text-amber-300">${t('groups_report_unsaved')}</span>
+                <button type="button" onclick="saveGroupsReportSettings()" ${groupsReportState.saving ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas ${groupsReportState.saving ? 'fa-spinner fa-spin' : 'fa-floppy-disk'} mr-1.5" aria-hidden="true"></i>${t('groups_report_save')}</button>
+            </div>
+        </div>
+        <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+            <div class="grid grid-cols-1 lg:grid-cols-[minmax(220px,1fr)_auto] gap-4 items-end">
+                <label class="block"><span class="block text-sm font-medium text-slate-800 dark:text-slate-100 mb-1.5">${t('groups_report_room')}</span><select onchange="selectGroupsReportRoom(this.value)" class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">${roomOptions}</select></label>
+                <label class="inline-flex min-h-11 items-center gap-3 text-sm text-slate-800 dark:text-slate-100"><input id="groups-report-enabled" type="checkbox" ${settings.enabled ? 'checked' : ''} onchange="markGroupsReportDirty()" class="h-5 w-5 accent-primary-500"><span>${t('groups_report_enabled')}</span></label>
+            </div><p class="text-xs text-slate-500 dark:text-slate-400 mt-3">${t('groups_report_enabled_hint')}</p>
+        </section>
+        <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" aria-live="polite">
+            ${buildGroupsReportMetric(t('groups_report_archive'), `${Number(archive.message_count || 0)} 条`, archive.first_created_at ? `${formatGroupsEmotionTimestamp(Number(archive.first_created_at || 0))}` : '-')}
+            ${buildGroupsReportMetric(t('groups_report_latest'), overview.latest_report?.report_type || '-', overview.latest_report?.generated_at || '-')}
+            ${buildGroupsReportMetric(t('groups_report_delivery'), overview.latest_delivery?.state || '-', overview.latest_delivery?.sent_at || '-')}
+            ${buildGroupsReportMetric(t('groups_report_scheduler'), syncStatus, settings.schedule_sync_error || '-')}
+        </section>
+        <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3"><div><h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_schedules')}</h4><p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_report_timezone')}：${escapeHtml(settings.timezone || 'Asia/Shanghai')}</p></div><label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_timezone')}<input id="groups-report-timezone" value="${escapeHtml(settings.timezone || 'Asia/Shanghai')}" onchange="markGroupsReportDirty()" class="block mt-1 min-h-11 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label></div>${scheduleRows}
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-200 dark:border-white/10"><label class="inline-flex min-h-11 items-center gap-3 text-sm text-slate-700 dark:text-slate-200"><input id="groups-report-manual-admin" type="checkbox" ${settings.manual_admin_only !== false ? 'checked' : ''} onchange="markGroupsReportDirty()" class="h-5 w-5 accent-primary-500">${t('groups_report_manual_admin')}</label><label class="inline-flex min-h-11 items-center gap-3 text-sm text-slate-700 dark:text-slate-200"><input id="groups-report-daily-memory" type="checkbox" ${settings.save_daily_topics_to_group_memory ? 'checked' : ''} onchange="markGroupsReportDirty()" class="h-5 w-5 accent-primary-500">${t('groups_report_daily_memory')}</label></div>
+        </section>
+        <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 p-4">
+            <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_output')}</h4>
+            <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-2" role="radiogroup" aria-label="${escapeHtml(t('groups_report_output'))}">
+                ${buildGroupsReportMode('text', 'groups_report_mode_text', mode)}${buildGroupsReportMode('image', 'groups_report_mode_image', mode)}${buildGroupsReportMode('image_preferred', 'groups_report_mode_preferred', mode)}
+            </div>
+            ${showText ? `<div class="mt-5 pt-5 border-t border-slate-200 dark:border-white/10"><div class="flex flex-wrap items-center justify-between gap-3"><h5 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_report_text_template')}</h5><div class="flex gap-3 text-xs"><label><input type="radio" name="groups-report-text-source" value="builtin" ${output.text_template_source !== 'custom' ? 'checked' : ''} onchange="changeGroupsReportLayout()">${t('groups_report_builtin_template')}</label><label><input type="radio" name="groups-report-text-source" value="custom" ${output.text_template_source === 'custom' ? 'checked' : ''} onchange="changeGroupsReportLayout()">${t('groups_report_custom_template')}</label></div></div>
+                ${output.text_template_source !== 'custom' ? `<label class="mt-3 block text-xs text-slate-600 dark:text-slate-300">${t('groups_report_builtin_template')}<select id="groups-report-builtin-text-template" onchange="markGroupsReportDirty()" class="mt-1 block w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100">${builtinTextTemplateOptions}</select></label>` : ''}
+                ${output.text_template_source === 'custom' ? `<div class="mt-3"><div class="flex flex-wrap gap-2 mb-2"><select onchange="insertGroupsReportTemplateField(this.value); this.value=''" class="min-h-11 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-xs text-slate-700 dark:text-slate-200"><option value="">${t('groups_report_template_fields')}</option><option value="{room_name}">{room_name}</option><option value="{report_type}">{report_type}</option><option value="{period_start}">{period_start}</option><option value="{period_end}">{period_end}</option><option value="{timezone}">{timezone}</option><option value="{active_speaker_count}">{active_speaker_count}</option><option value="{total_messages}">{total_messages}</option><option value="{top_speaker_name}">{top_speaker_name}</option><option value="{top_speaker_message_count}">{top_speaker_message_count}</option><option value="{topic_count}">{topic_count}</option><option value="{ranking_block}">{ranking_block}</option><option value="{topics_block}">{topics_block}</option><option value="{highlights_block}">{highlights_block}</option><option value="{links_block}">{links_block}</option><option value="{archive_message_count}">{archive_message_count}</option><option value="{unresolved_message_count}">{unresolved_message_count}</option><option value="{generated_at}">{generated_at}</option></select><button type="button" onclick="restoreGroupsReportTemplate()" class="min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5">${t('groups_report_restore')}</button></div><textarea id="groups-report-custom-template" rows="9" oninput="markGroupsReportDirty(); validateGroupsReportTemplate(this.value)" class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 resize-y">${escapeHtml(output.custom_text_template || '')}</textarea><p id="groups-report-template-error" class="hidden mt-1 text-xs text-red-600 dark:text-red-400" role="alert"></p></div>` : ''}
+            </div>` : ''}
+            ${showImage ? `<div class="mt-5 pt-5 border-t border-slate-200 dark:border-white/10"><h5 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_report_image_template')}</h5><select id="groups-report-image-template" onchange="markGroupsReportDirty()" class="mt-3 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100">${imageTemplates}</select>${renderGroupsReportTemplatePreview(output.skill_image_template_name)}</div>` : ''}
+        </section>
+        ${buildGroupsReportManualPanel(settings)}
+        ${renderGroupsReportPreview()}
+    </div>`;
+}
+
+function buildGroupsReportMetric(label, value, detail) {
+    return `<article class="min-h-24 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4"><p class="text-xs text-slate-500 dark:text-slate-400">${escapeHtml(label)}</p><p class="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100 break-words">${escapeHtml(String(value || '-'))}</p><p class="mt-1 text-[11px] text-slate-400 dark:text-slate-500 break-words">${escapeHtml(String(detail || '-'))}</p></article>`;
+}
+
+function buildGroupsReportMode(value, key, current) {
+    const selected = value === current;
+    return `<label class="min-h-11 rounded-lg border ${selected ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20' : 'border-slate-200 dark:border-white/10'} px-3 py-3 cursor-pointer text-sm text-slate-700 dark:text-slate-200"><input type="radio" name="groups-report-output-mode" value="${value}" ${selected ? 'checked' : ''} onchange="changeGroupsReportLayout()" class="mr-2 accent-primary-500">${t(key)}</label>`;
+}
+
+function renderGroupsReportTemplatePreview(skillName) {
+    const template = (groupsReportState.templates || []).find(item => item.skill_name === skillName && item.valid);
+    if (!template?.preview_url) return '';
+    return `<img src="${escapeHtml(template.preview_url)}" alt="${escapeHtml(template.display_name || t('groups_report_image_template'))}" loading="lazy" class="mt-3 w-full max-w-xs aspect-[941/1600] object-cover object-top rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5">`;
+}
+
+function buildGroupsReportManualPanel(settings) {
+    const offline = groupsReportState.connection?.ready === false;
+    const generating = groupsReportState.generating;
+    const previewReady = !!groupsReportState.confirmationToken && !!groupsReportState.previewId;
+    const sendHint = !previewReady ? t('groups_report_preview_required') : offline ? t('groups_report_channel_offline') : '';
+    return `<section class="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 p-4"><div class="flex flex-col lg:flex-row lg:items-end gap-3"><label class="block flex-1"><span class="block text-sm font-medium text-slate-800 dark:text-slate-100 mb-1.5">${t('groups_report_period')}</span><select id="groups-report-period" onchange="changeGroupsReportPeriod()" class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"><option value="daily">${t('groups_report_period_daily')}</option><option value="weekly">${t('groups_report_period_weekly')}</option><option value="monthly">${t('groups_report_period_monthly')}</option><option value="custom">${t('groups_report_period_custom')}</option></select></label><button type="button" onclick="startGroupsReportPreview()" ${generating ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg border border-primary-200 dark:border-primary-900/40 text-primary-700 dark:text-primary-300 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-sm font-medium disabled:opacity-50"><i class="fas ${generating ? 'fa-spinner fa-spin' : 'fa-eye'} mr-1.5" aria-hidden="true"></i>${t('groups_report_preview')}</button><button type="button" onclick="sendGroupsReport()" ${previewReady ? '' : 'disabled'} aria-describedby="groups-report-send-hint" class="min-h-11 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"><i class="fas fa-paper-plane mr-1.5" aria-hidden="true"></i>${t('groups_report_send')}</button></div><div id="groups-report-custom-range" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_custom_start')}<input id="groups-report-custom-start" type="datetime-local" class="block mt-1 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label><label class="text-xs text-slate-600 dark:text-slate-300">${t('groups_report_custom_end')}<input id="groups-report-custom-end" type="datetime-local" class="block mt-1 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100"></label></div>${sendHint ? `<p id="groups-report-send-hint" class="mt-3 text-xs ${offline ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}">${escapeHtml(sendHint)}</p>` : ''}${renderGroupsReportDeliveryStatus()}</section>`;
+}
+
+function changeGroupsReportPeriod() {
+    const custom = document.getElementById('groups-report-period')?.value === 'custom';
+    document.getElementById('groups-report-custom-range')?.classList.toggle('hidden', !custom);
+}
+
+function renderGroupsReportDeliveryStatus() {
+    const delivery = groupsReportState.delivery;
+    if (!delivery) return '';
+    const state = String(delivery.state || 'pending');
+    const notice = state === 'delivery_unknown' ? t('groups_report_status_unknown') : state === 'partial_failed' ? t('groups_report_status_partial') : '';
+    const retry = ['failed', 'partial_failed'].includes(state) ? `<button type="button" onclick="retryGroupsReportDelivery()" class="mt-2 min-h-11 px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-900/40 text-xs text-amber-700 dark:text-amber-300">${t('groups_report_retry')}</button>` : '';
+    return `<div class="mt-3 text-xs ${state === 'sent' || state === 'fallback_sent' ? 'text-emerald-700 dark:text-emerald-300' : state.includes('failed') || state === 'delivery_unknown' ? 'text-amber-700 dark:text-amber-300' : 'text-slate-500 dark:text-slate-400'}" aria-live="polite">${escapeHtml(state)}${notice ? `：${escapeHtml(notice)}` : ''}${retry}</div>`;
+}
+
+function renderGroupsReportPreview() {
+    const report = groupsReportState.report;
+    if (!report) return '';
+    const preview = groupsReportState.preview;
+    const ranking = (report.ranking || []).map(item => `<li>${escapeHtml(item.display_name || '')}：${Number(item.message_count || 0)}</li>`).join('') || '<li>-</li>';
+    const topics = (report.topics || []).map(item => `<li><strong>${escapeHtml(item.title || '')}</strong> ${escapeHtml(item.summary || '')}</li>`).join('') || `<li>${t('groups_report_period_daily')}</li>`;
+    const highlights = (report.highlights || []).map(item => `<li>${escapeHtml(item.speaker_display_name || '')}：${escapeHtml(item.quote || '')}</li>`).join('') || '<li>-</li>';
+    const links = (report.links || []).map(item => `<li class="break-all">${escapeHtml(item.url || '')}<span class="text-slate-500 dark:text-slate-400"> ${escapeHtml(item.summary || '')}</span></li>`).join('') || '<li>-</li>';
+    const imageParts = (preview?.parts || []).map((part, index) => {
+        const width = Math.max(Number(part.width || 941), 1);
+        const height = Math.max(Number(part.height || 0), 0);
+        const size = height ? ` width="${width}" height="${height}"` : ` width="${width}"`;
+        return `<img src="${escapeHtml(part.asset_url || '')}" alt="${escapeHtml(`${t('groups_report_rendered_preview')} ${index + 1}`)}"${size} loading="lazy" class="w-full max-w-[941px] h-auto rounded-lg border border-slate-200 dark:border-white/10 bg-slate-100 dark:bg-white/5">`;
+    }).join('');
+    const textParts = (preview?.text_parts || []).map(part => `<pre class="whitespace-pre-wrap break-words rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-black/10 p-3 text-xs leading-6 text-slate-700 dark:text-slate-200 font-sans">${escapeHtml(part)}</pre>`).join('');
+    const rendered = !preview ? `<p class="mt-3 text-xs text-slate-500 dark:text-slate-400">${t('groups_report_preview_rendering')}</p>`
+        : preview.state === 'ready' ? `<div class="mt-3 space-y-3">${imageParts}</div>`
+        : preview.state === 'text_ready' ? `<div class="mt-3 space-y-3">${preview.fallback_reason ? `<p class="text-xs text-amber-700 dark:text-amber-300">${t('groups_report_preview_fallback')}</p>` : ''}${textParts}</div>`
+        : preview.state === 'failed' ? `<p class="mt-3 text-xs text-red-700 dark:text-red-300">${t('groups_report_preview_failed')}</p>`
+        : `<p class="mt-3 text-xs text-slate-500 dark:text-slate-400">${t('groups_report_preview_rendering')}</p>`;
+    return `<section class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4" aria-live="polite"><h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_text_preview')}</h4><p class="mt-1 text-xs text-slate-500 dark:text-slate-400">${escapeHtml(report.room_name || '')} · ${escapeHtml(report.period_start || '')} - ${escapeHtml(report.period_end || '')}</p><div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 text-sm text-slate-700 dark:text-slate-200"><div><h5 class="font-medium">${t('groups_report_archive')}</h5><p>${Number(report.active_speaker_count || 0)} / ${Number(report.total_messages || 0)}</p><h5 class="mt-3 font-medium">${t('groups_report_ranking')}</h5><ol class="list-decimal pl-5">${ranking}</ol></div><div><h5 class="font-medium">${t('groups_report_topics')}</h5><ol class="list-decimal pl-5 space-y-2">${topics}</ol></div><div><h5 class="font-medium">${t('groups_report_highlights')}</h5><ol class="list-decimal pl-5 space-y-2">${highlights}</ol></div><div><h5 class="font-medium">${t('groups_report_links')}</h5><ol class="list-decimal pl-5 space-y-2">${links}</ol></div></div><div class="mt-5 pt-5 border-t border-slate-200 dark:border-white/10"><h5 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_report_rendered_preview')}</h5>${rendered}</div></section>`;
 }
 
 function ensureGroupsFocusLoaded(extra) {
@@ -13009,10 +13953,11 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
             <div class="flex items-center justify-between gap-3">
                 <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('wechat_group_free_reply_llm_title')}</h4>
                 <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
-                    <input id="free-reply-llm-enabled" type="checkbox" class="accent-primary-500" ${free.llm_judge_enabled !== false ? 'checked' : ''}>
+                    <input id="free-reply-llm-enabled" type="checkbox" class="accent-primary-500" aria-describedby="free-reply-llm-hint" ${free.llm_judge_enabled !== false ? 'checked' : ''}>
                     ${t('wechat_group_free_reply_llm_enabled')}
                 </label>
             </div>
+            <p id="free-reply-llm-hint" class="text-xs leading-relaxed text-slate-500 dark:text-slate-400">${t('wechat_group_free_reply_llm_hint')}</p>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 ${buildFreeReplyNumberField('free-reply-llm-timeout', 'wechat_group_free_reply_llm_timeout', free.llm_judge_timeout_seconds ?? 8, 1, 30, 1)}
                 ${buildFreeReplyNumberField('free-reply-llm-confidence', 'wechat_group_free_reply_llm_confidence', free.llm_judge_min_confidence ?? 0.6, 0, 1, 0.05)}

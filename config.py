@@ -80,6 +80,15 @@ available_setting = {
     "wechat_group_names": [],
     "wechat_group_room_ids": [],
     "wechat_group_stable_room_ids": [],
+    # Cross-room defaults for persisted group chat report settings. Per-room
+    # enablement, schedules and templates are stored in the report SQLite DB.
+    "wechat_group_report_default_enabled": False,
+    "wechat_group_report_timezone": "Asia/Shanghai",
+    "wechat_group_report_default_output_mode": "image_preferred",
+    "wechat_group_report_default_text_template_id": "standard_text",
+    "wechat_group_report_default_image_template_source": "skill",
+    "wechat_group_report_default_skill_image_template_name": "wechat-group-report-cyber-intelligence",
+    "wechat_group_report_asset_retention_days": 90,
     # GitHub push webhook notifications delivered through the WeChat group channel.
     # LIGHTAGENT_GITHUB_WEBHOOK_SECRET overrides the local secret when present.
     "github_commit_notify_enabled": False,

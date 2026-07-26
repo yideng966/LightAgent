@@ -13,6 +13,7 @@ import time
 from typing import Dict, Any
 
 from agent.tools.base_tool import BaseTool, ToolResult
+from agent.skills.runtime import build_skill_runtime_env
 from agent.tools.utils.truncate import truncate_tail, format_size, DEFAULT_MAX_LINES, DEFAULT_MAX_BYTES
 from common.log import logger
 from common.utils import expand_path
@@ -91,7 +92,8 @@ SAFETY:
 
         try:
             # Prepare environment with .env file variables
-            env = os.environ.copy()
+            skill_workspace = self.config.get("skill_workspace") or self.cwd
+            env = build_skill_runtime_env(skill_workspace, os.environ.copy())
             
             # Load environment variables from ~/.lightagent/.env if it exists
             env_file = expand_path("~/.lightagent/.env")

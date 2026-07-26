@@ -1,0 +1,20 @@
+【{room_name} · {report_type}】
+统计周期：{period_start} 至 {period_end}（{timezone}）
+本期发言：{active_speaker_count} 人 / {total_messages} 条
+榜一成员：{top_speaker_name}（{top_speaker_message_count} 条）
+重点话题：{topic_count} 个
+
+发言排行
+{ranking_block}
+
+重点话题
+{topics_block}
+
+精彩发言
+{highlights_block}
+
+链接收集
+{links_block}
+
+归档覆盖：{archive_message_count} 条；无法稳定归属：{unresolved_message_count} 条
+生成时间：{generated_at}

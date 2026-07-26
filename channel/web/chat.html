@@ -732,6 +732,7 @@
                                    class="inline-flex items-center gap-2 whitespace-nowrap px-3.5 py-2 rounded-lg text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 disabled:opacity-60 transition-colors">
                                     <i class="fas fa-cloud-arrow-down text-xs"></i>
                                     <span data-i18n="skills_hub_btn">获取在线技能</span>
+                                    <span id="skill-update-count-badge" class="hidden min-w-5 rounded-full bg-white px-1.5 py-0.5 text-center text-[10px] font-bold text-primary-600"></span>
                                 </button>
                             </div>
 
@@ -1152,15 +1153,28 @@
                 </div>
                 <div class="min-w-0 flex-1">
                     <h3 id="skill-hub-modal-title" class="text-base font-semibold text-slate-800 dark:text-slate-100" data-i18n="skill_hub_title">在线技能库</h3>
-                    <p class="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400" data-i18n="skill_hub_desc">从 LightAgent Skill Hub 获取经过签名校验的技能，点击安装后即可使用。</p>
+                    <p class="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400" data-i18n="skill_hub_desc">同时浏览 LightAgent Skill Hub 和原技能广场，点击安装后即可使用。</p>
                 </div>
-                <a href="https://xiaoguiwucan.github.io/LightAgent-SkillHub/" target="_blank" rel="noopener" title="在新窗口打开 Skill Hub"
+                <a id="skill-hub-source-link" href="https://xiaoguiwucan.github.io/LightAgent-SkillHub/" target="_blank" rel="noopener noreferrer" title="在新窗口打开 LightAgent Skill Hub"
                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
                     <i class="fas fa-arrow-up-right-from-square text-xs"></i>
                 </a>
                 <button type="button" onclick="closeSkillHubModal()" title="关闭在线技能库"
                    class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-white/10 dark:text-slate-400 dark:hover:bg-white/5">
                     <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4 pt-2 dark:border-white/10 dark:bg-[#151515] sm:px-6" role="tablist" aria-label="技能库来源">
+                <button type="button" role="tab" data-skill-hub-source="lightagent-skillhub" onclick="switchSkillHubSource('lightagent-skillhub')"
+                    class="skill-hub-source-tab flex h-10 shrink-0 items-center gap-2 border-b-2 border-primary-500 px-3 text-sm font-medium text-primary-600 dark:text-primary-400">
+                    <i class="fas fa-shield-halved text-xs"></i><span>LightAgent Skill Hub</span>
+                    <span id="skill-hub-source-count-official" class="rounded-full bg-primary-50 px-1.5 py-0.5 text-[10px] text-primary-600 dark:bg-primary-900/20 dark:text-primary-400">0</span>
+                </button>
+                <button type="button" role="tab" data-skill-hub-source="cowagent-skillhub" onclick="switchSkillHubSource('cowagent-skillhub')"
+                    class="skill-hub-source-tab flex h-10 shrink-0 items-center gap-2 border-b-2 border-transparent px-3 text-sm font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200">
+                    <i class="fas fa-store text-xs"></i><span>原技能广场</span>
+                    <span id="skill-hub-source-count-cowagent" class="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500 dark:bg-white/10 dark:text-slate-400">0</span>
                 </button>
             </div>
 
@@ -1178,11 +1192,36 @@
                         <option value="" data-i18n="skill_hub_all_categories">全部分类</option>
                     </select>
                 </label>
-                <button type="button" onclick="loadSkillHub()" title="刷新在线技能库"
+                <button type="button" onclick="loadSkillHub({refresh:true})" title="刷新在线技能库"
                     class="flex h-10 items-center justify-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:bg-[#1A1A1A] dark:text-slate-300 dark:hover:bg-white/5">
                     <i class="fas fa-rotate text-xs"></i><span class="sm:hidden lg:inline" data-i18n="skill_hub_refresh">刷新</span>
                 </button>
             </div>
+
+            <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 px-4 py-3 dark:border-white/10 sm:px-6">
+                <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                    <input id="skill-hub-select-page" type="checkbox" onchange="selectSkillHubCurrentPage(this.checked)" class="accent-primary-500">
+                    <span data-i18n="skill_hub_select_page">选择当前页</span>
+                </label>
+                <button type="button" onclick="clearSkillHubSelection()" class="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600 hover:bg-slate-50 dark:border-white/10 dark:text-slate-300 dark:hover:bg-white/5">
+                    <span data-i18n="skill_hub_clear_selection">清空选择</span>
+                </button>
+                <span id="skill-hub-selected-count" class="text-xs text-slate-400">已选 0 项</span>
+                <span class="min-w-0 flex-1"></span>
+                <div id="skill-hub-batch-actions" class="flex flex-wrap items-center gap-2">
+                    <button type="button" data-batch-operation="install" onclick="runSkillHubBatch('install')" disabled class="rounded-md bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-40">
+                        <i class="fas fa-download mr-1"></i><span data-i18n="skill_hub_batch_install">批量安装</span>
+                    </button>
+                    <button type="button" data-batch-operation="update" onclick="runSkillHubBatch('update')" disabled class="rounded-md border border-primary-200 px-3 py-1.5 text-xs font-medium text-primary-600 hover:bg-primary-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-primary-900/50 dark:hover:bg-primary-900/10">
+                        <i class="fas fa-rotate mr-1"></i><span data-i18n="skill_hub_batch_update">批量更新</span>
+                    </button>
+                    <button type="button" data-batch-operation="uninstall" onclick="runSkillHubBatch('uninstall')" disabled class="rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-red-900/50 dark:hover:bg-red-900/10">
+                        <i class="fas fa-trash-can mr-1"></i><span data-i18n="skill_hub_batch_uninstall">批量卸载</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="skill-hub-batch-result" class="hidden border-b border-slate-200 px-4 py-3 text-xs dark:border-white/10 sm:px-6"></div>
 
             <div id="skill-hub-scroll" class="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-6">
                 <div id="skill-hub-loading" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="正在加载在线技能">

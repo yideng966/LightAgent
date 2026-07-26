@@ -40,7 +40,7 @@ LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目，包含�
 - `plugins/`：聊天命令插件与插件管理器。不要把 Agent 工具和插件混为一类。
 - `voice/`、`translate/`：ASR/TTS 与翻译 Provider。
 - `desktop/`：Electron 主进程、React 渲染端和桌面打包配置。桌面后端默认由 `desktop/src/main/python-manager.ts` 管理。
-- `docs/`：英文、中文、日文文档。涉及用户可见能力变更时，优先补充对应文档。
+- `docs/`：英文、中文。涉及用户可见能力变更时，优先补充对应文档。
 - `tests/`：`unittest` 风格回归测试，很多测试通过 stub/mocking 避免真实网络和外部服务。
 
 ## 本地运行与验证
@@ -268,6 +268,8 @@ docker push yideng966/lightagent:latest
 - 修改 Agent 工具时，同步检查工具注册、工具 schema、异常返回格式、文档和安全测试。
 - Skill Hub 安装必须以签名索引和 SHA-256 为信任边界；后备源只能安装与已验证索引中来源身份和哈希一致的产物，不得用后备源自身返回的哈希建立信任。
 - Hub 技能不得覆盖内置技能或非 Hub 同名技能；更新、回滚和卸载必须保持配置与用户数据分离，声明的普通依赖与带 SHA-256 的下载依赖在安装时自动处理。
+- 原技能广场未提供结构化依赖时，只能通过代码内人工审核的兼容清单补充依赖；不得解析或执行 `SKILL.md` 中的任意安装命令，依赖安装失败时不得写锁文件或替换现有技能。
+- 技能隔离依赖只能根据 `skills.lock.json` 中已安装的安全技能名称注入子进程环境；Python/npm 依赖保持按技能目录隔离，npm 安装不得默认执行第三方生命周期脚本。
 - 官方 Skill Hub 的仓库与 Pages 地址以 `xiaoguiwucan/LightAgent-SkillHub` 为准；修改 Registry 默认地址时必须同步检查配置模板、CLI、Web 入口、文档和签名索引构建配置。
 - Web 技能页不得直接展开完整在线技能目录；在线技能统一通过独立二级弹窗按搜索、分类和分页浏览，主页面只展示本地技能与内置工具，避免 Registry 增长后撑长页面。
 - 修改桌面后端启动逻辑时，特别注意端口、数据目录、打包后路径和 Windows 行为。
@@ -285,7 +287,7 @@ docker push yideng966/lightagent:latest
 ## 编码与风格
 
 - Python 代码保持现有风格，优先小函数、明确异常处理和 `common.log.logger` 日志。
-- 仓库贡献规范要求 issue、PR 和代码注释尽量使用英文；新增代码注释也应优先英文。Git 提交说明（commit message）必须使用简体中文，清晰概括本次变更。
+- 仓库贡献规范要求 issue、PR 和代码注释尽量使用中文；新增代码注释也应优先中文。Git 提交说明（commit message）必须使用简体中文，清晰概括本次变更。
 - 用户对话可以使用中文，但写入项目代码和面向国际社区的文档时遵循仓库既有语言策略。
 - 避免引入新的全局依赖；确需新增依赖时，同步更新 `requirements.txt`、`requirements-optional.txt` 或 `desktop/package.json`，并说明原因。
 - README 或文档中如出现编码异常，先确认文件实际编码，不要盲目整体重写。
@@ -326,6 +328,13 @@ docker push yideng966/lightagent:latest
 - 通道层管理员硬门禁、humanized 降级上下文、生图额度和 scheduler 会话都必须使用 stable scope；runtime 字段只用于微信真实发送和 legacy 快照。
 - 群画像自主进化调用 LLM 时必须先识别模型错误 envelope（如 `{"error": true, "status_code": 503}`），HTTP 408/429/5xx 等临时供应商故障不得继续当作画像 JSON 正文解析；失败记录应保留可读 HTTP 状态且不推进归档游标。
 - GitHub 提交通知属于 Webhook 到微信群的固定消息投递适配：配置 UI 放在「群聊 -> 基础设置」，目标群只能使用已选择的 `wechat_group_stable_room_ids`；Webhook 必须先做 HMAC-SHA256 验签和 delivery 去重，配置 API 不得回显真实 Secret，`LIGHTAGENT_GITHUB_WEBHOOK_SECRET` 存在时优先于本地配置。
+- 群聊报告的统计、报告 revision、预览、投递、定时任务和日报记忆必须按 `stable_room_id` 隔离；legacy runtime 群只在身份服务明确确认的历史别名范围内兼容，禁止无条件按 `stable_room_id OR room_id` 扩大范围。
+- 群聊报告仅复用现有归档、`TextModelRouter`、scheduler 和 Wechaty sidecar；群内手动生成必须经过通道、Tool 和 Prompt 三层管理员门禁，Web 预览和发送必须经过 Web 登录鉴权。
+- 报告图片默认输出到 `agent_workspace/images/wechat_group_reports`，Docker 对应 `/home/agent/lightagent/images`；`image_preferred` 仅在图片尚未被确认发送且失败可判定时回退文字，`delivery_unknown` 或已有图片分片成功时不得补发全文。
+- 报告链接抓取必须始终使用严格 SSRF 校验并逐跳校验重定向；自定义文字模板只允许白名单字段，不得执行表达式、访问本机文件或扩大 Web 文件服务根目录。
+- Web 手动发送必须绑定当前群、当前报告且已完成的 `preview_id`；确认后的文字分段或 PNG 是不可变投递快照，已确认图片发送失败应保留失败状态并允许重试，不得发送用户未预览的文字回退。
+- 默认 `wechat-group-report-cyber-intelligence` 是仓库随附的受控模板，工作区同名旧 Skill 不得覆盖其版本和视觉资源；其他自定义图片模板仍按普通 Skill 发现规则处理。
+- 报告任务和投递轮询触发 Web 控制台重绘时必须保留当前报告滚动位置；连接状态只用于实时提示和服务端投递门禁，不能以过期离线快照禁用已完成预览后的发送动作。
 
 1. 优先查看 `channel/wechat_group/wechat_group_channel.py`、`wechat_group_client.py`、`wechat_group_message.py`、`protocol.py` 和 `channel/wechat_group/sidecar/wechaty-sidecar.mjs`。
 2. 扫码入口必须在通道管理中完成：`通道管理 -> 接入通道 -> 个人微信群`，由界面展示二维码；不要把“看日志扫码”作为主要交互路径。

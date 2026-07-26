@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -49,6 +50,21 @@ def test_fast_command_returns_output_without_progress(tmp_path):
     assert result.status == "success"
     assert result.result["output"] == "fast"
     assert progress == []
+
+
+def test_execute_injects_skill_runtime_environment(tmp_path):
+    tool = Bash({"cwd": str(tmp_path), "skill_workspace": str(tmp_path)})
+    process = SimpleNamespace(returncode=0, stdout="ok", stderr="")
+    with patch(
+        "agent.tools.bash.bash.build_skill_runtime_env",
+        return_value={"PATH": "/skill/bin"},
+    ) as build_env, patch.object(tool, "_run_streaming", return_value=process) as run:
+        result = tool.execute({"command": "example"})
+
+    assert result.status == "success"
+    build_env.assert_called_once()
+    assert build_env.call_args.args[0] == str(tmp_path)
+    assert run.call_args.args[2]["PATH"] == "/skill/bin"
 
 
 @posix_only

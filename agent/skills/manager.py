@@ -328,7 +328,7 @@ class SkillManager:
             })
             skill = entry.skill
             config = self.skills_config.get(skill.name, {})
-            if config.get("source") == "lightagent-skillhub" and os.path.isdir(skill.base_dir):
+            if config.get("source") in ("lightagent-skillhub", "cowagent-skillhub") and os.path.isdir(skill.base_dir):
                 if cleanup_dir is None:
                     os.makedirs(snapshot_parent, exist_ok=True)
                     cleanup_dir = tempfile.mkdtemp(prefix="run-", dir=snapshot_parent)

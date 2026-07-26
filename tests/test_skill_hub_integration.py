@@ -9,7 +9,7 @@ from agent.protocol.agent_stream import AgentStreamExecutor
 from agent.skills.manager import SkillManager
 from agent.skills.types import Skill, SkillEntry, SkillSnapshot
 from cli.commands.skill import InstallResult, SkillInstallError, _install_hub
-from channel.web.web_channel import _paginate_skill_hub_catalog
+from channel.web.web_channel import _filter_skill_hub_source, _paginate_skill_hub_catalog
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,17 +24,52 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         self.assertNotIn("approval_required", backend)
         self.assertIn("function openSkillHubModal()", frontend)
         self.assertIn("page_size: String(skillHubState.pageSize)", frontend)
+        self.assertIn("loadSkillHub({refresh: true})", frontend)
+        self.assertIn("function runSkillHubBatch(operation)", frontend)
+        self.assertIn("selected: new Map()", frontend)
+        self.assertIn("永久删除，且无法恢复", frontend)
         self.assertIn("id=\"skill-hub-modal\"", html)
         self.assertIn("id=\"skill-hub-detail-modal\"", html)
         self.assertIn("id=\"skill-hub-search\"", html)
         self.assertNotIn("id=\"skill-hub-risk\"", html)
         self.assertNotIn("approve-risk", frontend)
+        self.assertIn("id=\"skill-hub-select-page\"", html)
+        self.assertIn("id=\"skill-hub-batch-result\"", html)
+        self.assertIn('data-skill-hub-source="lightagent-skillhub"', html)
+        self.assertIn('data-skill-hub-source="cowagent-skillhub"', html)
+        self.assertIn("source: 'lightagent-skillhub'", frontend)
+        self.assertIn("source: skillHubState.source", frontend)
+        self.assertIn("function switchSkillHubSource(source)", frontend)
+        self.assertIn("if (search) search.value = '';", frontend)
+        self.assertIn("formatSkillCategory(skill.category)", frontend)
+        self.assertIn("访问原技能广场", frontend)
+        dockerfile = (ROOT / "docker/Dockerfile.latest").read_text(encoding="utf-8")
+        self.assertIn("/usr/local/bin/npm /usr/local/bin/npm", dockerfile)
+        self.assertIn("/usr/local/lib/node_modules/npm", dockerfile)
         self.assertNotIn("loadSkillHub();\n}", frontend.split("function loadSkillsView()", 1)[1].split("let skillHubSearchTimer", 1)[0])
+
+    def test_web_api_exposes_versions_batch_and_purge_uninstall(self):
+        backend = (ROOT / "channel/web/web_channel.py").read_text(encoding="utf-8")
+        for field in (
+            '"installed_version"', '"available_version"', '"update_available"',
+            '"update_status"', '"last_checked_at"',
+        ):
+            self.assertIn(field, backend)
+        self.assertIn('if action == "batch":', backend)
+        self.assertIn('purge_data=operation == "uninstall"', backend)
+        self.assertIn('manager.uninstall(name, purge_data=True)', backend)
+        self.assertIn('get_builtin_skills_dir()', backend)
+        self.assertIn('"builtin"\n                            if is_builtin', backend)
 
     def test_web_catalog_supports_filtering_and_pagination(self):
         backend = (ROOT / "channel/web/web_channel.py").read_text(encoding="utf-8")
-        self.assertIn('category="", page="1", page_size="12"', backend)
+        frontend = (ROOT / "channel/web/static/js/console.js").read_text(encoding="utf-8")
+        self.assertIn('source="lightagent-skillhub", action="list", category="", page="1", page_size="12"', backend)
         self.assertIn("_paginate_skill_hub_catalog", backend)
+        self.assertIn("_filter_skill_hub_source", backend)
+        self.assertIn('"catalog_sources": source_counts', backend)
+        self.assertIn("skill.registry_source || 'lightagent-skillhub'", frontend)
+        self.assertIn("原技能广场", frontend)
 
     def test_web_catalog_paginates_and_filters_by_category(self):
         skills = [
@@ -61,10 +96,33 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         )
         self.assertEqual(12, filtered_pagination["total"])
 
+    def test_web_catalog_defaults_to_official_source_and_separates_marketplace(self):
+        skills = [
+            {"name": "official", "registry_source": "lightagent-skillhub"},
+            {"name": "legacy", "registry_source": "cowagent-skillhub"},
+            {"name": "implicit-official"},
+        ]
+        self.assertEqual(
+            ["official", "implicit-official"],
+            [item["name"] for item in _filter_skill_hub_source(skills)],
+        )
+        self.assertEqual(
+            ["legacy"],
+            [item["name"] for item in _filter_skill_hub_source(skills, "cowagent-skillhub")],
+        )
+        with self.assertRaises(ValueError):
+            _filter_skill_hub_source(skills, "unknown")
+
     def test_chat_mutations_require_admin(self):
         plugin = (ROOT / "plugins/lightagent_cli/lightagent_cli.py").read_text(encoding="utf-8")
         self.assertIn("def _require_skill_admin", plugin)
         self.assertIn("denied = self._require_skill_admin(e_context)", plugin)
+
+    def test_cli_search_and_install_use_the_merged_catalog(self):
+        cli = (ROOT / "cli/commands/skill.py").read_text(encoding="utf-8")
+        self.assertIn("all_skills = SkillLifecycleManager().search()", cli)
+        self.assertIn('SkillLifecycleManager().search(query=query)', cli)
+        self.assertIn('source=LegacySkillRegistryClient.SOURCE', cli)
 
     def test_active_executor_uses_the_skill_snapshot_content(self):
         old_skill = Skill(

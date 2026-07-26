@@ -214,6 +214,34 @@ test('sendText mentions the original sender by contact id after room membership 
   }])
 })
 
+test('sendText echoes request id only for confirmed send callers', async () => {
+  const room = {
+    id: 'room@@confirmed',
+    async say() {},
+  }
+  const emitted = []
+
+  await sendText(
+    { room_id: room.id, text: 'report part', request_id: 'request-123' },
+    {
+      emit: (type, payload) => emitted.push({ type, payload }),
+      findRoom: async roomId => roomId === room.id ? room : undefined,
+      findContact: async () => undefined,
+    },
+  )
+
+  assert.deepEqual(emitted, [{
+    type: 'send_result',
+    payload: {
+      ok: true,
+      command: 'send_text',
+      room_id: room.id,
+      command_type: 'send_text',
+      request_id: 'request-123',
+    },
+  }])
+})
+
 test('sendText resolves mention target from current room members when contact lookup misses', async () => {
   const alice = { id: 'wxid_alice', name: () => 'Alice' }
   const room = {

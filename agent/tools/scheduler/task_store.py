@@ -29,7 +29,7 @@ class TaskStore:
             store_path = os.path.join(home, "lightagent", "scheduler", "tasks.json")
         
         self.store_path = store_path
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self._ensure_store_dir()
     
     def _ensure_store_dir(self):
@@ -45,16 +45,7 @@ class TaskStore:
             Dictionary of task_id -> task_data
         """
         with self.lock:
-            if not os.path.exists(self.store_path):
-                return {}
-            
-            try:
-                with open(self.store_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    return data.get("tasks", {})
-            except Exception as e:
-                print(f"Error loading tasks: {e}")
-                return {}
+            return self._load_tasks_unlocked()
     
     def save_tasks(self, tasks: Dict[str, dict]):
         """
@@ -64,29 +55,39 @@ class TaskStore:
             tasks: Dictionary of task_id -> task_data
         """
         with self.lock:
-            try:
-                # Create backup
-                if os.path.exists(self.store_path):
-                    backup_path = f"{self.store_path}.bak"
-                    try:
-                        with open(self.store_path, 'r') as src:
-                            with open(backup_path, 'w') as dst:
-                                dst.write(src.read())
-                    except Exception:
-                        pass
-                
-                # Save tasks
-                data = {
-                    "version": 1,
-                    "updated_at": datetime.now().isoformat(),
-                    "tasks": tasks
-                }
-                
-                with open(self.store_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                print(f"Error saving tasks: {e}")
-                raise
+            self._save_tasks_unlocked(tasks)
+
+    def _load_tasks_unlocked(self) -> Dict[str, dict]:
+        if not os.path.exists(self.store_path):
+            return {}
+        try:
+            with open(self.store_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get("tasks", {})
+        except Exception as e:
+            print(f"Error loading tasks: {e}")
+            return {}
+
+    def _save_tasks_unlocked(self, tasks: Dict[str, dict]):
+        try:
+            if os.path.exists(self.store_path):
+                backup_path = f"{self.store_path}.bak"
+                try:
+                    with open(self.store_path, 'r', encoding='utf-8') as src:
+                        with open(backup_path, 'w', encoding='utf-8') as dst:
+                            dst.write(src.read())
+                except Exception:
+                    pass
+            data = {
+                "version": 1,
+                "updated_at": datetime.now().isoformat(),
+                "tasks": tasks
+            }
+            with open(self.store_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Error saving tasks: {e}")
+            raise
     
     def add_task(self, task: dict) -> bool:
         """
@@ -98,17 +99,17 @@ class TaskStore:
         Returns:
             True if successful
         """
-        tasks = self.load_tasks()
         task_id = task.get("id")
         
         if not task_id:
             raise ValueError("Task must have an 'id' field")
         
-        if task_id in tasks:
-            raise ValueError(f"Task with id '{task_id}' already exists")
-        
-        tasks[task_id] = task
-        self.save_tasks(tasks)
+        with self.lock:
+            tasks = self._load_tasks_unlocked()
+            if task_id in tasks:
+                raise ValueError(f"Task with id '{task_id}' already exists")
+            tasks[task_id] = task
+            self._save_tasks_unlocked(tasks)
         return True
     
     def update_task(self, task_id: str, updates: dict) -> bool:
@@ -122,16 +123,13 @@ class TaskStore:
         Returns:
             True if successful
         """
-        tasks = self.load_tasks()
-        
-        if task_id not in tasks:
-            raise ValueError(f"Task '{task_id}' not found")
-        
-        # Update fields
-        tasks[task_id].update(updates)
-        tasks[task_id]["updated_at"] = datetime.now().isoformat()
-        
-        self.save_tasks(tasks)
+        with self.lock:
+            tasks = self._load_tasks_unlocked()
+            if task_id not in tasks:
+                raise ValueError(f"Task '{task_id}' not found")
+            tasks[task_id].update(updates)
+            tasks[task_id]["updated_at"] = datetime.now().isoformat()
+            self._save_tasks_unlocked(tasks)
         return True
     
     def delete_task(self, task_id: str) -> bool:
@@ -144,13 +142,27 @@ class TaskStore:
         Returns:
             True if successful
         """
-        tasks = self.load_tasks()
-        
-        if task_id not in tasks:
-            raise ValueError(f"Task '{task_id}' not found")
-        
-        del tasks[task_id]
-        self.save_tasks(tasks)
+        with self.lock:
+            tasks = self._load_tasks_unlocked()
+            if task_id not in tasks:
+                raise ValueError(f"Task '{task_id}' not found")
+            del tasks[task_id]
+            self._save_tasks_unlocked(tasks)
+        return True
+
+    def upsert_task(self, task: dict) -> bool:
+        """Create or replace one task while holding a single store lock."""
+        task_id = str((task or {}).get("id") or "").strip()
+        if not task_id:
+            raise ValueError("Task must have an 'id' field")
+        with self.lock:
+            tasks = self._load_tasks_unlocked()
+            current = dict(tasks.get(task_id) or {})
+            current.update(dict(task))
+            current["id"] = task_id
+            current["updated_at"] = datetime.now().isoformat()
+            tasks[task_id] = current
+            self._save_tasks_unlocked(tasks)
         return True
     
     def get_task(self, task_id: str) -> Optional[dict]:
