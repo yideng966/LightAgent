@@ -170,6 +170,30 @@ class TestTextModelRouter(unittest.TestCase):
         )
         self.assertNotIn("request_options", primary.calls[1])
 
+    def test_request_level_none_disables_global_thinking_for_one_call(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        bot = FakeBot([
+            {"choices": [{"message": {"content": "scored"}}]},
+            {"choices": [{"message": {"content": "main answer"}}]},
+        ])
+        config = self._config()
+        config["enable_thinking"] = True
+        config["reasoning_effort"] = "high"
+        with patch("bridge.agent_bridge.conf", return_value=config), \
+                patch("models.bot_factory.create_bot", return_value=bot):
+            router = TextModelRouter(FakeBridge())
+            router.complete(
+                [{"role": "user", "content": "score"}],
+                request_options={"reasoning_effort": "none"},
+            )
+            router.complete([{"role": "user", "content": "answer"}])
+
+        self.assertEqual({"type": "disabled"}, bot.calls[0]["thinking"])
+        self.assertNotIn("reasoning_effort", bot.calls[0])
+        self.assertEqual({"type": "enabled"}, bot.calls[1]["thinking"])
+        self.assertEqual("high", bot.calls[1]["reasoning_effort"])
+
     def test_complete_model_override_does_not_fallback_or_update_primary_circuit(self):
         from bridge.agent_bridge import TextModelRouter
 
@@ -224,6 +248,23 @@ class TestTextModelRouter(unittest.TestCase):
             proxy=None,
         )
         self.assertEqual("primary-model", config["model"])
+
+    def test_missing_custom_override_fails_without_chat_provider_fallback(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        override = FakeBot([])
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", return_value=override), \
+                patch("models.custom_provider.get_custom_providers", return_value=[]):
+            router = TextModelRouter(FakeBridge())
+            with self.assertRaisesRegex(ValueError, "custom provider not found: missing"):
+                router.complete(
+                    [{"role": "user", "content": "score"}],
+                    provider="custom:missing",
+                    model="scorer-model",
+                )
+
+        self.assertEqual([], override.calls)
 
     def test_clear_memory_command_does_not_call_model(self):
         from bridge.agent_bridge import TextModelRouter

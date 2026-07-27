@@ -55,6 +55,19 @@ class TestModelsHandler(unittest.TestCase):
         self.assertEqual("custom:score01", cap["current_provider"])
         self.assertEqual("score-model", cap["current_model"])
         self.assertIn("custom:score01", cap["providers"])
+        self.assertEqual("openai_compatible", cap["structured_output_mode"])
+
+    def test_scorer_capability_marks_native_provider_as_prompt_only(self):
+        from channel.web.web_channel import ModelsHandler
+
+        cap = ModelsHandler._scorer_capability({
+            "bot_type": "deepseek",
+            "model": "deepseek-chat",
+            "wechat_group_free_reply_scorer_provider": "deepseek",
+            "wechat_group_free_reply_scorer_model": "deepseek-chat",
+        })
+
+        self.assertEqual("prompt_only", cap["structured_output_mode"])
 
     def test_set_scorer_persists_without_changing_main_model(self):
         from channel.web.web_channel import ModelsHandler
@@ -113,6 +126,32 @@ class TestModelsHandler(unittest.TestCase):
 
         self.assertEqual("success", result["status"])
         self.assertEqual("score-model", local_config["wechat_group_free_reply_scorer_model"])
+
+    def test_delete_custom_provider_rejects_active_scorer_reference(self):
+        from channel.web.web_channel import ModelsHandler
+
+        local_config = {
+            "bot_type": "deepseek",
+            "model": "deepseek-chat",
+            "wechat_group_free_reply_scorer_provider": "custom:score01",
+            "wechat_group_free_reply_scorer_model": "score-model",
+            "custom_providers": [{
+                "id": "score01",
+                "name": "Scorer",
+                "api_key": "secret",
+                "api_base": "https://score.example/v1",
+                "model": "score-model",
+            }],
+        }
+        handler = ModelsHandler()
+
+        with patch("channel.web.web_channel.conf", return_value=local_config), \
+                patch.object(ModelsHandler, "_persist_custom_providers") as persist:
+            result = json.loads(handler._handle_delete_custom_provider({"id": "score01"}))
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("LLM Scorer", result["message"])
+        persist.assert_not_called()
 
     def test_chat_capability_exposes_model_fallbacks_for_ui(self):
         from channel.web.web_channel import ModelsHandler

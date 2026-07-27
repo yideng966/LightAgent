@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from config import conf
 from channel.wechat_group.wechat_group_free_reply_scorer import (
@@ -305,6 +305,32 @@ class WechatGroupFreeReplyScorerTest(unittest.TestCase):
             },
             kwargs["request_options"],
         )
+
+    def test_runtime_router_is_resolved_again_after_bridge_reset(self):
+        first_router = Mock()
+        second_router = Mock()
+        first_router.complete.return_value = {
+            "success": True,
+            "content": scorer_json(),
+        }
+        second_router.complete.return_value = {
+            "success": True,
+            "content": scorer_json(),
+        }
+        bridge = Mock()
+        bridge.get_text_model_router.side_effect = [first_router, second_router]
+
+        with patch(
+            "channel.wechat_group.wechat_group_free_reply_scorer.Bridge",
+            return_value=bridge,
+        ):
+            scorer = WechatGroupFreeReplyScorer()
+            scorer.score(self.task(), self.config())
+            scorer.score(self.task(), self.config())
+
+        self.assertEqual(2, bridge.get_text_model_router.call_count)
+        first_router.complete.assert_called_once()
+        second_router.complete.assert_called_once()
 
     def test_unconfigured_model_falls_back_without_calling_router(self):
         conf()["wechat_group_free_reply_scorer_provider"] = ""

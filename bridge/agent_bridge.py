@@ -444,57 +444,63 @@ class TextModelRouter(LLMModel):
 
     def _configure_custom_candidate_bot(self, bot, candidate):
         bot_type = candidate.get("bot_type") or ""
-        try:
-            from models.custom_provider import get_custom_providers, parse_custom_bot_type
-            is_custom, provider_id = parse_custom_bot_type(bot_type)
-            if not is_custom or not provider_id:
-                return bot
+        from models.custom_provider import get_custom_providers, parse_custom_bot_type
 
-            provider = None
-            for item in get_custom_providers():
-                if item.get("id") == provider_id:
-                    provider = item
-                    break
-            if not provider:
-                return bot
+        is_custom, provider_id = parse_custom_bot_type(bot_type)
+        if not is_custom:
+            return bot
 
-            api_key = provider.get("api_key", "")
-            api_base = provider.get("api_base") or None
-            model_name = candidate.get("model") or provider.get("model") or self.model
-            proxy = conf().get("proxy") or None
+        if provider_id:
+            provider = next(
+                (item for item in get_custom_providers() if item.get("id") == provider_id),
+                None,
+            )
+            if provider is None:
+                raise ValueError(f"custom provider not found: {provider_id}")
+        else:
+            provider = {
+                "api_key": conf().get("custom_api_key", ""),
+                "api_base": conf().get("custom_api_base") or None,
+                "model": "",
+            }
 
-            if hasattr(bot, "_api_key"):
-                bot._api_key = api_key
-            if hasattr(bot, "_api_base"):
-                bot._api_base = api_base
-            if hasattr(bot, "args") and isinstance(bot.args, dict):
-                bot.args["model"] = model_name
-            if hasattr(bot, "sessions") and hasattr(bot.sessions, "model"):
-                bot.sessions.model = model_name
-            try:
-                from models.openai.openai_http_client import OpenAIHTTPClient
-                bot._http_client = OpenAIHTTPClient(
-                    api_key=api_key,
-                    api_base=api_base,
-                    proxy=proxy,
-                )
-            except Exception as e:
-                logger.warning(f"[AgentLLMModel] failed to prepare custom fallback http client: {e}")
+        api_key = provider.get("api_key", "")
+        api_base = provider.get("api_base") or None
+        if not api_base:
+            provider_label = provider_id or "legacy"
+            raise ValueError(f"custom provider api_base is required: {provider_label}")
 
-            def get_api_config(instance):
-                return {
-                    "api_key": api_key,
-                    "api_base": api_base,
-                    "model": model_name,
-                    "default_temperature": conf().get("temperature", 0.9),
-                    "default_top_p": conf().get("top_p", 1.0),
-                    "default_frequency_penalty": conf().get("frequency_penalty", 0.0),
-                    "default_presence_penalty": conf().get("presence_penalty", 0.0),
-                }
+        model_name = candidate.get("model") or provider.get("model") or self.model
+        proxy = conf().get("proxy") or None
 
-            bot.get_api_config = types.MethodType(get_api_config, bot)
-        except Exception as e:
-            logger.warning(f"[AgentLLMModel] failed to configure custom fallback bot: {e}")
+        if hasattr(bot, "_api_key"):
+            bot._api_key = api_key
+        if hasattr(bot, "_api_base"):
+            bot._api_base = api_base
+        if hasattr(bot, "args") and isinstance(bot.args, dict):
+            bot.args["model"] = model_name
+        if hasattr(bot, "sessions") and hasattr(bot.sessions, "model"):
+            bot.sessions.model = model_name
+
+        from models.openai.openai_http_client import OpenAIHTTPClient
+        bot._http_client = OpenAIHTTPClient(
+            api_key=api_key,
+            api_base=api_base,
+            proxy=proxy,
+        )
+
+        def get_api_config(instance):
+            return {
+                "api_key": api_key,
+                "api_base": api_base,
+                "model": model_name,
+                "default_temperature": conf().get("temperature", 0.9),
+                "default_top_p": conf().get("top_p", 1.0),
+                "default_frequency_penalty": conf().get("frequency_penalty", 0.0),
+                "default_presence_penalty": conf().get("presence_penalty", 0.0),
+            }
+
+        bot.get_api_config = types.MethodType(get_api_config, bot)
         return bot
 
     def _get_bot_for_candidate(self, candidate):
@@ -522,7 +528,9 @@ class TextModelRouter(LLMModel):
         if request.max_tokens is not None:
             kwargs['max_tokens'] = request.max_tokens
         request_options = getattr(request, 'request_options', None)
-        if isinstance(request_options, dict) and request_options:
+        if not isinstance(request_options, dict):
+            request_options = {}
+        if request_options:
             kwargs['request_options'] = dict(request_options)
 
         system_prompt = getattr(request, 'system', None)
@@ -536,7 +544,12 @@ class TextModelRouter(LLMModel):
         if session_id:
             kwargs['session_id'] = session_id
 
-        thinking_enabled = bool(conf().get("enable_thinking", False))
+        request_disables_thinking = request_options.get("reasoning_effort") == "none"
+        thinking_enabled = (
+            False
+            if request_disables_thinking
+            else bool(conf().get("enable_thinking", False))
+        )
         kwargs['thinking'] = (
             {"type": "enabled"} if thinking_enabled
             else {"type": "disabled"}

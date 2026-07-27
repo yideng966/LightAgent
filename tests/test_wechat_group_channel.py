@@ -2284,6 +2284,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         self.assertTrue(should_enqueue)
         self.assertTrue(decision["triggered"])
+        self.assertFalse(decision["local_rule_triggered"])
         self.assertIn("below_threshold", decision["suppressions"])
         self.assertEqual(scorer_timeline, returned_recent)
         archive.get_recent_messages.assert_called_once_with(

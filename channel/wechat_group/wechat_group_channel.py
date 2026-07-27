@@ -2007,6 +2007,7 @@ class WechatGroupChannel(ChatChannel):
             ]
             decision["triggered"] = not decision["suppressions"]
             decision["contextual_short_question"] = True
+        decision["local_rule_triggered"] = bool(decision.get("triggered"))
         hard_suppressions = set(decision.get("suppressions") or []) - {"below_threshold"}
         if cfg.get("scorer_enabled") and not hard_suppressions:
             decision["triggered"] = True

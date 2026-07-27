@@ -45,6 +45,7 @@ const I18N = {
         models_capability_chat_desc: '用于基础对话和 Agent 推理',
         models_capability_scorer: 'LLM Scorer',
         models_capability_scorer_desc: '用于微信群自由回复判定，不影响主模型',
+        models_scorer_prompt_only_hint: '当前 Provider 不使用 OpenAI JSON Mode 参数，将依赖严格 JSON 提示与失败回落。',
         models_chat_fallbacks: '备用模型',
         models_chat_fallbacks_desc: '主模型临时不可用时按顺序尝试',
         models_chat_fallback_add: '添加备用',
@@ -955,6 +956,7 @@ const I18N = {
         models_capability_chat_desc: 'Used for basic chat and agent reasoning',
         models_capability_scorer: 'LLM Scorer',
         models_capability_scorer_desc: 'Used for WeChat group free-reply decisions without changing the main model',
+        models_scorer_prompt_only_hint: 'This provider does not use OpenAI JSON Mode parameters; strict JSON prompting and failure fallback remain active.',
         models_chat_fallbacks: 'Fallback Models',
         models_chat_fallbacks_desc: 'Tried in order when the main model is temporarily unavailable',
         models_chat_fallback_add: 'Add fallback',
@@ -8552,6 +8554,20 @@ function renderCapabilityHints(def, cap, body, currentProvider) {
     const slot = body.querySelector(`[data-cap-hint="${def.id}"]`);
     if (!slot) return;
     slot.innerHTML = '';
+
+    if (def.id === 'scorer') {
+        const promptOnly = currentProvider
+            && currentProvider !== 'openai'
+            && !currentProvider.startsWith('custom');
+        if (promptOnly) {
+            slot.innerHTML = `
+                <span class="inline-flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                    <i class="fas fa-triangle-exclamation mt-0.5 text-[10px]"></i>
+                    <span>${t('models_scorer_prompt_only_hint')}</span>
+                </span>`;
+        }
+        return;
+    }
 
     if (currentProvider !== '' || !capabilitySupportsAuto(def.id)) return;
 

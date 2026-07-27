@@ -492,6 +492,9 @@ messages:
 - 情绪与主动性负责维护当前群的运行时情绪状态，并影响自由回复概率、回复节奏和最终 LLM 上下文。默认配置 `wechat_group_emotion_enabled = true`；它本身不会独立发起群消息，也不绕过自由回复或 @ 必回链路。
 - 普通非 @ 文本先经过 `evaluate_wechat_group_free_reply()` 本地评分、群范围、冷却、小时上限、连续上限、低信息和风险抑制；本地通过后进入 `WechatGroupFreeReplyWorkerPool`，再由 `WechatGroupFreeReplyJudge` 做轻量 LLM JSON 二次判定。
 - 自由回复 LLM Scorer 必须复用共享 `TextModelRouter.complete()`，并通过 Web 控制台「模型管理 -> LLM Scorer」能力卡单独选择 Provider 和模型；微信群通道只负责提示词装配、严格 JSON 解析与失败回落，不得维护独立 API Base、API Key、超时、Temperature 或模型 HTTP 调用。
+- Scorer 显式选择的 `custom:<id>` 不存在或缺少 API Base 时必须失败闭合，不得隐式回退到主聊天 Provider；自定义 Provider 被 Scorer 使用时，Web 模型管理必须阻止删除并提示先切换 Scorer Provider。模型管理更新凭据并重置共享 Router 后，Scorer 下一次请求必须重新获取当前 Router，不得长期持有旧 Bot 或旧凭据。
+- Scorer 为旁路 `below_threshold` 保存的候选必须保留介入前的 `local_rule_triggered`；Scorer 失败且允许规则回落、旧 LLM Judge 又关闭时，只能恢复该本地判定，不得把原本低于阈值的消息直接放行。
+- Scorer 的请求级禁用思考只能覆盖当前调用，不得修改全局思考配置；OpenAI-compatible Provider 可使用白名单 JSON Mode 参数，其他 Provider 必须依赖严格 JSON Prompt、解析校验和失败回落，UI 与文档不得宣称所有 Provider 都原生支持同一种结构化输出参数。
 - 自由回复 worker 必须按 `room_id` 做短暂防抖和 pending 合并；同一群窗口内只把最新普通候选送入 LLM judge，不同群互不影响。不要在候选入队时提前写入已回复冷却，冷却应在 worker 判定通过并进入回复上下文后记录。
 - worker 判定通过后，通道用 `wechat_group_force_reply = true` 重新走 `_compose_context()` / `produce()`，绕过通用群聊“必须 @ / 前缀 / 关键词”的过滤，但最终回复仍复用 `ChatChannel`、`Bridge` 和 Agent 主链路。
 - 默认生图触发词必须保守；不要使用 `看`、`找` 这类容易命中“看看”“找到”“找不到”等普通群聊文本的单字前缀，避免自由回复候选被误转成 `ContextType.IMAGE_CREATE`。

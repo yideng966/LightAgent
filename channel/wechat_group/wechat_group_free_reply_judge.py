@@ -112,6 +112,17 @@ class WechatGroupFreeReplyJudge:
                 }
             if not scorer_decision.get("fallback_to_rules"):
                 return scorer_decision
+            if not config.get("llm_judge_enabled", True):
+                approved = bool(local_decision.get("local_rule_triggered", False))
+                return {
+                    "approved": approved,
+                    "should_reply": approved,
+                    "confidence": 1.0 if approved else 0.0,
+                    "reason": "local_rules_fallback",
+                    "tone": "natural" if approved else "",
+                    "error": "" if approved else str(scorer_decision.get("error") or "rejected"),
+                    "source": "local_fallback",
+                }
         if not config.get("llm_judge_enabled", True):
             return {
                 "approved": True,

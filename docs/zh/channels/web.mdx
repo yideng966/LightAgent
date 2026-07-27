@@ -64,7 +64,7 @@ Web 控制台是 LightAgent 的默认通道，启动后会自动运行，通过�
 
 <img width="850" src="https://cdn.link-ai.tech/doc/20260521212949.png" />
 
-微信群自由回复启用 LLM Scorer 时，请在「模型管理 -> LLM Scorer」能力卡中单独选择 Provider 和模型。该选择复用模型管理中的厂商凭据，不会修改主模型；自由回复页面仅保留开关、上下文长度、判定阈值、Token 上限和失败回落等行为设置。
+微信群自由回复启用 LLM Scorer 时，请在「模型管理 -> LLM Scorer」能力卡中单独选择 Provider 和模型。该选择复用模型管理中的厂商凭据，不会修改主模型；自由回复页面仅保留开关、上下文长度、判定阈值、Token 上限和失败回落等行为设置。OpenAI-compatible Provider 使用原生 JSON Mode，其他 Provider 使用严格 JSON Prompt、解析校验与失败回落。删除自定义 Provider 前，需要先将 LLM Scorer 切换到其他 Provider。
 
 ### 技能管理
 

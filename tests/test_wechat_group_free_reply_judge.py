@@ -172,6 +172,63 @@ class WechatGroupFreeReplyJudgeTest(unittest.TestCase):
         self.assertFalse(result["approved"])
         bridge.fetch_reply_content.assert_not_called()
 
+    def test_scorer_failure_restores_local_rejection_when_legacy_judge_disabled(self):
+        scorer = Mock()
+        scorer.score.return_value = {
+            "approved": False,
+            "error": "timeout",
+            "fallback_to_rules": True,
+            "source": "scorer",
+        }
+        judge = WechatGroupFreeReplyJudge(bridge=Mock(), scorer=scorer)
+
+        result = judge.judge(
+            {
+                "local_decision": {
+                    "triggered": True,
+                    "local_rule_triggered": False,
+                    "suppressions": ["below_threshold"],
+                }
+            },
+            {
+                "scorer_enabled": True,
+                "llm_judge_enabled": False,
+                "scorer_fallback_to_rules": True,
+            },
+        )
+
+        self.assertFalse(result["approved"])
+        self.assertEqual("local_fallback", result["source"])
+        self.assertEqual("timeout", result["error"])
+
+    def test_scorer_failure_keeps_local_approval_when_legacy_judge_disabled(self):
+        scorer = Mock()
+        scorer.score.return_value = {
+            "approved": False,
+            "error": "timeout",
+            "fallback_to_rules": True,
+            "source": "scorer",
+        }
+        judge = WechatGroupFreeReplyJudge(bridge=Mock(), scorer=scorer)
+
+        result = judge.judge(
+            {
+                "local_decision": {
+                    "triggered": True,
+                    "local_rule_triggered": True,
+                    "suppressions": [],
+                }
+            },
+            {
+                "scorer_enabled": True,
+                "llm_judge_enabled": False,
+                "scorer_fallback_to_rules": True,
+            },
+        )
+
+        self.assertTrue(result["approved"])
+        self.assertEqual("local_fallback", result["source"])
+
     def test_force_keyword_bypasses_scorer(self):
         scorer = Mock()
         judge = WechatGroupFreeReplyJudge(bridge=Mock(), scorer=scorer)

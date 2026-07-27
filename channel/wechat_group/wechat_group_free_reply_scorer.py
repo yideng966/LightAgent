@@ -345,7 +345,7 @@ def parse_scorer_response(text, reply_threshold, soft_threshold, group_size=0) -
 
 class WechatGroupFreeReplyScorer:
     def __init__(self, router=None):
-        self.router = router or Bridge().get_text_model_router()
+        self._router = router
         self._lock = threading.Lock()
         self._counters = {
             "scored": 0,
@@ -360,6 +360,11 @@ class WechatGroupFreeReplyScorer:
         }
         self._latencies = []
         self._last_error = ""
+
+    def _get_router(self):
+        if self._router is not None:
+            return self._router
+        return Bridge().get_text_model_router()
 
     @staticmethod
     def _fallback_decision(config, error, reason="") -> dict:
@@ -432,7 +437,7 @@ class WechatGroupFreeReplyScorer:
                 },
             }
         )
-        result = self.router.complete(
+        result = self._get_router().complete(
             prompt,
             purpose="wechat_group_free_reply_scorer",
             max_tokens=config.get("scorer_max_tokens", 256),

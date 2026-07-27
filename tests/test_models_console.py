@@ -14,6 +14,8 @@ class TestModelsConsole(unittest.TestCase):
         self.assertIn("{ id: 'scorer'", console_js)
         self.assertIn("models_capability_scorer", console_js)
         self.assertIn("models_capability_scorer_desc", console_js)
+        self.assertIn("models_scorer_prompt_only_hint", console_js)
+        self.assertIn("!currentProvider.startsWith('custom')", console_js)
         self.assertIn("saveCapability(capId)", console_js)
 
     def test_models_page_exposes_chat_fallback_controls(self):

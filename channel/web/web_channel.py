@@ -2630,15 +2630,21 @@ class ModelsHandler:
     def _scorer_capability(cls, local_config: dict) -> dict:
         """Dedicated stateless text model for WeChat free-reply scoring."""
         chat_capability = cls._chat_capability(local_config)
+        provider_id = str(
+            local_config.get("wechat_group_free_reply_scorer_provider") or ""
+        ).strip()
         return {
             "editable": True,
-            "current_provider": str(
-                local_config.get("wechat_group_free_reply_scorer_provider") or ""
-            ).strip(),
+            "current_provider": provider_id,
             "current_model": str(
                 local_config.get("wechat_group_free_reply_scorer_model") or ""
             ).strip(),
             "providers": list(chat_capability.get("providers") or []),
+            "structured_output_mode": (
+                "openai_compatible"
+                if provider_id == "openai" or provider_id.startswith("custom")
+                else "prompt_only"
+            ),
         }
 
     @staticmethod
@@ -3466,6 +3472,15 @@ class ModelsHandler:
         remaining = [p for p in providers if p.get("id") != provider_id]
         if len(remaining) == len(providers):
             return json.dumps({"status": "error", "message": f"unknown custom provider id: {provider_id}"})
+
+        scorer_provider = str(
+            local_config.get("wechat_group_free_reply_scorer_provider") or ""
+        ).strip()
+        if scorer_provider == f"custom:{provider_id}":
+            return json.dumps({
+                "status": "error",
+                "message": "LLM Scorer 正在使用该自定义 Provider，请先切换 Scorer Provider",
+            }, ensure_ascii=False)
 
         # If the deleted provider was active, fall back to the first remaining.
         _, current_active_id = parse_custom_bot_type(local_config.get("bot_type") or "")
