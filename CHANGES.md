@@ -185,7 +185,17 @@
 - 微信群消息与 Web 104 项通过；上下文与 worker 34 项通过；微信群通道 131 项通过。
 - UTF-8 模式全量 Python 回归 1041 项通过、1 项按条件跳过；Windows 默认 GBK 模式唯一错误为未改动的 Registry 测试读取 UTF-8 缓存文件，单项切换 UTF-8 后通过。
 - Python 编译、JavaScript 语法、配置模板 JSON 与 `git diff --check` 通过。
+### 微信群语音直接忽略模式
 
+- 将 `wechat_group_voice_interaction_mode` 扩展为 `force_reply`、`free_reply`、`ignore` 三种模式，默认值和非法值回退行为保持不变。
+- Web 控制台「群聊 -> 语音交互」新增“忽略语音”，选择后群语音仍保留侧车下载和归档，但不会进入情绪观察、上下文构造、音频转换、ASR、自由回复、Agent、LLM、TTS 或发送链路。
+- 转写回调增加 `ignore` 防御性短路，避免运行中配置切换时把忽略模式误当作自由回复。
+- 补充普通语音、@ 语音、引用语音、`audio` 类型归档、配置归一化、Web 保存回显和界面合同回归测试，并同步 README、项目规则与实施计划。
+
+验证记录：
+
+- `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web tests.test_chat_channel_voice`（249 项通过）。
+- JavaScript 语法检查、`config-template.json` JSON 校验、Python 编译和 `git diff --check` 通过；系统 PATH 未提供 Node.js，JavaScript 检查使用 Codex 工作区自带 Node.js 执行。
 ## 2026-07-26
 
 ### 技能完整性、能力包、加密备份与 Skill Runner

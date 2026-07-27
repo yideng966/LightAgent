@@ -340,6 +340,7 @@ docker push yideng966/lightagent:latest
 - 身份恢复必须按 stable account -> stable room -> stable member 的顺序确认；未确认 account 不得确认 room，未确认 member 不得写入管理员 stable 配置或继承敏感权限。
 - legacy runtime room/member 如果在多个 stable account 下产生歧义，必须返回未解析并要求人工确认，不得按最近记录任取；在线成员解析应优先使用当前运行中 room 的 stable 映射。
 - 通道层管理员硬门禁、humanized 降级上下文、生图额度和 scheduler 会话都必须使用 stable scope；runtime 字段只用于微信真实发送和 legacy 快照。
+- `wechat_group_voice_interaction_mode = ignore` 表示群语音在 sidecar 下载并由 Python 写入群归档后立即短路；`voice` / `audio` 都不得进入音频转换、ASR、自由回复、Agent、LLM、TTS 或发送链路。该模式不改变 sidecar 媒体下载和归档生命周期；如需做到侧车零下载，必须先单独规划配置同步与 JSON Lines 协议变更。
 - 群画像自主进化调用 LLM 时必须先识别模型错误 envelope（如 `{"error": true, "status_code": 503}`），HTTP 408/429/5xx 等临时供应商故障不得继续当作画像 JSON 正文解析；失败记录应保留可读 HTTP 状态且不推进归档游标。
 - GitHub 提交通知属于 Webhook 到微信群的固定消息投递适配：配置 UI 放在「群聊 -> 基础设置」，目标群只能使用已选择的 `wechat_group_stable_room_ids`；Webhook 必须先做 HMAC-SHA256 验签和 delivery 去重，配置 API 不得回显真实 Secret，`LIGHTAGENT_GITHUB_WEBHOOK_SECRET` 存在时优先于本地配置。
 - 群聊报告的统计、报告 revision、预览、投递、定时任务和日报记忆必须按 `stable_room_id` 隔离；legacy runtime 群只在身份服务明确确认的历史别名范围内兼容，禁止无条件按 `stable_room_id OR room_id` 扩大范围。

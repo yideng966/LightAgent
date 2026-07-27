@@ -340,11 +340,13 @@ const I18N = {
         groups_basic_title: '基础设置',
         groups_basic_desc: '控制当前群基础运行设置。',
         groups_voice_interaction_title: '语音交互',
-        groups_voice_interaction_desc: '设置群语音识别成功后的回复触发方式。',
+        groups_voice_interaction_desc: '设置收到群语音后的转写与回复方式。',
         groups_voice_interaction_force_reply: '强制回复',
         groups_voice_interaction_force_reply_hint: '语音识别成功后直接进入回复链路。',
         groups_voice_interaction_free_reply: '依赖自由回复规则',
         groups_voice_interaction_free_reply_hint: '转写文本通过自由回复规则和判定后才回复。',
+        groups_voice_interaction_ignore: '忽略语音',
+        groups_voice_interaction_ignore_hint: '收到群语音后不转写、不进入回复链路，但仍保留消息归档。',
         groups_humanization_title: '拟人化上下文',
         groups_humanization_desc: '控制群聊回复策略、证据检索、摘要、链接策略和发送前清洗。',
         groups_humanization_enabled: '启用拟人化上下文',
@@ -1280,11 +1282,13 @@ const I18N = {
         groups_basic_title: 'Basic settings',
         groups_basic_desc: 'Controls basic runtime settings for the current group.',
         groups_voice_interaction_title: 'Voice interaction',
-        groups_voice_interaction_desc: 'Choose how transcribed group voice messages trigger replies.',
+        groups_voice_interaction_desc: 'Choose how inbound group voice messages are transcribed and handled.',
         groups_voice_interaction_force_reply: 'Always reply',
         groups_voice_interaction_force_reply_hint: 'Enter the reply flow immediately after transcription succeeds.',
         groups_voice_interaction_free_reply: 'Use free reply rules',
         groups_voice_interaction_free_reply_hint: 'Reply only after the transcript passes free reply rules and judging.',
+        groups_voice_interaction_ignore: 'Ignore voice messages',
+        groups_voice_interaction_ignore_hint: 'Do not transcribe or reply, while keeping the inbound message archive.',
         groups_humanization_title: 'Humanized context',
         groups_humanization_desc: 'Controls reply policy, evidence search, summaries, link policy, and outgoing cleanup.',
         groups_humanization_enabled: 'Enable humanized context',
@@ -10055,12 +10059,17 @@ function buildGroupsVoiceInteractionPanel(extra) {
             label: 'groups_voice_interaction_free_reply',
             hint: 'groups_voice_interaction_free_reply_hint',
         },
+        {
+            value: 'ignore',
+            label: 'groups_voice_interaction_ignore',
+            hint: 'groups_voice_interaction_ignore_hint',
+        },
     ];
     return `<div class="h-full w-full">
         ${buildGroupsPanelTitle('fa-microphone-lines', 'groups_voice_interaction_title', 'groups_voice_interaction_desc')}
         <fieldset>
             <legend class="sr-only">${t('groups_voice_interaction_title')}</legend>
-            <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-3">
                 ${options.map(option => `<label class="flex items-start gap-3 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 cursor-pointer hover:border-primary-300 dark:hover:border-primary-500 transition-colors">
                     <input type="radio" name="groups-voice-interaction-mode" value="${option.value}"
                         class="mt-0.5 h-4 w-4 accent-primary-500 flex-shrink-0" ${mode === option.value ? 'checked' : ''}>
@@ -10077,7 +10086,7 @@ function buildGroupsVoiceInteractionPanel(extra) {
 function readWechatGroupVoiceInteractionMode(saved = {}) {
     const selected = document.querySelector('input[name="groups-voice-interaction-mode"]:checked');
     const mode = String(selected?.value || saved.mode || 'force_reply').trim().toLowerCase();
-    return mode === 'free_reply' ? 'free_reply' : 'force_reply';
+    return ['free_reply', 'ignore'].includes(mode) ? mode : 'force_reply';
 }
 
 function buildGroupsHumanizationPanel(extra) {

@@ -81,6 +81,7 @@ WECHAT_GROUP_SHORT_QUESTION_BOT_FOLLOWUP_SECONDS = 60
 WECHAT_GROUP_FREE_REPLY_MUTE_COMMAND = "闭嘴"
 WECHAT_GROUP_VOICE_INTERACTION_FORCE_REPLY = "force_reply"
 WECHAT_GROUP_VOICE_INTERACTION_FREE_REPLY = "free_reply"
+WECHAT_GROUP_VOICE_INTERACTION_IGNORE = "ignore"
 WECHAT_GROUP_DEFAULT_IMAGE_REPLY_QUESTION = "请根据这张图片作出简短回应。"
 WECHAT_GROUP_AGENT_HISTORY_FRESH = "fresh"
 WECHAT_GROUP_AGENT_HISTORY_INTERACTIVE = "interactive_session"
@@ -119,7 +120,10 @@ def _wechat_group_log_preview(text, limit=120) -> str:
 
 def normalize_wechat_group_voice_interaction_mode(value) -> str:
     mode = str(value or "").strip().lower()
-    if mode == WECHAT_GROUP_VOICE_INTERACTION_FREE_REPLY:
+    if mode in (
+        WECHAT_GROUP_VOICE_INTERACTION_FREE_REPLY,
+        WECHAT_GROUP_VOICE_INTERACTION_IGNORE,
+    ):
         return mode
     return WECHAT_GROUP_VOICE_INTERACTION_FORCE_REPLY
 
@@ -845,6 +849,23 @@ class WechatGroupChannel(ChatChannel):
 
     def handle_text(self, msg: WechatGroupMessage):
         self._log_inbound_message(msg)
+        voice_interaction_mode = normalize_wechat_group_voice_interaction_mode(
+            conf().get("wechat_group_voice_interaction_mode")
+        )
+        if (
+            msg.ctype == ContextType.VOICE
+            and voice_interaction_mode == WECHAT_GROUP_VOICE_INTERACTION_IGNORE
+        ):
+            logger.info(
+                '[wechat_group] voice message ignored: message_id="{}" room="{}" sender="{}"'.format(
+                    _wechat_group_log_value(getattr(msg, "msg_id", "")),
+                    _wechat_group_stable_room_scope(msg)
+                    or _wechat_group_log_value(getattr(msg, "other_user_id", "")).strip(),
+                    _wechat_group_stable_member_scope(msg)
+                    or _wechat_group_log_value(getattr(msg, "actual_user_id", "")).strip(),
+                )
+            )
+            return
         self._observe_emotion(msg)
         is_pat_self = getattr(msg, "is_pat_self", False) is True
         direct_reply = (
@@ -1078,6 +1099,8 @@ class WechatGroupChannel(ChatChannel):
         mode = normalize_wechat_group_voice_interaction_mode(
             conf().get("wechat_group_voice_interaction_mode")
         )
+        if mode == WECHAT_GROUP_VOICE_INTERACTION_IGNORE:
+            return None
         if mode == WECHAT_GROUP_VOICE_INTERACTION_FORCE_REPLY:
             kwargs = dict(context.kwargs)
             kwargs["wechat_group_force_reply"] = True
