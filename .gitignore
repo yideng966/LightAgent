@@ -67,5 +67,5 @@ desktop/build/*
 # icons. Only the finished icons under desktop/resources/ should be committed.
 desktop/resources/.icon-work/
 /$null
-plans
 /SERVER_ACCESS.md
+群聊UI设计
