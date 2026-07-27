@@ -2,6 +2,22 @@
 
 ## 2026-07-27
 
+### 微信群自由回复旧话题锚定与观察历史隔离修复
+
+- 修正 `get_messages_for_distill()` 的截取方向：时间窗口内先取最新 N 条，再按时间正序返回；本地摘要统一过滤 WPS/app transport XML、base64、路径、敏感键值和 URL 查询参数，不再把原始载荷送入 Prompt。
+- 修正 `unanswered_question`：近期消息数量不再等价于“无人回答”，仅明确面向全群的问题可获得该分值；候选排队后若已有新消息接话，worker 在 Judge 前失败闭合丢弃。
+- 新增统一安全近场关系模块。本地规则在“另一名群友刚说完，当前成员紧接无明确对象的短问句”时应用 `likely_human_followup` 硬抑制；Scorer 与 legacy Judge 共用最多 3-5/配置上限的 opaque actor timeline，不暴露内部 ID、XML 或路径。
+- 普通自由回复改为 recent-only：只注入当前 stable room 最近 30 分钟、最多 12 条群友与机器人真实回复，不再注入 archive evidence、local extractive summary 或旧焦点。
+- 微信群 Context 新增 `fresh / interactive_session / observe_only` 历史模式。普通 ambient 自由回复使用 `observe_only`，明确独立问题使用 `fresh`，引用机器人或明确继续使用 `interactive_session`。
+- Agent 增加 session execution lock；`observe_only` 空历史执行并在成功、异常、取消、文件回复和并发路径恢复原历史。观察轮次只保存清洗后的 user/最终 assistant，并以 `messages.extras.history_visibility=observe_only` 标记；模型恢复默认过滤，历史 UI/审计继续显示。
+- 自主进化入口接收独立、清洗后的观察消息缓冲，回复增强块、thinking 和工具原文不进入观察记录或后续回复上下文。
+
+验证记录：
+
+- 微信群通道 132 项通过；消息解析与 Web 104 项通过；上下文、自由回复、Judge、Scorer、worker 与 Agent 历史隔离专项 118 项通过。
+- 自进化 stub 场景 13 项及 undo 通过；会话迁移、自进化规则、Python 编译、JavaScript 语法、配置模板 JSON 和 `git diff --check` 通过。
+- `PYTHONUTF8=1 python -m unittest discover -s tests`：1062 项通过，1 项按条件跳过。Windows 默认 GBK 模式仅有未改动的 Registry 测试读取 UTF-8 缓存失败，单项 UTF-8 复跑通过。
+
 ### PR #15 微信群自由回复 Scorer 路由与回落修复
 
 - 合并 PR #15 的共享 `TextModelRouter.complete()` Scorer 架构，并修复显式 `custom:<id>` 不存在或缺少 API Base 时可能隐式使用主聊天凭据的问题；legacy `custom` 继续显式读取 `custom_api_key` 与 `custom_api_base`。

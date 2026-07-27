@@ -172,6 +172,21 @@ class WechatGroupFreeReplyWorkerPoolTest(unittest.TestCase):
         judge.judge.assert_not_called()
         callback.assert_not_called()
 
+    def test_answered_open_question_is_dropped_before_llm_judge(self):
+        pool, judge, callback = self.make_pool()
+        task = self.make_task("answered")
+        task["pre_judge_validator"] = Mock(return_value=False)
+        pool.start()
+        try:
+            self.assertTrue(pool.submit(task))
+            self.assertTrue(wait_until(lambda: pool.status()["rejected_total"] == 1))
+        finally:
+            pool.stop()
+
+        task["pre_judge_validator"].assert_called_once_with(task)
+        judge.judge.assert_not_called()
+        callback.assert_not_called()
+
     def test_queue_full_drops_task(self):
         pool, _, _ = self.make_pool(queue_size=1)
 

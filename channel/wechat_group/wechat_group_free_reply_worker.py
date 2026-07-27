@@ -195,14 +195,27 @@ class WechatGroupFreeReplyWorkerPool:
         with self._lock:
             self._active_workers += 1
         try:
+            validator = task.get("pre_judge_validator")
+            if callable(validator) and validator(task) is not True:
+                logger.info(
+                    '[wechat_group] free reply candidate skipped: reason="answered_after_queue" '
+                    'room="{}" sender="{}" text="{}"'.format(
+                        task.get("room_name", "") or "[room]",
+                        task.get("sender_name", "") or "[member]",
+                        _preview(task.get("text", "")),
+                    )
+                )
+                with self._lock:
+                    self.rejected_total += 1
+                return
             decision = _local_repeater_decision(task) or self.judge.judge(task, task.get("config") or {})
             if decision.get("approved"):
                 decision_source = decision.get("source") or "llm"
                 logger.info(
                     '[wechat_group] free reply {} approved: room="{}" sender="{}" confidence={} reason="{}" text="{}"'.format(
                         decision_source,
-                        task.get("room_name", "") or task.get("room_id", ""),
-                        task.get("sender_name", "") or task.get("sender_id", ""),
+                        task.get("room_name", "") or "[room]",
+                        task.get("sender_name", "") or "[member]",
                         decision.get("confidence", 0),
                         _preview(decision.get("reason", ""), limit=80),
                         _preview(task.get("text", "")),
@@ -214,8 +227,8 @@ class WechatGroupFreeReplyWorkerPool:
             else:
                 logger.info(
                     '[wechat_group] free reply llm rejected: room="{}" sender="{}" confidence={} error="{}" reason="{}" text="{}"'.format(
-                        task.get("room_name", "") or task.get("room_id", ""),
-                        task.get("sender_name", "") or task.get("sender_id", ""),
+                        task.get("room_name", "") or "[room]",
+                        task.get("sender_name", "") or "[member]",
                         decision.get("confidence", 0),
                         decision.get("error", ""),
                         _preview(decision.get("reason", ""), limit=80),

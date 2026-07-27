@@ -361,20 +361,22 @@ docker push yideng966/lightagent:latest
 
 1. `WechatGroupChannel.handle_text()` 把 sidecar 消息包装为 `Context`。
 2. `WechatGroupChannel._compose_context()` 先调用 `super()._compose_context()`，继续执行原 `ChatChannel` 群白名单、触发词、@ 去除、`session_id`、`receiver` 和插件事件逻辑。每个 `Context` 实例必须有独立 `kwargs`，不能复用可变默认字典，避免调度任务、自由回复等标记污染后续消息。
-3. 微信群通道随后写入服务端元数据，例如 `wechat_group_room_id`、`wechat_group_sender_id`、`wechat_group_bot_sender_id`、`wechat_group_user_content`、`wechat_group_trigger_source`、`wechat_group_is_free_reply` 和 `intent_requires_scheduler`。其中 `wechat_group_user_content` 必须保存用户原文，用于后续原文持久化。
+3. 微信群通道随后写入服务端元数据，例如 `wechat_group_room_id`、`wechat_group_sender_id`、`wechat_group_bot_sender_id`、`wechat_group_user_content`、`wechat_group_trigger_source`、`wechat_group_is_free_reply`、`wechat_group_agent_history_mode` 和 `intent_requires_scheduler`。其中 `wechat_group_user_content` 必须保存用户原文，用于后续原文持久化。
 4. `_record_inbound_message()` 先把本轮消息写入归档；随后 `WechatGroupHumanizedContextBuilder` 构造 prompt 时必须用 `exclude_message_id` 排除本轮消息，避免把用户刚问的问题当成证据。
 5. 微信群通道通过 `WechatGroupHumanizedContextBuilder` 在 `context.content` 前追加微信群专属上下文，包括 `<wechat-group-admin-policy>`、`<wechat-group-mention-verification>`、`<wechat-group-reply-policy>`、`<wechat-group-persona>`、`<wechat-group-archive-evidence>`、`<local-extractive-summary>`、`<recent-wechat-group-transcript>`、`<wechat-group-focus>`、`<wechat-group-memory>`、`<wechat-group-style>`、`<wechat-group-emotion>`、`<wechat-group-reference-policy>` 与 `<wechat-group-multimodal>`。
 6. Builder 会把注入结果回填到 `context` 元数据，例如 `wechat_group_contextual_history`、`wechat_group_archive_evidence_injected`、`wechat_group_recent_context_injected`、`wechat_group_memory_injected`、`wechat_group_multimodal_diagnostics` 和 `wechat_group_multimodal_matched_images`，供发送、诊断和测试使用。
 7. `ChatChannel._generate_reply()` 调用 `super().build_reply_content(context.content, context)`。
 8. 当 `agent` 配置为 `true` 时，`Channel.build_reply_content()` 进入 `Bridge.fetch_agent_reply()`，由 Agent 模式请求 LLM。
-9. `AgentBridge` 默认使用 `wechat_group_user_content` 预持久化用户原文；Agent 运行结束后再把 `agent.messages` 与 `_last_run_new_messages` 中的当轮增强文本替换回原文，防止 `<wechat-group-*>` 块进入下一轮会话历史。
+9. `AgentBridge` 默认使用 `wechat_group_user_content` 预持久化用户原文；`interactive_session` 延续合法交互历史，`fresh` 空历史执行并推进持久化上下文边界，`observe_only` 在统一 execution lock 内快照旧历史、空历史运行并在所有退出路径恢复。观察轮次只以 `messages.extras.history_visibility=observe_only` 保存清洗后的 user 和最终 assistant 正文，模型恢复默认过滤，UI/审计仍可读取。
 
 按意图注入历史的规则：
 
-- `should_include_contextual_history()` 是归档证据、本地摘要和普通 recent transcript 的主要门控。`free_reply`、`quote_self`、`image_message` 默认需要历史；文本中出现“刚才、上面、之前、谁说、总结、继续、引用、图片、照片、这张、链接、啥意思、什么意思”等上下文依赖表达时也需要历史。
+- `should_include_contextual_history()` 是 direct/quote/image 场景归档证据、本地摘要和普通 recent transcript 的主要门控；文本中出现“刚才、上面、之前、谁说、总结、继续、引用、图片、照片、这张、链接、啥意思、什么意思”等上下文依赖表达时需要历史。普通 `free_reply` 是单独的 recent-only 策略，不能据此打开远期事实块。
 - 独立 direct reply 或 standalone @ 默认不注入大段旧聊天；它仍可以注入管理员策略、触发/回复策略、人设、群记忆、风格、情绪、引用策略和多模态块，但不得为了“补上下文”自动塞入大量 recent transcript。
-- `<recent-wechat-group-transcript>` 优先使用焦点栈命中的消息；没有焦点消息时，只有上下文依赖场景才从当前 `room_id` 归档按 `wechat_group_recent_context_limit` 与 `wechat_group_recent_context_minutes` 拉取最近消息。
-- `<wechat-group-archive-evidence>` 和 `<local-extractive-summary>` 只在上下文依赖场景注入，并且必须先按当前 `room_id` 过滤，再排除当前 `message_id`。
+- 普通 `free_reply` 只从当前 stable room 的 conversation timeline 注入最近 30 分钟、最多 12 条安全消息，包含机器人已真实发送的回复并排除当前 `message_id`；不得注入 archive evidence、local summary 或旧焦点。其他上下文依赖场景的 `<recent-wechat-group-transcript>` 才允许优先使用当前焦点消息并按配置回退归档。
+- `<wechat-group-archive-evidence>` 和 `<local-extractive-summary>` 只在非普通自由回复的上下文依赖场景注入，并且必须先按当前 stable room 过滤，再排除当前 `message_id`。`get_messages_for_distill()` 必须倒序截取最新 N 条后正序返回；本地摘要必须过滤 transport XML、base64、路径、敏感键值和 URL 查询参数。
+- 自由回复本地判定必须先分析近场收件人关系。“另一名群友刚陈述结果 -> 当前成员发无明确对象的短问句”命中 `likely_human_followup` 后硬抑制，Scorer、legacy Judge、active/crazy 档位均不得覆盖；“大家/谁能/有没有人”等明确开放群问题和明确机器人目标除外。
+- Scorer 与 legacy Judge 只能读取统一的安全近场投影：actor 使用当轮 opaque token，正文清洗并截断，不得携带 stable/runtime ID、XML、媒体路径、完整 URL 参数或原始 quote payload。
 - 如果 `wechat_group_humanized_context_enabled = false` 或 builder 异常，通道会降级到旧的轻量拼装路径；该降级只用于运行时兜底，不是新的目标链路。
 
 因此 LLM 最终看到的是“通用 Agent 系统上下文 + Agent 会话历史 + 微信群增强后的当前用户消息”：

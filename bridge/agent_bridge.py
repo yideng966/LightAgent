@@ -5,6 +5,7 @@ Agent Bridge - Integrates Agent system with existing LightAgent bridge
 import os
 import re
 import html
+import copy
 import threading
 import time
 import types
@@ -1067,24 +1068,42 @@ class AgentBridge:
         agent = None
         request_id = None
         cancel_event = None
+        execution_lock = None
+        execution_lock_acquired = False
+        history_mode = "interactive_session"
+        history_snapshot = None
+        history_snapshot_restored = False
+        run_stream_executor = None
+        observed_messages = []
+        registry = None
+        token_key = None
         try:
             # Extract session_id from context for user isolation
             if context:
                 session_id = context.kwargs.get("session_id") or context.get("session_id")
                 request_id = context.kwargs.get("request_id") or context.get("request_id")
 
-            # Register a cancel token. Prefer per-turn request_id (web),
-            # fall back to session_id (IM channels). The Event is polled by
-            # AgentStreamExecutor at safe checkpoints.
+            # Get agent for this session (will auto-initialize if needed)
+            agent = self.get_agent(session_id=session_id)
+            if not agent:
+                return Reply(ReplyType.ERROR, "Failed to initialize super agent")
+
+            execution_lock = getattr(agent, "execution_lock", None)
+            if execution_lock is None:
+                execution_lock = threading.RLock()
+                agent.execution_lock = execution_lock
+            execution_lock.acquire()
+            execution_lock_acquired = True
+
+            # Register after acquiring the per-session execution lock so a
+            # queued IM request cannot replace the active request's token.
             registry = get_cancel_registry()
             token_key = request_id or session_id
             if token_key:
                 cancel_event = registry.register(token_key, session_id=session_id)
 
-            # Get agent for this session (will auto-initialize if needed)
-            agent = self.get_agent(session_id=session_id)
-            if not agent:
-                return Reply(ReplyType.ERROR, "Failed to initialize super agent")
+            history_mode = self._resolve_agent_history_mode(context)
+            history_snapshot = self._prepare_agent_history_for_mode(agent, history_mode)
             
             # Create event handler for logging and channel communication
             event_handler = AgentEventHandler(context=context, original_callback=on_event)
@@ -1274,8 +1293,13 @@ class AgentBridge:
             # The reply (assistant/tool messages) is appended once the run
             # completes; the final persist skips this already-stored user turn.
             persisted_user_query = self._select_persisted_user_query(query, context)
+            if history_mode == "fresh":
+                self._start_fresh_persistent_context(session_id, context)
             pre_persisted = self._pre_persist_user_message(
-                session_id, persisted_user_query, context, clear_history
+                session_id,
+                persisted_user_query,
+                context,
+                clear_history and history_mode != "observe_only",
             )
 
             # Mark this session as mid-run so the self-evolution idle scan does
@@ -1297,6 +1321,18 @@ class AgentBridge:
                     cancel_event=cancel_event,
                     context=context,
                 )
+                run_stream_executor = getattr(agent, "stream_executor", None)
+                if history_mode == "observe_only":
+                    if persisted_user_query != query:
+                        self._sanitize_wechat_group_runtime_messages(
+                            agent,
+                            query,
+                            persisted_user_query,
+                        )
+                    observed_messages = self._build_observed_exchange(
+                        persisted_user_query,
+                        response,
+                    )
             finally:
                 # Clear the mid-run flag so idle scans can review this session.
                 try:
@@ -1321,19 +1357,33 @@ class AgentBridge:
                     except Exception:
                         pass
 
+                if history_mode == "observe_only" and history_snapshot is not None:
+                    self._restore_agent_history_snapshot(agent, history_snapshot)
+                    history_snapshot_restored = True
+
             # Persist new messages generated during this run
             if session_id:
                 channel_type = (context.get("channel_type") or "") if context else ""
-                if persisted_user_query != query:
+                if history_mode == "observe_only":
+                    self._persist_observe_only_assistant(
+                        session_id,
+                        response,
+                        context,
+                    )
+                elif persisted_user_query != query:
                     self._sanitize_wechat_group_runtime_messages(agent, query, persisted_user_query)
-                new_messages = list(getattr(agent, '_last_run_new_messages', []))
+                new_messages = (
+                    []
+                    if history_mode == "observe_only"
+                    else list(getattr(agent, '_last_run_new_messages', []))
+                )
                 # The leading user turn was already persisted eagerly above;
                 # drop it here so it isn't stored twice.
                 if pre_persisted and new_messages and new_messages[0].get("role") == "user":
                     new_messages = new_messages[1:]
                 if new_messages:
                     self._persist_messages(session_id, list(new_messages), channel_type)
-                elif hasattr(agent, "messages") and hasattr(agent, "messages_lock"):
+                elif history_mode != "observe_only" and hasattr(agent, "messages") and hasattr(agent, "messages_lock"):
                     with agent.messages_lock:
                         msg_count = len(agent.messages)
                     if msg_count == 0:
@@ -1357,7 +1407,14 @@ class AgentBridge:
                     is_group = bool(context.get("isgroup")) if context else False
                     # Only enable proactive push for single chats (group push is
                     # noisy); group sessions still evolve, just without notify.
-                    note_user_turn(agent, channel_type=ch, receiver=(rcv if not is_group else ""))
+                    note_user_turn(
+                        agent,
+                        channel_type=ch,
+                        receiver=(rcv if not is_group else ""),
+                        observed_messages=(observed_messages if history_mode == "observe_only" else None),
+                        stable_room_id=(context.get("wechat_group_stable_room_id") or "") if context else "",
+                        stable_member_id=(context.get("wechat_group_stable_member_id") or "") if context else "",
+                    )
                 except Exception:
                     pass
 
@@ -1368,15 +1425,16 @@ class AgentBridge:
             self._schedule_mcp_hot_reload(agent)
 
             # Check if there are files to send (from send/read tool)
-            if hasattr(agent, 'stream_executor') and hasattr(agent.stream_executor, 'files_to_send'):
-                files_to_send = agent.stream_executor.files_to_send
+            active_executor = run_stream_executor or getattr(agent, "stream_executor", None)
+            if active_executor is not None and hasattr(active_executor, 'files_to_send'):
+                files_to_send = active_executor.files_to_send
                 if files_to_send:
                     # Send the first file (for now, handle one file at a time)
                     file_info = files_to_send[0]
                     logger.info(f"[AgentBridge] Sending file: {file_info.get('path')}")
                     
                     # Clear files_to_send for next request
-                    agent.stream_executor.files_to_send = []
+                    active_executor.files_to_send = []
                     
                     # Return file reply based on file type
                     return self._create_file_reply(file_info, response, context)
@@ -1387,7 +1445,7 @@ class AgentBridge:
             logger.error(f"Agent reply error: {e}")
             # If the agent cleared its messages due to format error / overflow,
             # also purge the DB so the next request starts clean.
-            if session_id and agent:
+            if session_id and agent and history_mode != "observe_only":
                 try:
                     if hasattr(agent, "messages") and hasattr(agent, "messages_lock"):
                         with agent.messages_lock:
@@ -1405,6 +1463,16 @@ class AgentBridge:
                 except Exception:
                     pass
             return Reply(ReplyType.ERROR, f"Agent error: {str(e)}")
+        finally:
+            if (
+                history_mode == "observe_only"
+                and history_snapshot is not None
+                and not history_snapshot_restored
+                and agent is not None
+            ):
+                self._restore_agent_history_snapshot(agent, history_snapshot)
+            if execution_lock_acquired and execution_lock is not None:
+                execution_lock.release()
 
     def _create_wechat_group_memory_tools(self, agent, context: Context = None):
         if not context or context.get("channel_type") != "wechat_group":
@@ -1624,6 +1692,127 @@ class AgentBridge:
             except Exception as e:
                 logger.warning(f"[AgentBridge] Failed to sync API keys: {e}")
     
+    @staticmethod
+    def _resolve_agent_history_mode(context: Context) -> str:
+        if not context or context.get("channel_type") != const.WECHAT_GROUP:
+            return "interactive_session"
+        mode = str(context.get("wechat_group_agent_history_mode") or "").strip()
+        if mode in {"fresh", "interactive_session", "observe_only"}:
+            return mode
+        return "interactive_session"
+
+    @staticmethod
+    def _prepare_agent_history_for_mode(agent, history_mode: str):
+        if history_mode not in {"fresh", "observe_only"}:
+            return None
+        snapshot = None
+        if history_mode == "observe_only":
+            with agent.messages_lock:
+                snapshot = {
+                    "messages": copy.deepcopy(list(agent.messages)),
+                    "last_run_new_messages": copy.deepcopy(
+                        list(getattr(agent, "_last_run_new_messages", []) or [])
+                    ),
+                    "stream_executor": getattr(agent, "stream_executor", None),
+                }
+                agent.messages = []
+                agent._last_run_new_messages = []
+            return snapshot
+        with agent.messages_lock:
+            agent.messages = []
+            agent._last_run_new_messages = []
+        return None
+
+    @staticmethod
+    def _restore_agent_history_snapshot(agent, snapshot) -> None:
+        if not agent or not isinstance(snapshot, dict):
+            return
+        with agent.messages_lock:
+            agent.messages = copy.deepcopy(list(snapshot.get("messages") or []))
+            agent._last_run_new_messages = copy.deepcopy(
+                list(snapshot.get("last_run_new_messages") or [])
+            )
+            previous_executor = snapshot.get("stream_executor")
+            if previous_executor is None:
+                try:
+                    delattr(agent, "stream_executor")
+                except AttributeError:
+                    pass
+            else:
+                agent.stream_executor = previous_executor
+
+    @staticmethod
+    def _history_visibility_extras(context: Context, visibility: str) -> dict:
+        if visibility != "observe_only":
+            return {}
+        extras = {
+            "history_visibility": "observe_only",
+            "channel_type": const.WECHAT_GROUP,
+        }
+        if context:
+            room_id = str(context.get("wechat_group_stable_room_id") or "").strip()
+            member_id = str(context.get("wechat_group_stable_member_id") or "").strip()
+            if room_id:
+                extras["stable_room_id"] = room_id
+            if member_id:
+                extras["stable_member_id"] = member_id
+        return extras
+
+    @staticmethod
+    def _build_observed_exchange(user_text: str, assistant_text: str) -> list:
+        messages = []
+        if str(user_text or "").strip():
+            messages.append({
+                "role": "user",
+                "content": [{"type": "text", "text": str(user_text)}],
+            })
+        if str(assistant_text or "").strip():
+            messages.append({
+                "role": "assistant",
+                "content": [{"type": "text", "text": str(assistant_text)}],
+            })
+        return messages
+
+    def _start_fresh_persistent_context(self, session_id: str, context: Context) -> None:
+        if not session_id or not context or context.get("channel_type") != const.WECHAT_GROUP:
+            return
+        try:
+            if not conf().get("conversation_persistence", True):
+                return
+            from agent.memory import get_conversation_store
+            get_conversation_store().clear_context(session_id)
+        except Exception as e:
+            logger.warning(
+                f"[AgentBridge] Failed to start fresh context for session={session_id}: {e}"
+            )
+
+    def _persist_observe_only_assistant(
+        self,
+        session_id: str,
+        response: str,
+        context: Context,
+    ) -> None:
+        if not session_id or not str(response or "").strip():
+            return
+        try:
+            if not conf().get("conversation_persistence", True):
+                return
+            from agent.memory import get_conversation_store
+            extras = self._history_visibility_extras(context, "observe_only")
+            get_conversation_store().append_messages(
+                session_id,
+                [{
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": str(response)}],
+                    "extras": extras,
+                }],
+                channel_type=(context.get("channel_type") or "") if context else "",
+            )
+        except Exception as e:
+            logger.warning(
+                f"[AgentBridge] Failed to persist observe-only assistant for session={session_id}: {e}"
+            )
+
     def _pre_persist_user_message(
         self, session_id: str, query: str, context: Context, clear_history: bool
     ) -> bool:
@@ -1658,6 +1847,11 @@ class AgentBridge:
                 "role": "user",
                 "content": [{"type": "text", "text": query}],
             }
+            if self._resolve_agent_history_mode(context) == "observe_only":
+                user_msg["extras"] = self._history_visibility_extras(
+                    context,
+                    "observe_only",
+                )
             store.append_messages(session_id, [user_msg], channel_type=channel_type)
             return True
         except Exception as e:

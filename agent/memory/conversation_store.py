@@ -110,6 +110,19 @@ def _extract_display_text(content: Any) -> str:
     return ""
 
 
+def _message_history_visibility(raw_extras: Any) -> str:
+    if isinstance(raw_extras, dict):
+        extras = raw_extras
+    else:
+        try:
+            extras = json.loads(raw_extras) if raw_extras else {}
+        except Exception:
+            extras = {}
+    if not isinstance(extras, dict):
+        return ""
+    return str(extras.get("history_visibility") or "").strip()
+
+
 # Internal markers written into the session for the agent's own bookkeeping
 # (scheduler injection / self-evolution undo). They must stay in the stored
 # content (the LLM reads them, e.g. to find a backup_id for undo) but should
@@ -362,6 +375,7 @@ class ConversationStore:
         self,
         session_id: str,
         max_turns: int = 30,
+        include_observe_only: bool = False,
     ) -> List[Dict[str, Any]]:
         """
         Load the most recent messages for a session, for injection into the LLM.
@@ -376,6 +390,8 @@ class ConversationStore:
         Args:
             session_id: Unique session identifier.
             max_turns: Maximum number of visible user-assistant turns to keep.
+            include_observe_only: Include audit-only turns that must not be
+                restored into normal model context. Defaults to False.
 
         Returns:
             Chronologically ordered list of message dicts (role, content).
@@ -392,7 +408,7 @@ class ConversationStore:
 
                 rows = conn.execute(
                     """
-                    SELECT seq, role, content
+                    SELECT seq, role, content, extras
                     FROM messages
                     WHERE session_id = ? AND seq >= ?
                     ORDER BY seq DESC
@@ -405,8 +421,14 @@ class ConversationStore:
         if not rows:
             return []
 
+        if not include_observe_only:
+            rows = [
+                row for row in rows
+                if _message_history_visibility(row[3]) != "observe_only"
+            ]
+
         visible_turn_seqs: List[int] = []
-        for seq, role, raw_content in rows:
+        for seq, role, raw_content, _extras in rows:
             if role != "user":
                 continue
             try:
@@ -422,7 +444,7 @@ class ConversationStore:
             cutoff_seq = visible_turn_seqs[max_turns - 1]
 
         result = []
-        for seq, role, raw_content in reversed(rows):
+        for seq, role, raw_content, _extras in reversed(rows):
             if cutoff_seq is not None and seq < cutoff_seq:
                 continue
             try:

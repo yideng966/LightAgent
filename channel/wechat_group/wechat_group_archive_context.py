@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List
 
-from channel.wechat_group.wechat_group_context import build_safe_wechat_group_context_lines
+from channel.wechat_group.wechat_group_context import (
+    build_safe_wechat_group_context_lines,
+    is_wechat_group_transport_payload,
+    sanitize_wechat_group_prompt_text,
+)
 from channel.wechat_group.wechat_group_transport import project_wechat_message_type
 
 
@@ -71,11 +75,16 @@ def build_local_extractive_summary_block(
             continue
         if project_wechat_message_type(row.get("message_type") or "text", row.get("text")) != "text":
             continue
-        text = str(row.get("text") or "").strip()
+        if is_wechat_group_transport_payload(row.get("text")):
+            continue
+        text = sanitize_wechat_group_prompt_text(row.get("text"), 160)
         if not text:
             continue
-        sender = str(row.get("sender_nickname") or row.get("sender_id") or "unknown").strip()
-        lines.append("{}: {}".format(sender, " ".join(text.split())))
+        sender = sanitize_wechat_group_prompt_text(
+            row.get("sender_nickname") or "unknown",
+            80,
+        )
+        lines.append("{}: {}".format(sender or "unknown", text))
     if not lines:
         return ""
     return "<local-extractive-summary>\n{}\n</local-extractive-summary>".format(

@@ -2077,6 +2077,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_activity_level"] = "normal"
+        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient())
         channel.produce = Mock()
         channel.free_reply_worker = Mock()
@@ -2095,6 +2096,60 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         channel.free_reply_worker.submit.assert_called_once()
         channel.produce.assert_not_called()
+
+    def test_likely_human_followup_is_suppressed_before_worker_without_scorer(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_scorer_enabled"] = False
+        conf()["wechat_group_emotion_enabled"] = False
+        archive = Mock(spec=WechatGroupArchive)
+        archive.get_recent_messages.return_value = [{
+            "message_id": "previous",
+            "stable_member_id": "wgm_bob",
+            "sender_id": "wxid_bob",
+            "sender_nickname": "Bob",
+            "text": "我弄好了~",
+            "created_at": 990,
+            "is_bot": False,
+        }]
+        archive.get_recent_conversation_messages.return_value = list(
+            archive.get_recent_messages.return_value
+        )
+        channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="有用吗",
+            text="有用吗",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            message_type="text",
+            media_path="",
+            my_msg=False,
+            create_time=1000,
+            msg_id="current",
+        )
+
+        should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
+
+        self.assertFalse(should_enqueue)
+        self.assertIn("likely_human_followup", decision["suppressions"])
+        archive.get_recent_conversation_messages.assert_called_once_with(
+            "room@@abc",
+            limit=18,
+            minutes=120,
+            now=1000,
+        )
 
     def test_free_reply_burst_keeps_latest_candidate_before_cooldown(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
@@ -2295,7 +2350,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         )
         archive.get_recent_conversation_messages.assert_called_once_with(
             "room@@abc",
-            limit=12,
+            limit=18,
             minutes=120,
             now=1005,
         )

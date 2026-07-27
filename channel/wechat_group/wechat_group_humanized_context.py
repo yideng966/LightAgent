@@ -28,6 +28,10 @@ from channel.wechat_group.wechat_group_reply_policy import (
 from config import conf
 
 
+WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT = 12
+WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES = 30
+
+
 def _scope_text(value) -> str:
     if not isinstance(value, str):
         return ""
@@ -67,10 +71,12 @@ class WechatGroupHumanizedContextBuilder:
         trigger_source: str = "",
         include_quote: bool = True,
         reply_mode: str = "",
+        is_free_reply: bool = False,
     ) -> WechatGroupHumanizedContextResult:
         text = str(user_content or "").strip()
         source = trigger_source or self.channel._infer_multimodal_trigger_source(msg)
         include_history = should_include_contextual_history(text, source)
+        ambient_free_reply = bool(is_free_reply)
         room_scope = _stable_room_scope(msg)
         member_scope = _stable_member_scope(msg)
         metadata: Dict[str, Any] = {
@@ -103,7 +109,7 @@ class WechatGroupHumanizedContextBuilder:
                 metadata["wechat_group_persona_preset_id"] = persona["preset_id"]
                 blocks.append(block)
 
-        if include_history and conf().get("wechat_group_archive_evidence_enabled", True):
+        if include_history and not ambient_free_reply and conf().get("wechat_group_archive_evidence_enabled", True):
             evidence_block = build_archive_evidence_block(
                 self.channel.archive,
                 room_id=room_scope,
@@ -118,7 +124,7 @@ class WechatGroupHumanizedContextBuilder:
                 metadata["wechat_group_archive_evidence_injected"] = True
                 blocks.append(evidence_block)
 
-        if include_history and conf().get("wechat_group_local_summary_enabled", True):
+        if include_history and not ambient_free_reply and conf().get("wechat_group_local_summary_enabled", True):
             summary_block = build_local_extractive_summary_block(
                 self.channel.archive,
                 room_id=room_scope,
@@ -131,11 +137,16 @@ class WechatGroupHumanizedContextBuilder:
                 metadata["wechat_group_local_summary_injected"] = True
                 blocks.append(summary_block)
 
-        focus = self.channel._resolve_focus_context(msg, text)
+        focus = {} if ambient_free_reply else self.channel._resolve_focus_context(msg, text)
         if focus:
             metadata["wechat_group_focus"] = focus
 
-        recent_block = self._build_recent_context_block(msg, focus, include_history)
+        recent_block = self._build_recent_context_block(
+            msg,
+            focus,
+            include_history,
+            ambient_free_reply=ambient_free_reply,
+        )
         if recent_block:
             metadata["wechat_group_recent_context_injected"] = True
             blocks.append(recent_block)
@@ -189,14 +200,36 @@ class WechatGroupHumanizedContextBuilder:
         content = "{}\n\n{}".format("\n\n".join([block for block in blocks if block]), text).strip() if blocks else text
         return WechatGroupHumanizedContextResult(content=content, metadata=metadata)
 
-    def _build_recent_context_block(self, msg, focus: Dict[str, Any], include_history: bool) -> str:
+    def _build_recent_context_block(
+        self,
+        msg,
+        focus: Dict[str, Any],
+        include_history: bool,
+        ambient_free_reply: bool = False,
+    ) -> str:
         if not conf().get("wechat_group_recent_context_enabled", True):
             return ""
         if not include_history and not (focus and focus.get("messages")):
             return ""
         rows = []
         used_focus_rows = False
-        if focus and focus.get("messages"):
+        if ambient_free_reply:
+            getter = getattr(self.channel.archive, "get_recent_conversation_messages", None)
+            if callable(getter):
+                rows = getter(
+                    _stable_room_scope(msg),
+                    limit=WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT,
+                    minutes=WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES,
+                    now=msg.create_time,
+                )
+            else:
+                rows = self.channel.archive.get_recent_messages(
+                    _stable_room_scope(msg),
+                    limit=WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT,
+                    minutes=WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES,
+                    now=msg.create_time,
+                )
+        elif focus and focus.get("messages"):
             rows = list(focus.get("messages") or [])
             used_focus_rows = True
         elif include_history:

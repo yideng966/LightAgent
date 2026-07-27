@@ -403,12 +403,12 @@ class WechatGroupArchive:
                 )
                   AND created_at >= ?
                   AND created_at <= ?
-                ORDER BY created_at ASC, id ASC
+                ORDER BY created_at DESC, id DESC
                 LIMIT ?
                 """,
                 (str(room_id), str(room_id), since, until, max_limit),
             ).fetchall()
-        return [self._message_row_to_dict(row) for row in rows]
+        return [self._message_row_to_dict(row) for row in reversed(rows)]
 
     def get_messages_after_row_id(
         self,

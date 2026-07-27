@@ -12,6 +12,7 @@ from channel.wechat_group.wechat_group_free_reply import (
     is_contextual_short_question,
 )
 from channel.wechat_group.wechat_group_free_reply_judge import build_free_reply_judge_prompt
+from channel.wechat_group.wechat_group_channel import select_wechat_group_agent_history_mode
 
 
 class WechatGroupFreeReplyConfigTest(unittest.TestCase):
@@ -188,7 +189,97 @@ class WechatGroupFreeReplyDecisionTest(unittest.TestCase):
         self.assertIn("group_question", decision["reasons"])
         self.assertIn("bot_capability_match", decision["reasons"])
 
-    def test_short_group_question_with_recent_context_triggers_at_active_level(self):
+    def test_generic_question_does_not_gain_unanswered_score_from_message_count(self):
+        decision = evaluate_wechat_group_free_reply(
+            self.enabled_cfg(),
+            room_id="room@@abc",
+            room_name="测试群",
+            sender_id="wxid_alice",
+            sender_name="Alice",
+            text="有用吗",
+            recent_messages=[
+                {"sender_id": "wxid_bob", "sender_nickname": "Bob", "text": "我弄好了~", "created_at": 990},
+                {"sender_id": "wxid_carol", "sender_nickname": "Carol", "text": "看起来不错", "created_at": 995},
+            ],
+            state={},
+            now=1000,
+        )
+
+        self.assertIn("group_question", decision["reasons"])
+        self.assertNotIn("unanswered_question", decision["reasons"])
+        self.assertEqual(30, decision["score"])
+
+    def test_explicit_open_group_question_can_gain_unanswered_score(self):
+        decision = evaluate_wechat_group_free_reply(
+            self.enabled_cfg(),
+            room_id="room@@abc",
+            room_name="测试群",
+            sender_id="wxid_alice",
+            sender_name="Alice",
+            text="大家觉得这个有用吗",
+            recent_messages=[
+                {"sender_id": "wxid_bob", "sender_nickname": "Bob", "text": "我弄好了~", "created_at": 990},
+            ],
+            state={},
+            now=1000,
+        )
+
+        self.assertIn("group_question", decision["reasons"])
+        self.assertIn("unanswered_question", decision["reasons"])
+
+    def test_short_question_after_another_member_is_hard_suppressed(self):
+        decision = evaluate_wechat_group_free_reply(
+            self.enabled_cfg(),
+            room_id="room@@abc",
+            room_name="测试群",
+            sender_id="wxid_alice",
+            sender_name="Alice",
+            text="有用吗",
+            recent_messages=[
+                {
+                    "message_id": "previous",
+                    "stable_member_id": "wgm_bob",
+                    "sender_id": "wxid_bob",
+                    "sender_nickname": "Bob",
+                    "text": "我弄好了~",
+                    "created_at": 990,
+                    "is_bot": False,
+                }
+            ],
+            state={},
+            now=1000,
+            bot_names=["LightBot", "小灯"],
+        )
+
+        self.assertFalse(decision["triggered"])
+        self.assertIn("likely_human_followup", decision["suppressions"])
+        self.assertEqual("human", decision["addressee"]["target_kind"])
+
+    def test_capability_nouns_do_not_by_themselves_target_the_bot(self):
+        decision = evaluate_wechat_group_free_reply(
+            self.enabled_cfg(),
+            room_id="room@@abc",
+            room_name="测试群",
+            sender_id="wxid_alice",
+            sender_name="Alice",
+            text="这个链接有用吗",
+            recent_messages=[{
+                "message_id": "previous",
+                "sender_id": "wxid_bob",
+                "sender_nickname": "Bob",
+                "text": "我把链接整理好了",
+                "created_at": 990,
+            }],
+            state={},
+            now=1000,
+            current_message_id="current",
+            bot_names=["LightBot", "小灯"],
+        )
+
+        self.assertIn("likely_human_followup", decision["suppressions"])
+        self.assertNotIn("explicit_bot_target", decision["addressee"]["evidence_codes"])
+
+    def test_short_group_question_does_not_infer_unanswered_from_recent_context(self):
         cfg = self.enabled_cfg()
         cfg["activity_level"] = "active"
 
@@ -207,10 +298,10 @@ class WechatGroupFreeReplyDecisionTest(unittest.TestCase):
             now=100000,
         )
 
-        self.assertTrue(decision["triggered"])
-        self.assertGreaterEqual(decision["score"], decision["threshold"])
+        self.assertFalse(decision["triggered"])
+        self.assertLess(decision["score"], decision["threshold"])
         self.assertIn("group_question", decision["reasons"])
-        self.assertIn("unanswered_question", decision["reasons"])
+        self.assertNotIn("unanswered_question", decision["reasons"])
 
     def test_ai_opinion_matches_ai_case_insensitively(self):
         cfg = self.enabled_cfg()
@@ -864,6 +955,89 @@ class WechatGroupFreeReplyJudgePromptTest(unittest.TestCase):
         self.assertIn("玩梗", prompt)
         self.assertIn("表情包", prompt)
         self.assertIn("纯表情或纯笑声", prompt)
+
+    def test_prompt_uses_safe_nearby_timeline_without_internal_ids_or_payloads(self):
+        prompt = build_free_reply_judge_prompt({
+            "room_name": "测试群",
+            "sender_id": "wgm_alice_secret",
+            "runtime_sender_id": "wxid_alice_secret",
+            "text": "有用吗",
+            "msg": type("Msg", (), {
+                "msg_id": "current-secret-id",
+                "create_time": 1000,
+                "to_user_id": "wxid_bot_secret",
+            })(),
+            "recent_messages": [{
+                "message_id": "previous-secret-id",
+                "stable_member_id": "wgm_bob_secret",
+                "sender_id": "wxid_bob_secret",
+                "sender_nickname": "Bob",
+                "text": '<?xml version="1.0"?><msg><appmsg><aeskey>secret</aeskey></appmsg></msg>',
+                "created_at": 990,
+            }],
+            "local_decision": {
+                "score": 30,
+                "threshold": 50,
+                "reasons": ["group_question"],
+                "suppressions": [],
+                "addressee": {"target_kind": "unknown"},
+            },
+        })
+
+        self.assertIn("安全近场上下文", prompt)
+        self.assertIn("CURRENT_MESSAGE", prompt)
+        self.assertIn("短问句自然承接上一名群友", prompt)
+        for fragment in (
+            "wgm_alice_secret",
+            "wxid_alice_secret",
+            "wgm_bob_secret",
+            "previous-secret-id",
+            "<appmsg>",
+            "<aeskey>",
+        ):
+            self.assertNotIn(fragment, prompt)
+
+
+class WechatGroupAgentHistoryModeTest(unittest.TestCase):
+    def test_ambient_group_reply_is_observe_only(self):
+        mode = select_wechat_group_agent_history_mode(
+            "free_reply",
+            "大家觉得这个有用吗",
+            is_free_reply=True,
+            local_decision={"addressee": {"target_kind": "group"}},
+            llm_decision={"target": "group", "is_followup_to_bot": False},
+        )
+        self.assertEqual("observe_only", mode)
+
+    def test_explicit_bot_target_uses_fresh_or_interactive(self):
+        fresh = select_wechat_group_agent_history_mode(
+            "free_reply",
+            "小灯，2+2 等于几",
+            is_free_reply=True,
+            llm_decision={"target": "bot", "is_followup_to_bot": False},
+        )
+        interactive = select_wechat_group_agent_history_mode(
+            "free_reply",
+            "继续刚才你说的",
+            is_free_reply=True,
+            llm_decision={"target": "bot", "is_followup_to_bot": True},
+        )
+        self.assertEqual("fresh", fresh)
+        self.assertEqual("interactive_session", interactive)
+
+    def test_direct_reply_is_fresh_unless_it_explicitly_continues_bot(self):
+        self.assertEqual(
+            "fresh",
+            select_wechat_group_agent_history_mode("direct_reply", "2+2 等于几"),
+        )
+        self.assertEqual(
+            "interactive_session",
+            select_wechat_group_agent_history_mode("direct_reply", "继续刚才你说的"),
+        )
+        self.assertEqual(
+            "interactive_session",
+            select_wechat_group_agent_history_mode("quote_self", "有用吗"),
+        )
 
 
 if __name__ == "__main__":

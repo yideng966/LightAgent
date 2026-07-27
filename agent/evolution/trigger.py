@@ -53,7 +53,14 @@ def _context_pressure_reached(agent) -> bool:
         return False
 
 
-def note_user_turn(agent, channel_type: str = "", receiver: str = "") -> None:
+def note_user_turn(
+    agent,
+    channel_type: str = "",
+    receiver: str = "",
+    observed_messages=None,
+    stable_room_id: str = "",
+    stable_member_id: str = "",
+) -> None:
     """Record activity for a session's agent. Called once per real user turn.
 
     Maintains, on the agent instance:
@@ -69,8 +76,49 @@ def note_user_turn(agent, channel_type: str = "", receiver: str = "") -> None:
             agent._evo_channel_type = channel_type
         if receiver:
             agent._evo_receiver = receiver
+        if observed_messages:
+            lock = getattr(agent, "_evo_observed_lock", None)
+            if lock is None:
+                lock = threading.RLock()
+                agent._evo_observed_lock = lock
+            safe_messages = _sanitize_observed_messages(observed_messages)
+            if safe_messages:
+                with lock:
+                    buffer = list(getattr(agent, "_evo_observed_messages", []) or [])
+                    buffer.extend(safe_messages)
+                    agent._evo_observed_messages = buffer[-200:]
+                    agent._evo_observed_scope = {
+                        "stable_room_id": str(stable_room_id or ""),
+                        "stable_member_id": str(stable_member_id or ""),
+                    }
     except Exception:
         pass
+
+
+def _sanitize_observed_messages(messages) -> list:
+    result = []
+    for message in messages or []:
+        if not isinstance(message, dict) or message.get("role") not in ("user", "assistant"):
+            continue
+        content = message.get("content")
+        if isinstance(content, str):
+            text = content
+        elif isinstance(content, list):
+            text = "\n".join(
+                str(block.get("text") or "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+        else:
+            text = ""
+        text = str(text or "").strip()
+        if not text:
+            continue
+        result.append({
+            "role": message.get("role"),
+            "content": [{"type": "text", "text": text[:4000]}],
+        })
+    return result
 
 
 def mark_run_active(agent, active: bool) -> None:

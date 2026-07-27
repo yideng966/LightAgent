@@ -48,6 +48,10 @@ class Agent:
         self.last_usage = None  # Store last API response usage info
         self.messages = []  # Unified message history for stream mode
         self.messages_lock = threading.Lock()  # Lock for thread-safe message operations
+        # Serialize complete turns for one session. AgentBridge temporarily
+        # swaps history for fresh/observe-only WeChat runs, so snapshot and
+        # restore must share this lock with ordinary executions.
+        self.execution_lock = threading.RLock()
         self.memory_manager = memory_manager  # Memory manager for auto memory flush
         self.workspace_dir = workspace_dir  # Workspace directory
         self.enable_skills = enable_skills  # Skills enabled flag

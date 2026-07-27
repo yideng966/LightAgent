@@ -199,7 +199,11 @@ class WechatGroupFreeReplyScorerPureFunctionTest(unittest.TestCase):
             12,
         )
 
-        self.assertEqual(["old", "CURRENT_MESSAGE"], [item["message_id"] for item in context])
+        self.assertEqual(
+            ["context_001", "CURRENT_MESSAGE"],
+            [item["message_id"] for item in context],
+        )
+        self.assertNotIn("bob", str(context))
 
     def test_prompt_contains_current_message_and_only_decision_instruction(self):
         prompt = build_scorer_prompt(

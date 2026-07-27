@@ -92,6 +92,27 @@ def _build_transcript(messages: List[dict], max_chars: int = 12000) -> str:
     return transcript
 
 
+def _snapshot_observed_messages(agent) -> list:
+    lock = getattr(agent, "_evo_observed_lock", None)
+    if lock is None:
+        return list(getattr(agent, "_evo_observed_messages", []) or [])
+    with lock:
+        return list(getattr(agent, "_evo_observed_messages", []) or [])
+
+
+def _consume_observed_messages(agent, count: int) -> None:
+    if count <= 0:
+        return
+    lock = getattr(agent, "_evo_observed_lock", None)
+    if lock is None:
+        current = list(getattr(agent, "_evo_observed_messages", []) or [])
+        agent._evo_observed_messages = current[count:]
+        return
+    with lock:
+        current = list(getattr(agent, "_evo_observed_messages", []) or [])
+        agent._evo_observed_messages = current[count:]
+
+
 def _extract_text(content) -> str:
     if isinstance(content, str):
         return content
@@ -344,7 +365,9 @@ def run_evolution_for_session(
         done = int(getattr(agent, "_evo_done_msg_count", 0))
         if done > total_msgs:
             done = 0  # history was trimmed/reset; start fresh
-        new_messages = all_messages[done:]
+        observed_messages = _snapshot_observed_messages(agent)
+        observed_count = len(observed_messages)
+        new_messages = all_messages[done:] + observed_messages
         transcript = _build_transcript(new_messages)
         if not transcript.strip():
             # Routine no-op: the per-minute scan hits every idle session. Advance
@@ -452,6 +475,7 @@ def run_evolution_for_session(
         # that STARTS with [SILENT] means the model chose to stay quiet.
         if not result or result.startswith(SILENT_TOKEN):
             logger.info(f"[Evolution] ✗ No change for session={session_id} ([SILENT])")
+            _consume_observed_messages(agent, observed_count)
             return False
 
         # Anti-nag backstop: if the model wrote a summary but actually changed no
@@ -461,6 +485,7 @@ def run_evolution_for_session(
                 f"[Evolution] ✗ session={session_id}: text produced but no file "
                 f"changed — staying silent"
             )
+            _consume_observed_messages(agent, observed_count)
             return False
 
         # The model produced a real summary. Strip any stray [SILENT] tokens it
@@ -468,6 +493,7 @@ def run_evolution_for_session(
         result = result.replace(SILENT_TOKEN, "").strip()
         if not result:
             logger.info(f"[Evolution] ✗ No change for session={session_id} ([SILENT])")
+            _consume_observed_messages(agent, observed_count)
             return False
 
         logger.info(f"[Evolution] ✓ session={session_id} evolved:\n{result}")
@@ -489,6 +515,7 @@ def run_evolution_for_session(
         if channel_type and receiver:
             _notify_user(channel_type, receiver, result)
 
+        _consume_observed_messages(agent, observed_count)
         return True
 
     except Exception as e:

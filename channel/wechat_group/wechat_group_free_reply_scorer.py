@@ -11,6 +11,9 @@ from typing import Any
 from bridge.bridge import Bridge
 from common.log import logger
 from config import conf
+from channel.wechat_group.wechat_group_free_reply_context import (
+    build_safe_free_reply_timeline,
+)
 
 
 _SCORER_ACTIONS = {"reply", "soft_reply", "ignore"}
@@ -59,66 +62,11 @@ def _safe_timestamp(value):
 
 def normalize_scorer_context(current_fields, recent_messages, limit) -> list:
     """Return a safe oldest-to-newest transcript ending in CURRENT_MESSAGE."""
-    current_fields = current_fields if isinstance(current_fields, dict) else {}
-    try:
-        limit = min(max(int(limit), 1), 50)
-    except (TypeError, ValueError):
-        limit = 12
-
-    bot_ids = {
-        str(value or "").strip()
-        for value in (
-            _field(current_fields, "bot_sender_id"),
-            _field(current_fields, "runtime_bot_sender_id"),
-            _field(current_fields, "bot_id"),
-        )
-        if str(value or "").strip()
-    }
-    current_message_id = str(_field(current_fields, "message_id", "msg_id") or "").strip()
-    normalized = []
-    for raw in recent_messages or []:
-        if not isinstance(raw, dict):
-            continue
-        message_id = str(_field(raw, "message_id", "msg_id", "id") or "").strip()
-        if current_message_id and message_id == current_message_id:
-            continue
-        sender_id = str(_field(raw, "sender_id", "actual_user_id") or "").strip()
-        normalized.append(
-            {
-                "message_id": message_id,
-                "timestamp": _safe_timestamp(
-                    _field(raw, "timestamp", "created_at", "create_time")
-                ),
-                "sender_id": sender_id,
-                "sender_name": _safe_text(
-                    _field(raw, "sender_name", "sender_nickname", "actual_user_nickname"),
-                    limit=120,
-                ),
-                "is_bot": bool(raw.get("is_bot") is True or sender_id in bot_ids),
-                "text": _safe_text(_field(raw, "text", "content")),
-            }
-        )
-
-    current_sender_id = str(_field(current_fields, "sender_id", "runtime_sender_id") or "").strip()
-    normalized.append(
-        {
-            "message_id": "CURRENT_MESSAGE",
-            "timestamp": _safe_timestamp(
-                _field(
-                    current_fields,
-                    "timestamp",
-                    "created_at",
-                    "create_time",
-                    default=time.time(),
-                )
-            ),
-            "sender_id": current_sender_id,
-            "sender_name": _safe_text(_field(current_fields, "sender_name", "sender_nickname"), limit=120),
-            "is_bot": current_sender_id in bot_ids if bot_ids else False,
-            "text": _safe_text(_field(current_fields, "text", "content")),
-        }
+    return build_safe_free_reply_timeline(
+        current_fields if isinstance(current_fields, dict) else {},
+        recent_messages or [],
+        limit=limit,
     )
-    return normalized[-limit:]
 
 
 def _normalize_group_size(value) -> int:
@@ -416,6 +364,8 @@ class WechatGroupFreeReplyScorer:
             "bot_sender_id": getattr(msg, "stable_self_id", "") if msg is not None else "",
             "runtime_bot_sender_id": getattr(msg, "to_user_id", "") if msg is not None else "",
             "text": task.get("text") or "",
+            "is_at": getattr(msg, "is_at", False) is True if msg is not None else False,
+            "is_quote_self": getattr(msg, "is_quote_self", False) is True if msg is not None else False,
         }
         messages = normalize_scorer_context(
             current_fields,
@@ -434,6 +384,7 @@ class WechatGroupFreeReplyScorer:
                     "threshold": local.get("threshold", 0),
                     "reasons": list(local.get("reasons") or []),
                     "suppressions": list(local.get("suppressions") or []),
+                    "addressee": dict(local.get("addressee") or {}),
                 },
             }
         )

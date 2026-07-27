@@ -5,6 +5,10 @@ import re
 import time
 
 from config import conf
+from channel.wechat_group.wechat_group_free_reply_context import (
+    analyze_free_reply_addressee,
+    is_explicit_open_group_question,
+)
 
 
 FREE_REPLY_ACTIVITY_LEVELS = ["quiet", "normal", "active", "crazy"]
@@ -42,6 +46,7 @@ NEGATIVE_RULES = [
     {"id": "sensitive_or_dangerous", "score": "-", "label": "Sensitive, private or dangerous request", "label_zh": "敏感、隐私或危险请求"},
     {"id": "image_generation_failure_discussion", "score": "-", "label": "Image generation failure discussion should not trigger free reply", "label_zh": "生图失败讨论不触发自由回复"},
     {"id": "image_context_unavailable", "score": "-", "label": "Image-related question has no free-reply image context", "label_zh": "图片相关追问缺少自由回复图片上下文"},
+    {"id": "likely_human_followup", "score": "-", "label": "Likely continuation between group members", "label_zh": "疑似群友间连续对话"},
     {"id": "min_interval", "score": "-", "label": "Room cooldown is active", "label_zh": "当前群冷却时间未结束"},
     {"id": "hourly_limit", "score": "-", "label": "Hourly limit reached", "label_zh": "已达到每小时回复上限"},
     {"id": "consecutive_limit", "score": "-", "label": "Consecutive reply limit reached", "label_zh": "已达到连续发言上限"},
@@ -562,6 +567,9 @@ def evaluate_wechat_group_free_reply(
     bot_names=None,
     message_type=None,
     allow_media_payload=False,
+    current_message_id="",
+    is_at=False,
+    is_quote_self=False,
 ) -> dict:
     now = time.time() if now is None else now
     state = state or {}
@@ -575,6 +583,19 @@ def evaluate_wechat_group_free_reply(
     threshold = int(profile.get("min_score", 50))
     rule_scores = normalize_wechat_group_free_reply_rule_scores(config.get("rule_scores"))
     rule_enabled = normalize_wechat_group_free_reply_rule_enabled(config.get("rule_enabled"))
+    addressee = analyze_free_reply_addressee(
+        {
+            "sender_id": sender_id,
+            "sender_name": sender_name,
+            "text": normalized_text,
+            "created_at": now,
+            "message_id": current_message_id,
+            "is_at": is_at,
+            "is_quote_self": is_quote_self,
+        },
+        recent_messages or [],
+        bot_names=bot_names or [],
+    )
 
     def maybe_suppress(rule_id: str) -> None:
         if _is_suppression_enabled(rule_enabled, rule_id):
@@ -592,7 +613,7 @@ def evaluate_wechat_group_free_reply(
             activity_level=level,
             rule_scores=rule_scores,
         )
-        if "group_question" in reasons and len(recent_messages or []) >= 2:
+        if "group_question" in reasons and is_explicit_open_group_question(normalized_text):
             score += _rule_score_value(rule_scores, "unanswered_question", level)
             reasons.append("unanswered_question")
         if _is_repeater_message(normalized_text, sender_id, sender_name, recent_messages):
@@ -629,6 +650,8 @@ def evaluate_wechat_group_free_reply(
         maybe_suppress("sensitive_or_dangerous")
     if _is_image_generation_failure_discussion(text or ""):
         maybe_suppress("image_generation_failure_discussion")
+    if addressee.get("is_likely_human_followup"):
+        maybe_suppress("likely_human_followup")
     if "repeater_message" in reasons and _repeater_text_cooldown_active(normalized_text, state, now):
         maybe_suppress("repeater_text_cooldown")
 
@@ -665,6 +688,7 @@ def evaluate_wechat_group_free_reply(
         "sender_name": sender_name or "",
         "text_preview": _text_preview(text),
         "timestamp": now,
+        "addressee": addressee,
     }
 
 

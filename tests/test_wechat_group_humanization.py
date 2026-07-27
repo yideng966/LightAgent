@@ -24,6 +24,20 @@ LONG_WECHAT_IMAGE_TRANSPORT_XML = """<?xml version="1.0"?>
 </msg>
 """.format("a" * 240)
 
+LONG_WPS_APP_TRANSPORT_XML = """<?xml version="1.0"?>
+<msg>
+  <appmsg appid="wx-test" sdkver="0">
+    <title>WPS 文档</title>
+    <type>6</type>
+    <appattach>
+      <cdnattachurl>{}</cdnattachurl>
+      <aeskey>top-secret-aes-key</aeskey>
+      <fileext>docx</fileext>
+    </appattach>
+  </appmsg>
+</msg>
+""".format("A" * 240)
+
 
 class WechatGroupHumanizationArchiveTest(unittest.TestCase):
     def setUp(self):
@@ -93,6 +107,49 @@ class WechatGroupHumanizationArchiveTest(unittest.TestCase):
         self.assertEqual("room@@runtime", exact["runtime_room_id"])
         self.assertEqual("wgm_alice", exact["stable_member_id"])
         self.assertEqual("wxid_runtime", exact["runtime_sender_id"])
+
+    def test_distill_returns_latest_limit_in_chronological_order(self):
+        for index in range(150):
+            self._record(
+                "message-{:03d}".format(index),
+                text="message {}".format(index),
+                ts=1000 + index,
+            )
+
+        rows = self.archive.get_messages_for_distill(
+            "room@@a",
+            since_ts=1000,
+            until_ts=1200,
+            limit=100,
+        )
+
+        self.assertEqual(100, len(rows))
+        self.assertEqual("message-050", rows[0]["message_id"])
+        self.assertEqual("message-149", rows[-1]["message_id"])
+        self.assertEqual(
+            sorted(row["created_at"] for row in rows),
+            [row["created_at"] for row in rows],
+        )
+
+    def test_distill_honors_until_timestamp_when_newer_rows_exist(self):
+        for index in range(6):
+            self._record(
+                "bounded-{}".format(index),
+                text="bounded {}".format(index),
+                ts=1000 + index,
+            )
+
+        rows = self.archive.get_messages_for_distill(
+            "room@@a",
+            since_ts=900,
+            until_ts=1003,
+            limit=10,
+        )
+
+        self.assertEqual(
+            ["bounded-0", "bounded-1", "bounded-2", "bounded-3"],
+            [row["message_id"] for row in rows],
+        )
 
     def test_summary_archive_context_rejects_other_room_runtime_id_collision(self):
         self.archive.record_message(
@@ -267,6 +324,52 @@ class WechatGroupHumanizationArchiveTest(unittest.TestCase):
             self.assertNotIn(transport_fragment, recent)
             self.assertNotIn(transport_fragment, evidence)
             self.assertNotIn(transport_fragment, summary)
+
+    def test_local_summary_filters_wps_xml_paths_base64_and_sensitive_values(self):
+        self._record(
+            "legacy-wps-app",
+            text=LONG_WPS_APP_TRANSPORT_XML,
+            sender="Alice",
+            ts=950,
+            message_type="text",
+        )
+        self._record(
+            "unsafe-text",
+            text=(
+                "请看 D:/Users/Alice/private/report.docx "
+                "token=super-secret-token {} "
+                "https://example.test/share?access_token=url-secret&download=1"
+            ).format("B" * 160),
+            sender="Bob",
+            ts=960,
+        )
+        self._record(
+            "safe-text",
+            text="发布窗口调整到周五",
+            sender="Carol",
+            ts=970,
+        )
+
+        summary = build_local_extractive_summary_block(
+            self.archive,
+            room_id="room@@a",
+            now=980,
+            hours=1,
+            limit=10,
+        )
+
+        self.assertIn("发布窗口调整到周五", summary)
+        for fragment in (
+            "<appmsg",
+            "cdnattachurl",
+            "aeskey",
+            "top-secret-aes-key",
+            "D:/Users",
+            "super-secret-token",
+            "url-secret",
+            "B" * 80,
+        ):
+            self.assertNotIn(fragment, summary)
 
 
 class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
@@ -547,6 +650,75 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
         self.assertNotIn("<recent-wechat-group-transcript>", result.content)
         self.assertNotIn("<wechat-group-archive-evidence>", result.content)
         self.assertIn("<wechat-group-reply-policy>", result.content)
+
+    def test_free_reply_uses_recent_conversation_only(self):
+        class FakeChannel:
+            def __init__(self, archive):
+                self.archive = archive
+
+            def _resolve_focus_context(self, msg, query):
+                raise AssertionError("free reply must not resolve old focus")
+
+            def _build_focus_context_block(self, focus):
+                return ""
+
+            def _build_memory_context_block(self, msg, query):
+                return ""
+
+            def _build_style_context_block(self, msg):
+                return ""
+
+            def _build_emotion_context_block(self, msg):
+                return ""
+
+            def _build_multimodal_context(self, msg, query, trigger_source, include_quote=True):
+                return {"block": "", "diagnostics": {}, "matched_images": []}
+
+            def _infer_multimodal_trigger_source(self, msg):
+                return "free_reply"
+
+        self.archive.record_message(
+            message_id="old-topic",
+            room_id="room@@a",
+            sender_nickname="Alice",
+            text="旧投屏话题",
+            created_at=1000,
+        )
+        self.archive.record_message(
+            message_id="recent-human",
+            room_id="room@@a",
+            sender_nickname="Bob",
+            text="我弄好了",
+            created_at=3900,
+        )
+        self.archive.record_assistant_reply(
+            room_id="room@@a",
+            room_name="Room",
+            content="刚才机器人真实发出的消息",
+            created_at=3950,
+        )
+        self.archive.record_message(
+            message_id="current",
+            room_id="room@@a",
+            sender_nickname="Alice",
+            text="有用吗",
+            created_at=4000,
+        )
+
+        result = WechatGroupHumanizedContextBuilder(FakeChannel(self.archive)).build(
+            msg=self._msg(text="有用吗", message_id="current", ts=4000, is_at=False),
+            user_content="有用吗",
+            trigger_source="free_reply",
+            is_free_reply=True,
+        )
+
+        self.assertIn("<recent-wechat-group-transcript>", result.content)
+        self.assertIn("我弄好了", result.content)
+        self.assertIn("刚才机器人真实发出的消息", result.content)
+        self.assertNotIn("旧投屏话题", result.content)
+        self.assertNotIn("<wechat-group-archive-evidence>", result.content)
+        self.assertNotIn("<local-extractive-summary>", result.content)
+        self.assertNotIn("<wechat-group-focus>", result.content)
 
     def test_builder_respects_link_policy_switch(self):
         class FakeChannel:
