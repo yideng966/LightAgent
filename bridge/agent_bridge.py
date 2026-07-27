@@ -528,6 +528,9 @@ class TextModelRouter(LLMModel):
         }
         if request.max_tokens is not None:
             kwargs['max_tokens'] = request.max_tokens
+        explicit_temperature = getattr(request, "_explicit_temperature", None)
+        if explicit_temperature is not None:
+            kwargs['temperature'] = explicit_temperature
         request_options = getattr(request, 'request_options', None)
         if not isinstance(request_options, dict):
             request_options = {}
@@ -825,6 +828,7 @@ class TextModelRouter(LLMModel):
         purpose="text",
         system="",
         max_tokens=None,
+        temperature=None,
         model=None,
         provider=None,
         request_options=None,
@@ -838,6 +842,7 @@ class TextModelRouter(LLMModel):
             stream=False,
             request_options=dict(request_options or {}),
         )
+        request._explicit_temperature = temperature
         response = self.call(request, model=model, provider=provider)
         text, success = self._extract_text_response(response)
         logger.debug(
@@ -1075,6 +1080,7 @@ class AgentBridge:
         history_snapshot_restored = False
         run_stream_executor = None
         observed_messages = []
+        memory_route = None
         registry = None
         token_key = None
         try:
@@ -1087,6 +1093,16 @@ class AgentBridge:
             agent = self.get_agent(session_id=session_id)
             if not agent:
                 return Reply(ReplyType.ERROR, "Failed to initialize super agent")
+
+            from agent.memory.routing import resolve_memory_route
+            memory_route = resolve_memory_route(
+                context=context,
+                agent=agent,
+                session_id=session_id or "",
+            )
+            agent._memory_route = memory_route
+            if getattr(agent, "memory_manager", None) is not None:
+                agent.memory_manager._memory_route = memory_route
 
             execution_lock = getattr(agent, "execution_lock", None)
             if execution_lock is None:
@@ -1399,14 +1415,14 @@ class AgentBridge:
             # not count as user activity.
             if session_id and not session_id.startswith("scheduler_") and not (
                 context and context.get("is_scheduled_task")
-            ):
+            ) and (memory_route is None or memory_route.allow_shared_evolution):
                 try:
                     from agent.evolution.trigger import note_user_turn
                     ch = (context.get("channel_type") or "") if context else ""
                     rcv = (context.get("receiver") or "") if context else ""
                     is_group = bool(context.get("isgroup")) if context else False
-                    # Only enable proactive push for single chats (group push is
-                    # noisy); group sessions still evolve, just without notify.
+                    # Only enable proactive push for single chats. WeChat group
+                    # sessions are rejected by MemoryRoute before this point.
                     note_user_turn(
                         agent,
                         channel_type=ch,
@@ -1494,11 +1510,20 @@ class AgentBridge:
             from channel.wechat_group.wechat_group_knowledge_service import WechatGroupKnowledgeService
             from channel.wechat_group.wechat_group_identity_service import WechatGroupIdentityService
             from channel.wechat_group.wechat_group_memory_tools import create_wechat_group_memory_tools
+            from channel.wechat_group.wechat_group_permissions import is_wechat_group_admin
             from channel.wechat_group.wechat_group_profile_service import WechatGroupProfileService
             from channel.wechat_group.wechat_group_sticker_service import WechatGroupStickerService
             from channel.wechat_group.wechat_group_sticker_tools import create_wechat_group_sticker_tools
             from channel.wechat_group.wechat_group_report_tools import create_wechat_group_report_tools
 
+            stable_room_id = str(context.get("wechat_group_stable_room_id") or "").strip()
+            stable_member_id = str(context.get("wechat_group_stable_member_id") or "").strip()
+            allow_memory_write = bool(
+                stable_room_id
+                and stable_member_id
+                and context.get("wechat_group_identity_requires_confirmation") is not True
+                and is_wechat_group_admin(stable_room_id, stable_member_id)
+            )
             return create_wechat_group_memory_tools(
                 knowledge_service=WechatGroupKnowledgeService(),
                 profile_service=WechatGroupProfileService(
@@ -1507,6 +1532,7 @@ class AgentBridge:
                 room_id=room_id,
                 sender_id=sender_id,
                 bot_sender_id=context.get("wechat_group_bot_sender_id") or "",
+                allow_write=allow_memory_write,
             ) + create_wechat_group_sticker_tools(
                 sticker_service=WechatGroupStickerService(),
                 room_id=room_id,
@@ -1526,6 +1552,11 @@ class AgentBridge:
             "- For current group rules, group preferences, historical agreements, "
             "project facts, or recurring decisions, prefer calling "
             "`wechat_group_memory_search` before answering.\n"
+            "- When the current-room administrator explicitly asks to remember or "
+            "disable a group memory, use `wechat_group_memory_write` or "
+            "`wechat_group_memory_disable` when those tools are available.\n"
+            "- Group memory tool scope is bound by the server; never invent or ask "
+            "for another room ID.\n"
             "- For current group member roles, preferences, expertise, interaction "
             "style, boundaries, or profile facts, prefer calling "
             "`wechat_group_profile_get` before answering.\n"

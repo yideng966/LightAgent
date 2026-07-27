@@ -444,8 +444,6 @@ class MemoryFlushManager:
         if not force and dedup_key == self._last_dream_input_hash:
             logger.info("[DeepDream] Already dreamed today with same daily content, skipping")
             return False
-        self._last_dream_input_hash = dedup_key
-
         logger.info(
             f"[DeepDream] Materials collected: "
             f"MEMORY.md={len(memory_content)} chars, "
@@ -461,18 +459,12 @@ class MemoryFlushManager:
                 days=lookback_days,
                 daily_content=daily_content or "(no recent daily records)",
             )
-            from agent.protocol.models import LLMRequest
-            # No output cap: the prompt already keeps MEMORY.md concise (~50
-            # items), so a hard max_tokens would only risk truncating a large
-            # rewrite. Let the model use its default output budget.
-            request = LLMRequest(
-                messages=[{"role": "user", "content": user_msg}],
+            raw = self._get_dream_engine().complete(
+                system_prompt=_dream_system_prompt(),
+                user_prompt=user_msg,
+                purpose="memory_deep_dream",
                 temperature=0.3,
-                stream=False,
-                system=_dream_system_prompt(),
             )
-            response = self.llm_model.call(request)
-            raw = self._extract_response_text(response)
             elapsed = _time.monotonic() - t0
             if not raw or not raw.strip():
                 logger.warning(f"[DeepDream] LLM returned empty response ({elapsed:.1f}s)")
@@ -511,6 +503,7 @@ class MemoryFlushManager:
                 logger.warning(f"[DeepDream] Failed to write dream diary: {e}")
 
         logger.info("[DeepDream] ✅ Deep Dream completed successfully")
+        self._last_dream_input_hash = dedup_key
         return True
 
     def _read_main_memory(self, user_id: Optional[str] = None) -> str:
@@ -676,18 +669,18 @@ class MemoryFlushManager:
 
     def _call_llm_for_summary(self, conversation_text: str) -> str:
         """Call LLM to generate a concise summary of the conversation."""
-        from agent.protocol.models import LLMRequest
-        
-        request = LLMRequest(
-            messages=[{"role": "user", "content": _summarize_user_prompt().format(conversation=conversation_text)}],
+        return self._get_dream_engine().complete(
+            system_prompt=_summarize_system_prompt(),
+            user_prompt=_summarize_user_prompt().format(conversation=conversation_text),
+            purpose="memory_daily_summary",
             temperature=0,
             max_tokens=500,
-            stream=False,
-            system=_summarize_system_prompt(),
         )
-        
-        response = self.llm_model.call(request)
-        return self._extract_response_text(response)
+
+    def _get_dream_engine(self):
+        from agent.memory.dream_engine import MemoryDreamEngine
+
+        return MemoryDreamEngine(self.llm_model)
 
     @staticmethod
     def _extract_first_meaningful_line(text: str, max_len: int = 120) -> str:

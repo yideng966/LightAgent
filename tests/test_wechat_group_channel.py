@@ -112,6 +112,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_free_reply_mute_mentions_enabled": conf().get("wechat_group_free_reply_mute_mentions_enabled"),
             "wechat_group_recent_context_enabled": conf().get("wechat_group_recent_context_enabled"),
             "wechat_group_knowledge_enabled": conf().get("wechat_group_knowledge_enabled"),
+            "wechat_group_learning_enabled": conf().get("wechat_group_learning_enabled"),
             "wechat_group_profile_enabled": conf().get("wechat_group_profile_enabled"),
             "wechat_group_focus_enabled": conf().get("wechat_group_focus_enabled"),
             "wechat_group_focus_recent_message_limit": conf().get("wechat_group_focus_recent_message_limit"),
@@ -187,6 +188,34 @@ class WechatGroupChannelTest(unittest.TestCase):
             self.assertIsNotNone(row)
             note.assert_called_once_with("room@@abc", archive_row_id=row["id"])
         self.assertEqual(const.WECHAT_GROUP, channel.channel_type)
+
+    def test_record_inbound_message_notifies_memory_dream_with_stable_room_only(self):
+        conf()["wechat_group_record_messages"] = True
+        conf()["wechat_group_learning_enabled"] = True
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = WechatGroupArchive(os.path.join(tmp, "archive.db"))
+            channel = WechatGroupChannel(client=Mock(), archive=archive)
+            msg = WechatGroupMessage(parse_sidecar_event({
+                "type": "message",
+                "message_id": "memory-signal-1",
+                "room_id": "room@@runtime",
+                "room_name": "Test Room",
+                "sender_id": "wxid_alice",
+                "sender_name": "Alice",
+                "self_id": "wxid_bot",
+                "self_name": "LightBot",
+                "text": "durable agreement",
+                "timestamp": 1000,
+            }))
+            msg.wechat_group_stable_room_id = "wgr_room"
+            msg.wechat_group_stable_member_id = "wgm_alice"
+
+            with patch("channel.wechat_group.wechat_group_memory_dream_trigger.note_wechat_group_memory_signal") as note, \
+                    patch("channel.wechat_group.wechat_group_profile_evolution_trigger.note_wechat_group_profile_signal"):
+                channel._record_inbound_message(msg)
+
+            row = archive.get_message_by_id("wgr_room", "memory-signal-1")
+            note.assert_called_once_with("wgr_room", archive_row_id=row["id"])
 
     def test_record_inbound_message_keeps_runtime_media_path_metadata(self):
         conf()["wechat_group_record_messages"] = True

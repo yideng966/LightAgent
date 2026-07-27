@@ -457,6 +457,21 @@ class ConversationStore:
             result.append({"role": role, "content": content})
         return result
 
+    def get_session_channel_type(self, session_id: str) -> str:
+        """返回持久化会话的来源渠道；会话不存在时返回空字符串。"""
+        if not session_id:
+            return ""
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    "SELECT channel_type FROM sessions WHERE session_id = ?",
+                    (str(session_id),),
+                ).fetchone()
+            finally:
+                conn.close()
+        return str(row[0] or "") if row else ""
+
     def append_messages(
         self,
         session_id: str,

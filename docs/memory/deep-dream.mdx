@@ -35,6 +35,12 @@ After the daily summary completes, Deep Dream automatically runs distillation:
 
 `MEMORY.md` is injected into the system prompt for every conversation, keeping the Agent aware of user preferences, decisions, and key facts. Therefore it must stay concise — Deep Dream targets approximately 30 entries or fewer.
 
+## WeChat group scope
+
+WeChat group sessions never enter the global daily memory, root `MEMORY.md`, or global Deep Dream. Permanent group memory reuses the same two-stage LLM distillation principles while keeping input and storage bound to one `stable_room_id`: new safe archive text is summarized first, then distilled together with that room's active memories.
+
+Both stages use the shared `TextModelRouter.complete()` route. The model cannot select a room ID, and temporary model failures, invalid JSON, or out-of-room evidence do not advance the learning cursor. Group Dream does not extract member profiles.
+
 ## Distillation Rules
 
 Deep Dream follows these consolidation rules:

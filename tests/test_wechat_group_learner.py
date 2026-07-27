@@ -1,4 +1,5 @@
 import os
+import json
 import tempfile
 import unittest
 
@@ -39,6 +40,42 @@ class WechatGroupLearnerTest(unittest.TestCase):
             identity_service=self.identity,
         )
         self.knowledge_service = WechatGroupKnowledgeService(self.knowledge_store)
+        from channel.wechat_group.wechat_group_memory_dream import WechatGroupMemoryDreamService
+
+        class FakeDreamEngine:
+            def __init__(self):
+                self.responses = [
+                    json.dumps({
+                        "summary": "本群周六统一发版",
+                        "evidence_message_ids": ["m1", "m2"],
+                    }),
+                    json.dumps({
+                        "memories": [{
+                            "action": "add",
+                            "target_memory_token": "",
+                            "content": "本群周六统一发版",
+                            "confidence": 0.99,
+                            "evidence_message_ids": ["m1", "m2"],
+                        }],
+                        "dream_summary": "新增发版约定",
+                    }),
+                ]
+
+            def complete(self, **_kwargs):
+                return self.responses.pop(0)
+
+        memory_config = lambda key, default=None: {
+            "wechat_group_learning_batch_message_limit": 50,
+            "wechat_group_learning_group_memory_min_messages": 2,
+            "wechat_group_learning_group_memory_window_minutes": 120,
+            "wechat_group_learning_auto_apply_threshold": 0.9,
+        }.get(key, default)
+        memory_dream_service = WechatGroupMemoryDreamService(
+            archive=self.archive,
+            knowledge_service=self.knowledge_service,
+            dream_engine=FakeDreamEngine(),
+            config_getter=memory_config,
+        )
         self.learner = WechatGroupLearner(
             archive=self.archive,
             profile_service=self.profile_service,
@@ -50,6 +87,7 @@ class WechatGroupLearnerTest(unittest.TestCase):
                 "wechat_group_learning_profile_sample_limit": 10,
                 "wechat_group_learning_group_memory_min_messages": 2,
             }.get(key, default),
+            memory_dream_service=memory_dream_service,
         )
 
     def tearDown(self):

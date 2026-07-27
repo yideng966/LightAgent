@@ -42,6 +42,10 @@ Self-Evolution does not run on a fixed schedule. It only kicks in **after a conv
 
 Only when both are met does a review begin. This makes sure there is something worth reviewing while keeping it from bothering you mid-conversation.
 
+<Warning>
+  WeChat group sessions do not participate in global Self-Evolution. They still reuse the Agent reply, tool, and skill pipeline, but they never accumulate global evolution turns, start the review agent, write shared memory, or modify the global workspace. Permanent group memory is generated separately by a `stable_room_id`-scoped group Dream.
+</Warning>
+
 ### Configuration
 
 You can toggle Self-Evolution in the Web console under **Settings → Agent Config** (below "Deep Thinking"), or adjust it in the config file:

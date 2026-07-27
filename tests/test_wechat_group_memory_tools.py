@@ -2,12 +2,15 @@ import os
 import tempfile
 import unittest
 
+from channel.wechat_group.wechat_group_archive import WechatGroupArchive
 from channel.wechat_group.wechat_group_identity_service import WechatGroupIdentityService
 from channel.wechat_group.wechat_group_identity_store import WechatGroupIdentityStore
 from channel.wechat_group.wechat_group_knowledge_service import WechatGroupKnowledgeService
 from channel.wechat_group.wechat_group_knowledge_store import WechatGroupKnowledgeStore
 from channel.wechat_group.wechat_group_memory_tools import (
     WechatGroupMemorySearchTool,
+    WechatGroupMemoryDisableTool,
+    WechatGroupMemoryWriteTool,
     WechatGroupProfileGetTool,
     create_wechat_group_memory_tools,
 )
@@ -21,6 +24,7 @@ class WechatGroupMemoryToolsTest(unittest.TestCase):
         self.knowledge_service = WechatGroupKnowledgeService(
             WechatGroupKnowledgeStore(os.path.join(self._tmp.name, "knowledge.db"))
         )
+        self.archive = WechatGroupArchive(os.path.join(self._tmp.name, "archive.db"))
         self.identity = WechatGroupIdentityService(
             WechatGroupIdentityStore(os.path.join(self._tmp.name, "identity.db"))
         )
@@ -144,6 +148,53 @@ class WechatGroupMemoryToolsTest(unittest.TestCase):
         )
         for tool in tools:
             self.assertNotIn("room_id", tool.params.get("properties", {}))
+
+    def test_admin_write_and_disable_tools_are_bound_to_current_room(self):
+        tools = create_wechat_group_memory_tools(
+            self.knowledge_service,
+            self.profile_service,
+            self.room_a,
+            "alice-a",
+            "bot-a",
+            allow_write=True,
+        )
+        write = next(item for item in tools if isinstance(item, WechatGroupMemoryWriteTool))
+        disable = next(item for item in tools if isinstance(item, WechatGroupMemoryDisableTool))
+
+        written = write.execute({"content": "A room keeps Friday releases"})
+        memory = self.knowledge_service.list_group_memories(self.room_a)[0]
+        disabled = disable.execute({"memory_id": memory["memory_id"]})
+
+        self.assertEqual("success", written.status)
+        self.assertEqual("success", disabled.status)
+        self.assertEqual([], self.knowledge_service.list_group_memories(self.room_a))
+        self.assertEqual([], self.knowledge_service.list_group_memories(self.room_b))
+        for tool in (write, disable):
+            self.assertNotIn("room_id", tool.params.get("properties", {}))
+
+    def test_admin_write_rejects_cross_room_evidence(self):
+        self.archive.record_message(
+            message_id="room-b-message",
+            room_id=self.room_b,
+            stable_room_id=self.room_b,
+            sender_id="bob-b",
+            stable_member_id=self.bob_b,
+            text="B room private agreement",
+            message_type="text",
+        )
+        tool = WechatGroupMemoryWriteTool(
+            self.knowledge_service,
+            self.room_a,
+            archive=self.archive,
+        )
+
+        result = tool.execute({
+            "content": "A room memory",
+            "evidence_message_ids": ["room-b-message"],
+        })
+
+        self.assertEqual("error", result.status)
+        self.assertEqual([], self.knowledge_service.list_group_memories(self.room_a))
 
 
 if __name__ == "__main__":

@@ -4505,6 +4505,10 @@ class ChannelsHandler:
                 "learning_profile_sample_limit": conf().get("wechat_group_learning_profile_sample_limit", 30),
                 "learning_group_memory_min_messages": conf().get("wechat_group_learning_group_memory_min_messages", 20),
                 "learning_group_memory_window_minutes": conf().get("wechat_group_learning_group_memory_window_minutes", 120),
+                "learning_idle_minutes": conf().get("wechat_group_learning_idle_minutes", 10),
+                "learning_auto_apply_threshold": conf().get("wechat_group_learning_auto_apply_threshold", 0.9),
+                "learning_max_interval_minutes": conf().get("wechat_group_learning_max_interval_minutes", 1440),
+                "learning_history_max_batches": conf().get("wechat_group_learning_history_max_batches", 10),
                 "profile_evolution_enabled": conf().get("wechat_group_profile_evolution_enabled", False),
                 "profile_evolution_idle_minutes": conf().get("wechat_group_profile_evolution_idle_minutes", 10),
                 "profile_evolution_min_messages": conf().get("wechat_group_profile_evolution_min_messages", 10),
@@ -4684,6 +4688,10 @@ class ChannelsHandler:
             "wechat_group_learning_profile_sample_limit",
             "wechat_group_learning_group_memory_min_messages",
             "wechat_group_learning_group_memory_window_minutes",
+            "wechat_group_learning_idle_minutes",
+            "wechat_group_learning_auto_apply_threshold",
+            "wechat_group_learning_max_interval_minutes",
+            "wechat_group_learning_history_max_batches",
             "wechat_group_profile_evolution_enabled",
             "wechat_group_profile_evolution_idle_minutes",
             "wechat_group_profile_evolution_min_messages",
@@ -4956,12 +4964,17 @@ class ChannelsHandler:
                 "wechat_group_learning_profile_sample_limit",
                 "wechat_group_learning_group_memory_min_messages",
                 "wechat_group_learning_group_memory_window_minutes",
+                "wechat_group_learning_idle_minutes",
+                "wechat_group_learning_max_interval_minutes",
+                "wechat_group_learning_history_max_batches",
                 "wechat_group_profile_evolution_idle_minutes",
                 "wechat_group_profile_evolution_min_messages",
                 "wechat_group_profile_evolution_max_interval_minutes",
                 "wechat_group_profile_evolution_batch_message_limit",
             ):
                 value = max(1, int(value))
+            elif key == "wechat_group_learning_auto_apply_threshold":
+                value = cls._clamp_float(value, 0.0, 1.0, 0.9)
             elif key in (
                 "wechat_group_focus_recent_message_limit",
                 "wechat_group_focus_context_message_limit",
@@ -6127,11 +6140,30 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 return self._json({"status": "success", "disabled": disabled, "identity": self._identity_payload(room_identity)})
             if action == "learn/run":
                 room_identity = self._resolve_room_identity(body, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
                 run = self._get_learner().run_once(
-                    room_id=room_identity["effective_room_id"],
-                    mode=body.get("mode") or "all",
+                    room_id=room_id,
+                    mode="memory",
                 )
-                return self._json({"status": "success", "run": run, "identity": self._identity_payload(room_identity)})
+                return self._json({
+                    "status": run.get("status") or "failed",
+                    "message": run.get("message") or "",
+                    "run": run,
+                    "identity": self._identity_payload(room_identity),
+                })
+            if action == "learn/history":
+                room_identity = self._resolve_room_identity(body, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
+                run = self._get_learner().run_history(
+                    room_id=room_id,
+                    max_batches=body.get("max_batches") or None,
+                )
+                return self._json({
+                    "status": run.get("status") or "failed",
+                    "message": run.get("message") or "",
+                    "run": run,
+                    "identity": self._identity_payload(room_identity),
+                })
             if action == "profile-evolution/config":
                 allowed_keys = {
                     "wechat_group_profile_evolution_enabled",
@@ -6228,6 +6260,7 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 profile_service=cls._get_profile_service(),
                 knowledge_service=cls._get_knowledge_service(),
                 knowledge_store=cls._get_knowledge_store(),
+                config_getter=lambda key, default=None: conf().get(key, default),
             )
         return cls._learner
 

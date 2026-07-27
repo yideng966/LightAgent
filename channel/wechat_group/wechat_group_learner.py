@@ -39,6 +39,7 @@ class WechatGroupLearner:
         knowledge_service: WechatGroupKnowledgeService,
         knowledge_store: Optional[WechatGroupKnowledgeStore] = None,
         config_getter=None,
+        memory_dream_service=None,
     ):
         self.archive = archive
         self.profile_service = profile_service
@@ -46,6 +47,15 @@ class WechatGroupLearner:
         self.knowledge_store = knowledge_store or knowledge_service.store
         self.profile_store = profile_service.store
         self.config_getter = config_getter or (lambda key, default=None: default)
+        if memory_dream_service is None:
+            from channel.wechat_group.wechat_group_memory_dream import WechatGroupMemoryDreamService
+
+            memory_dream_service = WechatGroupMemoryDreamService(
+                archive=archive,
+                knowledge_service=knowledge_service,
+                config_getter=self.config_getter,
+            )
+        self.memory_dream_service = memory_dream_service
 
     def run_once(self, room_id: str, mode: str = "all") -> Dict[str, Any]:
         room_text = str(room_id or "").strip()
@@ -57,8 +67,9 @@ class WechatGroupLearner:
 
         profile_result = self._run_profile_pipeline(room_text) if mode_text in {"all", "profile"} else {}
         memory_result = self._run_memory_pipeline(room_text, mode_text) if mode_text in {"all", "memory"} else {}
-        return {
-            "status": "success",
+        status = str(memory_result.get("status") or profile_result.get("status") or "success")
+        result = {
+            "status": status,
             "run_id": memory_result.get("run_id") or profile_result.get("run_id") or "",
             "profile_run_id": profile_result.get("run_id") or "",
             "memory_run_id": memory_result.get("run_id") or "",
@@ -73,6 +84,13 @@ class WechatGroupLearner:
             "profiles": profile_result.get("profiles") or [],
             "group_memories": memory_result.get("group_memories") or [],
         }
+        for key in ("message", "transient", "llm_status_code", "summary_status", "dream_status", "skipped_count", "dream_summary"):
+            if key in memory_result:
+                result[key] = memory_result[key]
+        return result
+
+    def run_history(self, room_id: str, max_batches: Optional[int] = None) -> Dict[str, Any]:
+        return self.memory_dream_service.run_history(room_id, max_batches=max_batches)
 
     def _run_profile_pipeline(self, room_id: str) -> Dict[str, Any]:
         state = self.profile_store.get_learning_state(room_id, pipeline="heuristic")
@@ -146,58 +164,10 @@ class WechatGroupLearner:
             raise
 
     def _run_memory_pipeline(self, room_id: str, mode: str) -> Dict[str, Any]:
-        cursor = self.knowledge_store.get_cursor(room_id)
-        batch_limit = int(self._cfg("wechat_group_learning_batch_message_limit", 200) or 200)
-        batch_start_row_id = int(cursor.get("last_archive_row_id") or 0)
-        run_id = self.knowledge_store.create_learning_run(room_id, mode, batch_start_row_id)
-        try:
-            messages = self.archive.get_messages_after_row_id(room_id, batch_start_row_id, limit=batch_limit)
-            if not messages:
-                self.knowledge_store.finish_learning_run(
-                    run_id=run_id,
-                    status="success",
-                    batch_end_row_id=batch_start_row_id,
-                    batch_message_count=0,
-                    profile_update_count=0,
-                    group_memory_upsert_count=0,
-                )
-                return {
-                    "status": "success",
-                    "run_id": run_id,
-                    "batch_message_count": 0,
-                    "group_memory_upsert_count": 0,
-                    "group_memories": [],
-                }
-
-            group_memories = self._learn_group_memories(room_id, messages)
-            batch_end_row_id = int(messages[-1].get("id") or batch_start_row_id)
-            self.knowledge_store.update_cursor(room_id, batch_end_row_id)
-            self.knowledge_store.finish_learning_run(
-                run_id=run_id,
-                status="success",
-                batch_end_row_id=batch_end_row_id,
-                batch_message_count=len(messages),
-                profile_update_count=0,
-                group_memory_upsert_count=len(group_memories),
-            )
-            return {
-                "status": "success",
-                "run_id": run_id,
-                "batch_message_count": len(messages),
-                "group_memory_upsert_count": len(group_memories),
-                "group_memories": group_memories,
-            }
-        except Exception as exc:
-            self.knowledge_store.finish_learning_run(
-                run_id=run_id,
-                status="failed",
-                batch_end_row_id=batch_start_row_id,
-                batch_message_count=0,
-                profile_update_count=0,
-                group_memory_upsert_count=0,
-                failed_reason=str(exc),
-            )
-            raise
+        return self.memory_dream_service.run_once(
+            room_id,
+            trigger_source="manual",
+        )
 
     def _learn_profiles(self, room_id: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         grouped: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
@@ -268,30 +238,6 @@ class WechatGroupLearner:
                 results.append(profile)
         return results
 
-    def _learn_group_memories(self, room_id: str, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        min_messages = max(int(self._cfg("wechat_group_learning_group_memory_min_messages", 20) or 20), 1)
-        keyword_rows = [
-            item for item in messages
-            if _is_learnable_text_message(item)
-            and _looks_like_group_memory(str(item.get("text") or ""))
-        ]
-        if len(keyword_rows) < min_messages:
-            return []
-
-        memory_text = _merge_memory_texts([str(item.get("text") or "") for item in keyword_rows])
-        existing = self.knowledge_service.search_group_memories(room_id, memory_text, limit=5)
-        if any(_normalize_text(item.get("content", "")) == _normalize_text(memory_text) for item in existing):
-            return []
-
-        memory = self.knowledge_service.add_group_memory(
-            room_id=room_id,
-            content=memory_text,
-            evidence_message_ids=[str(item.get("message_id") or "") for item in keyword_rows if item.get("message_id")],
-            evidence_text=" | ".join(str(item.get("text") or "") for item in keyword_rows[:3]),
-            source_kind="learning",
-        )
-        return [memory]
-
     def _cfg(self, key: str, default=None):
         return self.config_getter(key, default)
 
@@ -353,34 +299,6 @@ def _normalize_common_word_token(token: str) -> str:
     if len(lowered) <= 3 and lowered not in _COMMON_WORD_ASCII_ALLOWLIST:
         return ""
     return lowered
-
-
-def _looks_like_group_memory(text: str) -> bool:
-    lowered = _normalize_text(text)
-    return any(keyword in lowered for keyword in ("发版", "发布", "固定", "统一", "规则", "约定"))
-
-
-def _merge_memory_texts(texts: List[str]) -> str:
-    if not texts:
-        return ""
-    normalized = [_normalize_text(text) for text in texts if _normalize_text(text)]
-    if not normalized:
-        return ""
-    first = normalized[0]
-    for candidate in normalized[1:]:
-        if candidate == first:
-            continue
-        if first in candidate:
-            first = candidate
-        elif candidate in first:
-            continue
-        else:
-            return texts[-1].strip()
-    return texts[-1].strip()
-
-
-def _normalize_text(text: str) -> str:
-    return re.sub(r"\s+|[，。,.!！?？:：]", "", text or "").lower()
 
 
 def _merge_profile_results(*groups: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

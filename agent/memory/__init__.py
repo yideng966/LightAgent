@@ -8,6 +8,8 @@ conversation history persistence (SQLite).
 from agent.memory.manager import MemoryManager
 from agent.memory.config import MemoryConfig, get_default_memory_config, set_global_memory_config
 from agent.memory.scope import MemoryScope
+from agent.memory.routing import MemoryRoute, resolve_memory_route
+from agent.memory.dream_engine import MemoryDreamEngine, MemoryDreamError
 from agent.memory.embedding import create_embedding_provider, create_default_embedding_provider
 from agent.memory.conversation_store import ConversationStore, get_conversation_store
 from agent.memory.summarizer import ensure_daily_memory_file
@@ -16,6 +18,10 @@ __all__ = [
     'MemoryManager',
     'MemoryConfig',
     'MemoryScope',
+    'MemoryRoute',
+    'resolve_memory_route',
+    'MemoryDreamEngine',
+    'MemoryDreamError',
     'get_default_memory_config',
     'set_global_memory_config',
     'create_embedding_provider',

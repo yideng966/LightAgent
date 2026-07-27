@@ -44,6 +44,7 @@ class WechatGroupMemoryUiTest(unittest.TestCase):
         self.assertIn("buildGroupsMemoryLearningPanel", console_js)
         self.assertIn("runGroupsMemoryLearning", console_js)
         self.assertIn("/api/wechat-group/memories/learn/run", console_js)
+        self.assertIn("/api/wechat-group/memories/learn/history", console_js)
         self.assertIn("/api/wechat-group/memories/learn/runs", console_js)
         self.assertIn("/api/wechat-group/memories/profile-evolution/config", console_js)
         self.assertIn("/api/wechat-group/memories/profile-evolution/status", console_js)
@@ -64,6 +65,8 @@ class WechatGroupMemoryUiTest(unittest.TestCase):
         self.assertNotIn("approveGroupsMemoryCandidate", console_js)
         self.assertNotIn("rejectGroupsMemoryCandidate", console_js)
         self.assertNotIn("candidate review", console_js.lower())
+        self.assertIn("群记忆梦境蒸馏", console_js)
+        self.assertIn("groups-memory-auto-apply-threshold", console_js)
 
     def test_room_profiles_list_counts_actual_name_records(self):
         console_js = (ROOT / "channel/web/static/js/console.js").read_text(encoding="utf-8")

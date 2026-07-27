@@ -111,11 +111,11 @@ class AgentInitializer:
             runtime_info=runtime_info  # Pass runtime_info for dynamic time updates
         )
         
-        # Attach memory manager and share LLM model for summarization
+        # Attach memory manager. Its flush manager keeps the shared
+        # TextModelRouter injected by _setup_memory_system so all stateless
+        # memory tasks share one fallback chain and circuit-breaker state.
         if memory_manager:
             agent.memory_manager = memory_manager
-            if hasattr(agent, 'model') and agent.model:
-                memory_manager.flush_manager.llm_model = agent.model
 
         # Restore persisted conversation history for this session
         if session_id:
@@ -639,6 +639,18 @@ class AgentInitializer:
         for label, agent in agents:
             try:
                 if not agent.memory_manager:
+                    continue
+                from agent.memory.routing import resolve_memory_route
+                route = resolve_memory_route(
+                    agent=agent,
+                    session_id="" if label == "default" else label,
+                )
+                if not route.allow_shared_flush:
+                    logger.info(
+                        "[DailyFlush] skipped shared flush for session=%s scope=%s",
+                        label,
+                        route.scope_type,
+                    )
                     continue
                 with agent.messages_lock:
                     messages = list(agent.messages)

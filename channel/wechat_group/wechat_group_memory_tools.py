@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from agent.tools.base_tool import BaseTool, ToolResult
+from channel.wechat_group.wechat_group_archive import WechatGroupArchive
 from channel.wechat_group.wechat_group_knowledge_service import WechatGroupKnowledgeService
 from channel.wechat_group.wechat_group_profile_service import WechatGroupProfileService
 
@@ -63,6 +64,105 @@ class WechatGroupMemorySearchTool(BaseTool):
         for idx, item in enumerate(rows, 1):
             lines.append(f"\n{idx}. {item.get('content', '')}")
         return ToolResult.success("\n".join(lines))
+
+
+class WechatGroupMemoryWriteTool(BaseTool):
+    name = "wechat_group_memory_write"
+    description = (
+        "Write one explicit permanent memory to the current WeChat group only. "
+        "The room is bound by the server and this tool is available only to a current-room administrator."
+    )
+    params = {
+        "type": "object",
+        "properties": {
+            "content": {
+                "type": "string",
+                "description": "Durable fact, agreement, rule, or decision to remember",
+            },
+            "evidence_message_ids": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Optional current-room archive message IDs",
+            },
+        },
+        "required": ["content"],
+    }
+
+    def __init__(
+        self,
+        service: WechatGroupKnowledgeService,
+        room_id: str,
+        archive: Optional[WechatGroupArchive] = None,
+    ):
+        super().__init__()
+        self.service = service
+        self.room_id = room_id
+        self.archive = archive
+
+    def execute(self, params: dict) -> ToolResult:
+        content = str(params.get("content") or "").strip()
+        if not content:
+            return ToolResult.fail("Error: content parameter is required")
+        try:
+            evidence_message_ids = _normalize_text_list(
+                params.get("evidence_message_ids"),
+                limit=20,
+            )
+            if evidence_message_ids:
+                archive = self.archive or WechatGroupArchive()
+                if any(
+                    archive.get_message_by_id(self.room_id, message_id) is None
+                    for message_id in evidence_message_ids
+                ):
+                    return ToolResult.fail(
+                        "Error: evidence_message_ids must belong to the current group"
+                    )
+            memory = self.service.add_group_memory(
+                self.room_id,
+                content,
+                evidence_message_ids=evidence_message_ids,
+                source_kind="manual_chat",
+            )
+        except Exception as e:
+            return ToolResult.fail(f"Error writing current group memory: {e}")
+        return ToolResult.success(
+            "Current group memory saved: {}".format(memory.get("memory_id") or "")
+        )
+
+
+class WechatGroupMemoryDisableTool(BaseTool):
+    name = "wechat_group_memory_disable"
+    description = (
+        "Disable one permanent memory in the current WeChat group only. "
+        "The room is bound by the server and cannot be supplied by arguments."
+    )
+    params = {
+        "type": "object",
+        "properties": {
+            "memory_id": {
+                "type": "string",
+                "description": "Current-room memory ID returned by memory search or write",
+            },
+        },
+        "required": ["memory_id"],
+    }
+
+    def __init__(self, service: WechatGroupKnowledgeService, room_id: str):
+        super().__init__()
+        self.service = service
+        self.room_id = room_id
+
+    def execute(self, params: dict) -> ToolResult:
+        memory_id = str(params.get("memory_id") or "").strip()
+        if not memory_id:
+            return ToolResult.fail("Error: memory_id parameter is required")
+        try:
+            disabled = self.service.disable_group_memory(self.room_id, memory_id)
+        except Exception as e:
+            return ToolResult.fail(f"Error disabling current group memory: {e}")
+        if not disabled:
+            return ToolResult.fail("Error: memory_id is not active in the current group")
+        return ToolResult.success("Current group memory disabled.")
 
 
 class WechatGroupProfileGetTool(BaseTool):
@@ -173,8 +273,9 @@ def create_wechat_group_memory_tools(
     room_id: str,
     sender_id: str,
     bot_sender_id: Optional[str] = None,
+    allow_write: bool = False,
 ) -> List[BaseTool]:
-    return [
+    tools: List[BaseTool] = [
         WechatGroupMemorySearchTool(knowledge_service, room_id=room_id),
         WechatGroupProfileGetTool(
             profile_service,
@@ -183,6 +284,12 @@ def create_wechat_group_memory_tools(
             bot_sender_id=bot_sender_id,
         ),
     ]
+    if allow_write:
+        tools.extend([
+            WechatGroupMemoryWriteTool(knowledge_service, room_id=room_id),
+            WechatGroupMemoryDisableTool(knowledge_service, room_id=room_id),
+        ])
+    return tools
 
 
 def _to_int(value, fallback: int) -> int:
@@ -197,3 +304,15 @@ def _to_bool(value) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_text_list(value, limit: int = 20) -> List[str]:
+    values = value if isinstance(value, list) else []
+    result = []
+    for item in values:
+        text = str(item or "").strip()
+        if text and text not in result:
+            result.append(text)
+        if len(result) >= max(int(limit or 1), 1):
+            break
+    return result

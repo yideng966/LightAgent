@@ -79,6 +79,10 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_learning_profile_sample_limit": conf().get("wechat_group_learning_profile_sample_limit"),
             "wechat_group_learning_group_memory_min_messages": conf().get("wechat_group_learning_group_memory_min_messages"),
             "wechat_group_learning_group_memory_window_minutes": conf().get("wechat_group_learning_group_memory_window_minutes"),
+            "wechat_group_learning_idle_minutes": conf().get("wechat_group_learning_idle_minutes"),
+            "wechat_group_learning_auto_apply_threshold": conf().get("wechat_group_learning_auto_apply_threshold"),
+            "wechat_group_learning_max_interval_minutes": conf().get("wechat_group_learning_max_interval_minutes"),
+            "wechat_group_learning_history_max_batches": conf().get("wechat_group_learning_history_max_batches"),
             "wechat_group_profile_evolution_enabled": conf().get("wechat_group_profile_evolution_enabled"),
             "wechat_group_profile_evolution_idle_minutes": conf().get("wechat_group_profile_evolution_idle_minutes"),
             "wechat_group_profile_evolution_min_messages": conf().get("wechat_group_profile_evolution_min_messages"),
@@ -237,6 +241,10 @@ class WechatGroupWebTest(unittest.TestCase):
                 "learning_profile_sample_limit": 30,
                 "learning_group_memory_min_messages": 20,
                 "learning_group_memory_window_minutes": 120,
+                "learning_idle_minutes": 10,
+                "learning_auto_apply_threshold": 0.9,
+                "learning_max_interval_minutes": 1440,
+                "learning_history_max_batches": 10,
                 "profile_evolution_enabled": False,
                 "profile_evolution_idle_minutes": 10,
                 "profile_evolution_min_messages": 10,
@@ -915,6 +923,10 @@ class WechatGroupWebTest(unittest.TestCase):
                 "wechat_group_learning_profile_sample_limit": "12",
                 "wechat_group_learning_group_memory_min_messages": "9",
                 "wechat_group_learning_group_memory_window_minutes": "90",
+                "wechat_group_learning_idle_minutes": "8",
+                "wechat_group_learning_auto_apply_threshold": "0.93",
+                "wechat_group_learning_max_interval_minutes": "720",
+                "wechat_group_learning_history_max_batches": "6",
             },
         }
         with tempfile.TemporaryDirectory() as tmpdir, \
@@ -943,6 +955,10 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual(12, conf()["wechat_group_learning_profile_sample_limit"])
         self.assertEqual(9, conf()["wechat_group_learning_group_memory_min_messages"])
         self.assertEqual(90, conf()["wechat_group_learning_group_memory_window_minutes"])
+        self.assertEqual(8, conf()["wechat_group_learning_idle_minutes"])
+        self.assertEqual(0.93, conf()["wechat_group_learning_auto_apply_threshold"])
+        self.assertEqual(720, conf()["wechat_group_learning_max_interval_minutes"])
+        self.assertEqual(6, conf()["wechat_group_learning_history_max_batches"])
 
     def test_channels_save_wechat_group_stable_room_config(self):
         from channel.web.web_channel import ChannelsHandler
@@ -2595,15 +2611,36 @@ class WechatGroupWebTest(unittest.TestCase):
                 self.args = (room_id, mode)
                 return {"status": "success", "run_id": "run-1"}
 
-        body = {"room_id": "room@@abc", "mode": "all"}
+        fake = FakeLearner()
+        body = {"stable_room_id": "wgr_abc", "mode": "all"}
         handler = WechatGroupMemoriesHandler()
         with patch("channel.web.web_channel._require_auth"), \
-                patch.object(WechatGroupMemoriesHandler, "_get_learner", return_value=FakeLearner()), \
+                patch.object(WechatGroupMemoriesHandler, "_get_learner", return_value=fake), \
                 patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")):
             result = json.loads(handler.POST("learn/run"))
 
         self.assertEqual("success", result["status"])
         self.assertEqual("run-1", result["run"]["run_id"])
+        self.assertEqual(("wgr_abc", "memory"), fake.args)
+
+    def test_learn_history_api_uses_explicit_batch_limit(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        class FakeLearner:
+            def run_history(self, room_id, max_batches=None):
+                self.args = (room_id, max_batches)
+                return {"status": "success", "processed_batches": 2}
+
+        fake = FakeLearner()
+        body = {"stable_room_id": "wgr_abc", "max_batches": 4}
+        handler = WechatGroupMemoriesHandler()
+        with patch("channel.web.web_channel._require_auth"), \
+                patch.object(WechatGroupMemoriesHandler, "_get_learner", return_value=fake), \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")):
+            result = json.loads(handler.POST("learn/history"))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(("wgr_abc", 4), fake.args)
 
     def test_profile_evolution_config_api_reads_current_config(self):
         from channel.web.web_channel import WechatGroupMemoriesHandler

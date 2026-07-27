@@ -789,11 +789,11 @@ const I18N = {
         groups_memory_preview_empty: '暂无可注入记忆',
         groups_memory_tab_manual: '记忆维护',
         groups_memory_tab_auto: '学习运行',
-        groups_memory_auto_title: '从聊天记录学习',
-        groups_memory_auto_hint: '从当前群的新归档文本消息中分别学习群记忆和群友画像。',
+        groups_memory_auto_title: '群记忆梦境蒸馏',
+        groups_memory_auto_hint: '使用共享文本模型对当前群新增归档执行两阶段摘要与蒸馏，只写入当前群永久记忆。',
         groups_memory_knowledge_enabled: '启用群记忆',
         groups_memory_profile_enabled: '启用群友画像',
-        groups_memory_learning_enabled: '启用学习',
+        groups_memory_learning_enabled: '启用自动群记忆 Dream',
         groups_memory_profile_context_limit: '画像注入条数',
         groups_memory_group_context_limit: '群记忆注入条数',
         groups_memory_learning_batch_limit: '每批学习消息数',
@@ -801,6 +801,9 @@ const I18N = {
         groups_memory_learning_profile_sample_limit: '画像取样条数',
         groups_memory_learning_group_memory_min_messages: '群记忆最少消息数',
         groups_memory_learning_group_memory_window_minutes: '群记忆时间窗口（分钟）',
+        groups_memory_learning_idle_minutes: '群空闲时间（分钟）',
+        groups_memory_learning_max_interval_minutes: '最长等待时间（分钟）',
+        groups_memory_learning_history_max_batches: '历史生成最大批次',
         groups_memory_auto_enabled: '启用自动蒸馏',
         groups_memory_auto_apply_threshold: '自动写入阈值',
         groups_memory_candidate_threshold: '候选阈值',
@@ -810,7 +813,8 @@ const I18N = {
         groups_memory_auto_apply_member: '允许自动写群友画像',
         groups_memory_auto_save: '保存配置',
         groups_memory_auto_saved: '自动生成配置已保存',
-        groups_memory_auto_run: '从最近聊天生成记忆',
+        groups_memory_auto_run: '运行一次',
+        groups_memory_history_run: '从历史归档生成',
         groups_memory_auto_runs: '运行记录',
         groups_memory_auto_candidates: '候选审核',
         groups_memory_auto_no_runs: '当前群暂无运行记录',
@@ -1700,11 +1704,11 @@ const I18N = {
         groups_memory_preview_empty: 'No memory would be injected',
         groups_memory_tab_manual: 'Memory',
         groups_memory_tab_auto: 'Learning',
-        groups_memory_auto_title: 'Learn from chat history',
-        groups_memory_auto_hint: 'Learn room memories and room-scoped profiles independently from new archived messages.',
+        groups_memory_auto_title: 'Group memory Dream distillation',
+        groups_memory_auto_hint: 'Use the shared text model for two-stage summarization and distillation, writing only to the current room memory.',
         groups_memory_knowledge_enabled: 'Enable group memory',
         groups_memory_profile_enabled: 'Enable member profiles',
-        groups_memory_learning_enabled: 'Enable learning',
+        groups_memory_learning_enabled: 'Enable automatic memory Dream',
         groups_memory_profile_context_limit: 'Profile context limit',
         groups_memory_group_context_limit: 'Group memory context limit',
         groups_memory_learning_batch_limit: 'Learning batch size',
@@ -1712,6 +1716,9 @@ const I18N = {
         groups_memory_learning_profile_sample_limit: 'Profile sample size',
         groups_memory_learning_group_memory_min_messages: 'Group memory min messages',
         groups_memory_learning_group_memory_window_minutes: 'Group memory window minutes',
+        groups_memory_learning_idle_minutes: 'Room idle minutes',
+        groups_memory_learning_max_interval_minutes: 'Maximum wait minutes',
+        groups_memory_learning_history_max_batches: 'History max batches',
         groups_memory_auto_enabled: 'Enable auto distillation',
         groups_memory_auto_apply_threshold: 'Auto-apply threshold',
         groups_memory_candidate_threshold: 'Candidate threshold',
@@ -1721,7 +1728,8 @@ const I18N = {
         groups_memory_auto_apply_member: 'Auto-write member profiles',
         groups_memory_auto_save: 'Save config',
         groups_memory_auto_saved: 'Auto-generation config saved',
-        groups_memory_auto_run: 'Generate from recent chat',
+        groups_memory_auto_run: 'Run once',
+        groups_memory_history_run: 'Generate from archive history',
         groups_memory_auto_runs: 'Runs',
         groups_memory_auto_candidates: 'Learning records',
         groups_memory_auto_no_runs: 'No runs for this room',
@@ -13370,8 +13378,8 @@ function buildGroupsMemoryLearningPanel(roomId, extra) {
                 </div>
                 <div class="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-[11px] text-slate-500 dark:text-slate-400">
                     <span>${t('groups_memory_run_messages')} ${escapeHtml(String(run.batch_message_count || 0))}</span>
-                    <span>${t('groups_memory_run_profiles')} ${escapeHtml(String(run.profile_update_count || 0))}</span>
                     <span>${t('groups_memory_run_memories')} ${escapeHtml(String(run.group_memory_upsert_count || 0))}</span>
+                    <span>${currentLang === 'zh' ? '跳过' : 'Skipped'} ${escapeHtml(String(run.skipped_count || 0))}</span>
                     <span>${escapeHtml(run.failed_reason || '')}</span>
                 </div>
             </div>
@@ -13420,10 +13428,12 @@ function buildGroupsMemoryLearningPanel(roomId, extra) {
                 ${buildGroupsMemoryNumberInput('groups-memory-profile-context-limit', 'groups_memory_profile_context_limit', config.profile_context_limit ?? 2, '1', '1', '20')}
                 ${buildGroupsMemoryNumberInput('groups-memory-group-context-limit', 'groups_memory_group_context_limit', config.group_memory_context_limit ?? 5, '1', '1', '20')}
                 ${buildGroupsMemoryNumberInput('groups-memory-batch-message-limit', 'groups_memory_learning_batch_limit', config.learning_batch_message_limit ?? 200, '1', '1', '1000')}
-                ${buildGroupsMemoryNumberInput('groups-memory-profile-min-messages', 'groups_memory_learning_profile_min_messages', config.learning_profile_min_messages ?? 6, '1', '1', '200')}
-                ${buildGroupsMemoryNumberInput('groups-memory-profile-sample-limit', 'groups_memory_learning_profile_sample_limit', config.learning_profile_sample_limit ?? 30, '1', '1', '200')}
                 ${buildGroupsMemoryNumberInput('groups-memory-group-memory-min-messages', 'groups_memory_learning_group_memory_min_messages', config.learning_group_memory_min_messages ?? 20, '1', '1', '500')}
                 ${buildGroupsMemoryNumberInput('groups-memory-window-minutes', 'groups_memory_learning_group_memory_window_minutes', config.learning_group_memory_window_minutes ?? 120, '1', '1', '10080')}
+                ${buildGroupsMemoryNumberInput('groups-memory-idle-minutes', 'groups_memory_learning_idle_minutes', config.learning_idle_minutes ?? 10, '1', '1', '1440')}
+                ${buildGroupsMemoryNumberInput('groups-memory-auto-apply-threshold', 'groups_memory_auto_apply_threshold', config.learning_auto_apply_threshold ?? 0.9, '0.01', '0', '1')}
+                ${buildGroupsMemoryNumberInput('groups-memory-max-interval-minutes', 'groups_memory_learning_max_interval_minutes', config.learning_max_interval_minutes ?? 1440, '1', '1', '10080')}
+                ${buildGroupsMemoryNumberInput('groups-memory-history-max-batches', 'groups_memory_learning_history_max_batches', config.learning_history_max_batches ?? 10, '1', '1', '100')}
             </div>
             <div class="mt-4 flex flex-wrap justify-end gap-2">
                 <button id="groups-memory-auto-save" type="button" onclick="saveGroupsMemoryAutoConfig()"
@@ -13433,6 +13443,10 @@ function buildGroupsMemoryLearningPanel(roomId, extra) {
                 <button id="groups-memory-auto-run" type="button" onclick="runGroupsMemoryLearning()"
                     class="px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     ${t('groups_memory_auto_run')}
+                </button>
+                <button id="groups-memory-history-run" type="button" onclick="runGroupsMemoryHistory()"
+                    class="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-white/15 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-white/5 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    ${t('groups_memory_history_run')}
                 </button>
             </div>
         </div>
@@ -13663,10 +13677,12 @@ function saveGroupsMemoryAutoConfig() {
                 wechat_group_profile_context_limit: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-profile-context-limit', 2))),
                 wechat_group_group_memory_context_limit: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-group-context-limit', 5))),
                 wechat_group_learning_batch_message_limit: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-batch-message-limit', 200))),
-                wechat_group_learning_profile_min_messages: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-profile-min-messages', 6))),
-                wechat_group_learning_profile_sample_limit: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-profile-sample-limit', 30))),
                 wechat_group_learning_group_memory_min_messages: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-group-memory-min-messages', 20))),
                 wechat_group_learning_group_memory_window_minutes: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-window-minutes', 120))),
+                wechat_group_learning_idle_minutes: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-idle-minutes', 10))),
+                wechat_group_learning_auto_apply_threshold: Math.min(1, Math.max(0, getGroupsMemoryNumber('groups-memory-auto-apply-threshold', 0.9))),
+                wechat_group_learning_max_interval_minutes: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-max-interval-minutes', 1440))),
+                wechat_group_learning_history_max_batches: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-history-max-batches', 10))),
             },
         })
     }).then(r => r.json()).then(data => {
@@ -13689,7 +13705,33 @@ function runGroupsMemoryLearning() {
         body: JSON.stringify({
             stable_room_id: roomId,
             room_id: roomId,
-            mode: 'all',
+            mode: 'memory',
+        }),
+    }).then(r => r.json()).then(data => {
+        if (data.status !== 'success') throw new Error(data.message || 'groups_error_learning_failed');
+        showGroupsStatus('groups_memory_auto_ran', false);
+        groupsMemoryState.loadedRoomId = '';
+        refreshGroupsMemoryData(roomId);
+    }).catch(err => showGroupsStatus(err.message || 'groups_load_failed', true))
+      .finally(() => {
+          groupsMemoryState.learningLoading = false;
+          if (btn) btn.disabled = false;
+      });
+}
+
+function runGroupsMemoryHistory() {
+    const roomId = groupsMemoryState.selectedRoomId;
+    if (!roomId) return;
+    const btn = document.getElementById('groups-memory-history-run');
+    if (btn) btn.disabled = true;
+    groupsMemoryState.learningLoading = true;
+    fetch('/api/wechat-group/memories/learn/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            stable_room_id: roomId,
+            room_id: roomId,
+            max_batches: Math.max(1, Math.floor(getGroupsMemoryNumber('groups-memory-history-max-batches', 10))),
         }),
     }).then(r => r.json()).then(data => {
         if (data.status !== 'success') throw new Error(data.message || 'groups_error_learning_failed');

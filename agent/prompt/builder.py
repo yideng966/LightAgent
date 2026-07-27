@@ -202,6 +202,8 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "memory_search": "search memory",
             "memory_get": "read memory content",
             "wechat_group_memory_search": "search current WeChat group memory",
+            "wechat_group_memory_write": "write current WeChat group memory",
+            "wechat_group_memory_disable": "disable current WeChat group memory",
             "wechat_group_profile_get": "read current WeChat group member profile",
             "env_config": "manage API keys and skill config",
             "scheduler": "manage scheduled tasks and reminders",
@@ -224,6 +226,8 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
             "memory_search": "搜索记忆",
             "memory_get": "读取记忆内容",
             "wechat_group_memory_search": "搜索当前微信群记忆",
+            "wechat_group_memory_write": "写入当前微信群记忆",
+            "wechat_group_memory_disable": "停用当前微信群记忆",
             "wechat_group_profile_get": "读取当前微信群群友画像",
             "env_config": "管理API密钥和技能配置",
             "scheduler": "管理定时任务和提醒",
@@ -237,7 +241,8 @@ def _build_tooling_section(tools: List[Any], language: str) -> List[str]:
         "bash", "terminal",
         "web_search", "web_fetch", "browser",
         "memory_search", "memory_get",
-        "wechat_group_memory_search", "wechat_group_profile_get",
+        "wechat_group_memory_search", "wechat_group_memory_write",
+        "wechat_group_memory_disable", "wechat_group_profile_get",
         "env_config", "scheduler", "send", "vision",
     ]
 

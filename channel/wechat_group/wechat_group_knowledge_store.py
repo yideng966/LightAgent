@@ -39,8 +39,8 @@ class WechatGroupKnowledgeStore:
                     INSERT INTO wechat_group_group_memories (
                         memory_id, room_id, content, source_kind,
                         evidence_message_ids_json, evidence_text, status,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        source_run_id, confidence, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         memory_id,
@@ -50,6 +50,8 @@ class WechatGroupKnowledgeStore:
                         json.dumps(evidence_message_ids, ensure_ascii=False),
                         str(extra.get("evidence_text") or ""),
                         str(extra.get("status") or "active"),
+                        str(extra.get("source_run_id") or ""),
+                        float(extra.get("confidence") or 0.0),
                         int(extra.get("created_at") or now),
                         int(extra.get("updated_at") or now),
                     ),
@@ -70,8 +72,8 @@ class WechatGroupKnowledgeStore:
                     INSERT INTO wechat_group_group_memories (
                         memory_id, room_id, content, source_kind,
                         evidence_message_ids_json, evidence_text, status,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        source_run_id, confidence, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(memory_id) DO UPDATE SET
                         room_id = excluded.room_id,
                         content = excluded.content,
@@ -79,6 +81,8 @@ class WechatGroupKnowledgeStore:
                         evidence_message_ids_json = excluded.evidence_message_ids_json,
                         evidence_text = excluded.evidence_text,
                         status = excluded.status,
+                        source_run_id = excluded.source_run_id,
+                        confidence = excluded.confidence,
                         updated_at = excluded.updated_at
                     """,
                     (
@@ -89,6 +93,8 @@ class WechatGroupKnowledgeStore:
                         json.dumps(evidence_message_ids, ensure_ascii=False),
                         str(extra.get("evidence_text") or ""),
                         str(extra.get("status") or "active"),
+                        str(extra.get("source_run_id") or ""),
+                        float(extra.get("confidence") or 0.0),
                         int(extra.get("created_at") or now),
                         int(extra.get("updated_at") or now),
                     ),
@@ -192,7 +198,13 @@ class WechatGroupKnowledgeStore:
                     (room_id, int(last_archive_row_id or 0), now),
                 )
 
-    def create_learning_run(self, room_id: str, mode: str, batch_start_row_id: int) -> str:
+    def create_learning_run(
+        self,
+        room_id: str,
+        mode: str,
+        batch_start_row_id: int,
+        trigger_source: str = "manual",
+    ) -> str:
         room_id = _require_text("room_id", room_id)
         mode = _require_text("mode", mode)
         run_id = uuid4().hex
@@ -204,10 +216,19 @@ class WechatGroupKnowledgeStore:
                     INSERT INTO wechat_group_learning_runs (
                         run_id, room_id, mode, batch_start_row_id, batch_end_row_id,
                         batch_message_count, profile_update_count, group_memory_upsert_count,
-                        status, failed_reason, started_at, finished_at
-                    ) VALUES (?, ?, ?, ?, 0, 0, 0, 0, 'running', '', ?, 0)
+                        status, failed_reason, trigger_source, summary_status,
+                        dream_status, skipped_count, dream_summary, llm_status_code,
+                        started_at, finished_at
+                    ) VALUES (?, ?, ?, ?, 0, 0, 0, 0, 'running', '', ?, '', '', 0, '', 0, ?, 0)
                     """,
-                    (run_id, room_id, mode, int(batch_start_row_id or 0), now),
+                    (
+                        run_id,
+                        room_id,
+                        mode,
+                        int(batch_start_row_id or 0),
+                        str(trigger_source or "manual"),
+                        now,
+                    ),
                 )
         return run_id
 
@@ -220,6 +241,11 @@ class WechatGroupKnowledgeStore:
         profile_update_count: int,
         group_memory_upsert_count: int,
         failed_reason: str = "",
+        summary_status: str = "",
+        dream_status: str = "",
+        skipped_count: int = 0,
+        dream_summary: str = "",
+        llm_status_code: int = 0,
     ) -> None:
         with self._lock, closing(self._connect()) as conn:
             with conn:
@@ -232,6 +258,11 @@ class WechatGroupKnowledgeStore:
                         profile_update_count = ?,
                         group_memory_upsert_count = ?,
                         failed_reason = ?,
+                        summary_status = ?,
+                        dream_status = ?,
+                        skipped_count = ?,
+                        dream_summary = ?,
+                        llm_status_code = ?,
                         finished_at = ?
                     WHERE run_id = ?
                     """,
@@ -242,6 +273,11 @@ class WechatGroupKnowledgeStore:
                         int(profile_update_count or 0),
                         int(group_memory_upsert_count or 0),
                         str(failed_reason or ""),
+                        str(summary_status or ""),
+                        str(dream_status or ""),
+                        int(skipped_count or 0),
+                        str(dream_summary or ""),
+                        int(llm_status_code or 0),
                         int(time.time()),
                         str(run_id),
                     ),
@@ -276,11 +312,15 @@ class WechatGroupKnowledgeStore:
                         evidence_message_ids_json TEXT NOT NULL DEFAULT '[]',
                         evidence_text TEXT NOT NULL DEFAULT '',
                         status TEXT NOT NULL DEFAULT 'active',
+                        source_run_id TEXT NOT NULL DEFAULT '',
+                        confidence REAL NOT NULL DEFAULT 0,
                         created_at INTEGER NOT NULL,
                         updated_at INTEGER NOT NULL
                     )
                     """
                 )
+                _ensure_column(conn, "wechat_group_group_memories", "source_run_id", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_group_memories", "confidence", "REAL NOT NULL DEFAULT 0")
                 conn.execute(
                     """
                     CREATE INDEX IF NOT EXISTS idx_wechat_group_group_memories_room_status
@@ -309,11 +349,23 @@ class WechatGroupKnowledgeStore:
                         group_memory_upsert_count INTEGER NOT NULL DEFAULT 0,
                         status TEXT NOT NULL,
                         failed_reason TEXT NOT NULL DEFAULT '',
+                        trigger_source TEXT NOT NULL DEFAULT 'manual',
+                        summary_status TEXT NOT NULL DEFAULT '',
+                        dream_status TEXT NOT NULL DEFAULT '',
+                        skipped_count INTEGER NOT NULL DEFAULT 0,
+                        dream_summary TEXT NOT NULL DEFAULT '',
+                        llm_status_code INTEGER NOT NULL DEFAULT 0,
                         started_at INTEGER NOT NULL,
                         finished_at INTEGER NOT NULL DEFAULT 0
                     )
                     """
                 )
+                _ensure_column(conn, "wechat_group_learning_runs", "trigger_source", "TEXT NOT NULL DEFAULT 'manual'")
+                _ensure_column(conn, "wechat_group_learning_runs", "summary_status", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_learning_runs", "dream_status", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_learning_runs", "skipped_count", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "dream_summary", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_learning_runs", "llm_status_code", "INTEGER NOT NULL DEFAULT 0")
                 conn.execute(
                     """
                     CREATE INDEX IF NOT EXISTS idx_wechat_group_learning_runs_room_time
@@ -361,3 +413,9 @@ def _loads_json(value: Any, default: Any) -> Any:
         return parsed if isinstance(parsed, type(default)) else default
     except Exception:
         return default
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    columns = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")

@@ -70,6 +70,16 @@ def note_user_turn(
       _evo_receiver      : push target for notify
     """
     try:
+        from agent.memory.routing import resolve_memory_route
+
+        route = resolve_memory_route(
+            agent=agent,
+            channel_type=channel_type,
+            stable_room_id=stable_room_id,
+        )
+        if not route.allow_shared_evolution:
+            _clear_shared_evolution_state(agent)
+            return
         agent._evo_last_active = time.time()
         agent._evo_turns = int(getattr(agent, "_evo_turns", 0)) + 1
         if channel_type:
@@ -93,6 +103,12 @@ def note_user_turn(
                     }
     except Exception:
         pass
+
+
+def _clear_shared_evolution_state(agent) -> None:
+    agent._evo_turns = 0
+    agent._evo_observed_messages = []
+    agent._evo_observed_scope = {}
 
 
 def _sanitize_observed_messages(messages) -> list:
@@ -167,6 +183,16 @@ def _scan_once(agent_bridge, cfg) -> None:
     sessions = list(getattr(agent_bridge, "agents", {}).items())
     for session_id, agent in sessions:
         try:
+            from agent.memory.routing import resolve_memory_route
+
+            route = resolve_memory_route(
+                agent=agent,
+                session_id=session_id,
+                channel_type=getattr(agent, "_evo_channel_type", "") or "",
+            )
+            if not route.allow_shared_evolution:
+                _clear_shared_evolution_state(agent)
+                continue
             # Skip sessions whose agent is mid-run: a long turn must not be
             # reviewed while it is still producing the answer.
             if getattr(agent, "_evo_run_active", False):

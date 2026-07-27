@@ -43,15 +43,15 @@ class WechatGroupArchive:
         runtime_room_id: str = "",
         stable_member_id: str = "",
         runtime_sender_id: str = "",
-    ) -> None:
+    ) -> int:
         if not room_id or not message_id:
-            return
+            return 0
         ts = _coerce_timestamp(created_at)
         runtime_room = str(runtime_room_id or room_id)
         runtime_sender = str(runtime_sender_id or sender_id or "")
         with self._lock, closing(self._connect()) as conn:
             with conn:
-                conn.execute(
+                cursor = conn.execute(
                     """
                     INSERT OR IGNORE INTO wechat_group_messages (
                         message_id, room_id, room_name, sender_id, sender_nickname,
@@ -77,6 +77,13 @@ class WechatGroupArchive:
                         runtime_sender,
                     ),
                 )
+                if cursor.rowcount:
+                    return int(cursor.lastrowid or 0)
+                row = conn.execute(
+                    "SELECT id FROM wechat_group_messages WHERE message_id = ? LIMIT 1",
+                    (str(message_id),),
+                ).fetchone()
+                return int(row[0] or 0) if row else 0
 
     def record_assistant_reply(
         self,
@@ -440,6 +447,78 @@ class WechatGroupArchive:
                 LIMIT ?
                 """,
                 (str(room_id), str(room_id), row_id, max_limit),
+            ).fetchall()
+        return [self._message_row_to_dict(row) for row in rows]
+
+    def count_text_messages_after_row_id(self, room_id: str, last_row_id: int) -> int:
+        if not room_id:
+            return 0
+        with self._lock, closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*)
+                FROM wechat_group_messages
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
+                  AND id > ?
+                  AND LOWER(message_type) = 'text'
+                """,
+                (str(room_id), str(room_id), int(last_row_id or 0)),
+            ).fetchone()
+        return int(row[0] or 0) if row else 0
+
+    def get_text_messages_after_row_id(
+        self,
+        room_id: str,
+        last_row_id: int,
+        limit: int = 200,
+        window_minutes: int = 120,
+    ) -> List[Dict[str, Any]]:
+        if not room_id:
+            return []
+        max_limit = min(max(int(limit or 200), 1), 500)
+        row_id = max(int(last_row_id or 0), 0)
+        minutes = max(int(window_minutes or 120), 1)
+        scope_params = (str(room_id), str(room_id), row_id)
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            first = conn.execute(
+                """
+                SELECT created_at
+                FROM wechat_group_messages
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
+                  AND id > ?
+                  AND LOWER(message_type) = 'text'
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                scope_params,
+            ).fetchone()
+            if not first:
+                return []
+            window_end = int(first[0] or 0) + minutes * 60
+            rows = conn.execute(
+                """
+                SELECT id, message_id, room_id, room_name, sender_id, sender_nickname,
+                       message_type, text, media_path, is_at, metadata, created_at,
+                       stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
+                FROM wechat_group_messages
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
+                  AND id > ?
+                  AND LOWER(message_type) = 'text'
+                  AND created_at <= ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (*scope_params, window_end, max_limit),
             ).fetchall()
         return [self._message_row_to_dict(row) for row in rows]
 

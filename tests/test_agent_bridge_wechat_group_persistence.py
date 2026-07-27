@@ -255,10 +255,7 @@ class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
         self.assertEqual(ReplyType.ERROR, failed.type)
         self.assertEqual([[]], success_agent.starts)
         self.assertEqual([[]], failed_agent.starts)
-        observed_text = str(getattr(success_agent, "_evo_observed_messages", []))
-        self.assertIn("有用吗", observed_text)
-        self.assertIn("当前回复", observed_text)
-        self.assertNotIn("enhanced prompt", observed_text)
+        self.assertEqual([], getattr(success_agent, "_evo_observed_messages", []))
         for agent in (success_agent, failed_agent):
             self.assertEqual([{"role": "user", "content": "旧投屏历史"}], agent.messages)
             self.assertEqual([{"role": "assistant", "content": "旧回复"}], agent._last_run_new_messages)

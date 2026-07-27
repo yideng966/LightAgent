@@ -406,7 +406,7 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
 
 - 支持 `memory_search` 和 `memory_get` 工具。
 - 支持作用域记忆，用于区分全局记忆、群记忆、成员画像等。
-- 支持在上下文压力或空闲复盘时把历史消息 flush 到记忆。
+- Web、私聊等通用 Agent 会话支持在上下文压力或每日任务中把历史消息 flush 到全局记忆；微信群会话不会写入该 shared 链路。
 
 知识库：
 
@@ -426,11 +426,12 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
 - 产生真实改动时，会先创建备份，再把结果写入 `memory/evolution/YYYY-MM-DD.md`，并通过 `remember_scheduled_output` 向原会话注入 `[EVOLUTION]` 记录，后续可用 `evolution_undo` 回滚对应备份。
 - 只有同时存在 `channel_type` 和单聊 `receiver` 时才会主动推送进化摘要；群聊不会设置主动推送 receiver，避免在群里无人提问时主动打扰。
 
-微信群与群聊复用自主进化：
+微信群记忆与全局进化隔离：
 
-- 个人微信群通道没有独立实现第二套自主进化系统。`WechatGroupChannel` 仍按 `ChatChannel -> Bridge.fetch_agent_reply -> AgentBridge.agent_reply` 进入 LightAgent Agent 主链路，因此复用自主进化的用户轮次记录、空闲扫描、隔离 review agent、备份、`[EVOLUTION]` 注入和 `evolution_undo` 回滚能力。
-- `wechat_group` 上下文会被记录为群聊会话轮次，但 `AgentBridge.agent_reply` 会在 `isgroup=true` 时调用 `note_user_turn(agent, channel_type=ch, receiver="")`，即记录可进化信号但不设置主动推送 receiver。
-- 这意味着微信群可以在空闲后沉淀长期记忆、技能或知识修正，但进化摘要不会主动发到群里；用户后续继续对话时，主链路可通过会话中的 `[EVOLUTION]` 记录感知进化结果。
+- `WechatGroupChannel` 仍按 `ChatChannel -> Bridge.fetch_agent_reply -> AgentBridge.agent_reply` 复用 LightAgent Agent 回复、工具和技能主链路，但不参与 shared Daily Summary、全局 Deep Dream 或 Self-Evolution。
+- `channel_type=wechat_group` 和历史 `wechat_group:` 会话 ID 都会解析为 fail-closed 的群记忆路由；稳定群身份缺失时也不会降级写入根 `MEMORY.md`、全局天级记忆、进化记录或工作空间文件。
+- 群永久记忆使用独立的两阶段 LLM Dream：当前群新增归档先摘要，再与当前群已有永久记忆蒸馏合并；两阶段均走共享 `TextModelRouter.complete()`，输出只写当前 `stable_room_id` 的群知识库。
+- `wechat_group_learning_enabled` 只控制群永久记忆自动 Dream。群画像学习和群画像 evolution 使用各自配置与数据链路，不由该开关控制。
 
 ## 插件系统
 
@@ -530,7 +531,7 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
 - `wechaty-puppet-wechat4u` 下提供可见 `@昵称` 文本兜底。
 - 当前群最近上下文归档，按 `room_id` 隔离。
 - 人设预设和自定义人设，支持管理员配置请求跳过人设注入。
-- 群记忆和按 `stable_room_id + stable_member_id` 隔离的群友画像，只注入当前群回复上下文。
+- 群永久记忆通过两阶段 LLM Dream 自动生成，并按 `stable_room_id` 强隔离；按 `stable_room_id + stable_member_id` 隔离的群友画像只注入当前群回复上下文。
 - 群友画像学习、常用词噪声过滤、按群展示画像出现范围。
 - 话题追踪：活动话题持久化、消息归属、摘要历史、上下文注入。
 - 风格卡片：候选学习、审核启用、上下文注入。
@@ -563,7 +564,7 @@ Web 使用路径：
 ### 重要边界
 
 - 不在 `channel/wechat_group/` 内重写独立模型调用、独立 Agent loop 或独立长期记忆系统。
-- 群记忆和群友画像必须按 `room_id` / `sender_id` 强过滤，不能跨群泄露。
+- 群记忆和群友画像必须按 `stable_room_id` / `stable_member_id` 强过滤，不能跨群泄露；微信群不得写入 shared Daily、Deep Dream 或 Self-Evolution。
 - sidecar 遇到文本消息不能调用 `toFileBox()` 下载文件；只有真实媒体消息才下载。
 - Web 微信 / `wechaty-puppet-wechat4u` 不能稳定触发系统级“有人@我”提醒，当前保证的是回复回同一群且文本中可见 @ 到真实发送者。
 - 真实扫码、入群、真实 mention 和跨群隔离仍需要人工链路验证。

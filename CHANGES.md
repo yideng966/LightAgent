@@ -2,6 +2,32 @@
 
 ## 2026-07-27
 
+### 全局记忆与微信群永久记忆隔离及 Dream 蒸馏
+
+- 新增统一 `MemoryRoute`，微信群请求在上下文 overflow、轮次/token trim、每日汇总和 `MemoryManager` 二次防线中均禁止写入 shared Daily/Deep Dream；AgentBridge、idle trigger 与 evolution executor 三层同时阻断微信群参与全局 Self-Evolution。
+- 新增共享 `MemoryDreamEngine`，全局摘要、全局 Deep Dream 和群记忆蒸馏统一通过共享 `TextModelRouter.complete()` 使用同一主备模型顺序与熔断状态；失败后的全局 Dream 可重试，不再提前写入去重 hash。
+- 群永久记忆改为按 `stable_room_id` 强隔离的两阶段 LLM Dream：当前群安全归档先摘要，再结合当前群 active 记忆蒸馏；服务端严格校验 memory token、evidence allowlist、敏感文本、作用域与 add/update 操作，失败不推进游标，全部过滤的窗口可安全消费而不会卡死。
+- 新增全局单任务与同群串行保护、idle 自动触发、显式历史归档生成、运行诊断、Web 配置和当前群管理员写入/停用工具；普通成员仍只有搜索权限，管理员证据 ID 必须属于当前稳定群。群画像提取、画像 evolution、画像游标和画像 UI 未纳入本次修改。
+- 新增默认 dry-run 的 `scripts/reset_global_memory_history.py`，只重置根 `MEMORY.md`、全局日记/Dream/Evolution/备份、shared 索引和明确的进化注入消息，保留群归档、群知识库、用户作用域记忆、knowledge 与普通会话。
+- 更新 `AGENTS.md`：开发实际环境验证固定使用本地 `python app.py`，不得把远端 Docker 或远端数据作为默认开发测试环境。
+
+关键文件：
+
+- `agent/memory/routing.py`、`agent/memory/dream_engine.py`
+- `agent/protocol/agent_stream.py`、`agent/evolution/`、`bridge/agent_bridge.py`、`bridge/agent_initializer.py`
+- `channel/wechat_group/wechat_group_memory_dream.py`、`wechat_group_memory_dream_trigger.py`、`wechat_group_memory_material.py`
+- `channel/wechat_group/wechat_group_knowledge_service.py`、`wechat_group_memory_tools.py`
+- `channel/web/web_channel.py`、`channel/web/static/js/console.js`
+- `scripts/reset_global_memory_history.py`
+- `plans/20260727_全局与群记忆隔离及群梦境蒸馏开发计划.md`
+
+验证记录：
+
+- 定向回归覆盖记忆路由、Dream Engine、清理脚本、群材料、两阶段 Dream、trigger、Web、工具、渠道与 evolution；`PYTHONUTF8=1 python -m unittest discover -s tests` 共 1105 项通过，1 项按条件跳过。
+- `node --check channel/web/static/js/console.js`、`python -m json.tool config-template.json`、Python 编译和 `git diff --check` 通过。
+- 本地 `python app.py` 启动后 `192.168.3.113:9901` 返回 HTTP 200；两个稳定群的 memory-only 手动运行分别返回“无新增材料”和“10 条材料低于 20 条阈值”，确认阈值不足时不调用 LLM、不推进游标且不触发群画像。
+- 本地 `agent_workspace` 完成受控重置：删除 10 个全局文件/目录目标、16 条 shared 记忆索引和 10 条进化注入消息；二次 dry-run 三类计数均为 0，群归档仍保留 31754 条，短期回退快照已在验收后删除。
+
 ### 发布构建版本元数据同步
 
 - 新增统一版本写入脚本，校验不带 `v` 前缀的发布版本后，同时更新 `cli/VERSION` 与 `pyproject.toml` 的 `[project].version`，避免 `pip show lightagent` 持续显示旧的 `1.0.0`。

@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 
 from agent.memory.config import MemoryConfig, get_default_memory_config
 from agent.memory.scope import MemoryScope
+from agent.memory.routing import MemoryRoute, allow_shared_memory_write
 from agent.memory.storage import MemoryStorage, MemoryChunk, SearchResult
 from agent.memory.chunker import TextChunker
 from agent.memory.embedding import EmbeddingProvider, EmbeddingCache
@@ -450,6 +451,7 @@ class MemoryManager:
         reason: str = "threshold",
         max_messages: int = 10,
         context_summary_callback=None,
+        memory_route: Optional[MemoryRoute] = None,
     ) -> bool:
         """
         Flush conversation summary to daily memory file.
@@ -465,6 +467,18 @@ class MemoryManager:
         Returns:
             True if flush was dispatched
         """
+        memory_route = memory_route or getattr(self, "_memory_route", None)
+        if not allow_shared_memory_write(memory_route, purpose="flush"):
+            from common.log import logger
+
+            logger.info(
+                "[MemoryManager] skipped shared flush: scope=%s channel=%s reason=%s",
+                memory_route.scope_type,
+                memory_route.channel_type,
+                reason,
+            )
+            return False
+
         success = self.flush_manager.flush_from_messages(
             messages=messages,
             user_id=user_id,

@@ -332,6 +332,7 @@ class WechatGroupChannel(ChatChannel):
             self.report_startup_error(error)
             return
         self._ensure_profile_evolution_trigger_started()
+        self._ensure_memory_dream_trigger_started()
         self.report_startup_success()
 
     def stop(self):
@@ -382,6 +383,17 @@ class WechatGroupChannel(ChatChannel):
             get_wechat_group_profile_evolution_trigger().start()
         except Exception as e:
             logger.debug("[wechat_group] profile evolution trigger start skipped: {}".format(e))
+
+    @staticmethod
+    def _ensure_memory_dream_trigger_started() -> None:
+        try:
+            from channel.wechat_group.wechat_group_memory_dream_trigger import (
+                get_wechat_group_memory_dream_trigger,
+            )
+
+            get_wechat_group_memory_dream_trigger().start()
+        except Exception as e:
+            logger.debug("[wechat_group] memory Dream trigger start skipped: {}".format(e))
 
     def get_login_status(self) -> str:
         error = self._poll_client_error()
@@ -1450,7 +1462,7 @@ class WechatGroupChannel(ChatChannel):
             quote_diagnostics = getattr(msg, "quote_diagnostics", {})
             if not isinstance(quote_diagnostics, dict):
                 quote_diagnostics = {}
-            self.archive.record_message(
+            archive_row_id = self.archive.record_message(
                 message_id=msg.msg_id,
                 room_id=msg.other_user_id,
                 room_name=msg.other_user_nickname,
@@ -1484,7 +1496,7 @@ class WechatGroupChannel(ChatChannel):
                     getattr(msg, "wechat_group_stable_room_id", "") or msg.other_user_id,
                     msg.msg_id,
                 )
-                archive_row_id = int((row or {}).get("id") or 0)
+                archive_row_id = int(archive_row_id or (row or {}).get("id") or 0)
                 from channel.wechat_group.wechat_group_profile_evolution_trigger import note_wechat_group_profile_signal
                 note_wechat_group_profile_signal(
                     getattr(msg, "wechat_group_stable_room_id", "") or msg.other_user_id,
@@ -1492,6 +1504,19 @@ class WechatGroupChannel(ChatChannel):
                 )
             except Exception as signal_error:
                 logger.debug("[wechat_group] failed to notify profile evolution signal: {}".format(signal_error))
+            stable_room_id = str(getattr(msg, "wechat_group_stable_room_id", "") or "").strip()
+            if stable_room_id and conf().get("wechat_group_learning_enabled", False):
+                try:
+                    from channel.wechat_group.wechat_group_memory_dream_trigger import (
+                        note_wechat_group_memory_signal,
+                    )
+
+                    note_wechat_group_memory_signal(
+                        stable_room_id,
+                        archive_row_id=int(archive_row_id or 0),
+                    )
+                except Exception as signal_error:
+                    logger.debug("[wechat_group] failed to notify memory Dream signal: {}".format(signal_error))
             self._collect_sticker_from_message(msg)
         except Exception as e:
             logger.warning("[wechat_group] failed to archive inbound message: {}".format(e))

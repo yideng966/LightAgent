@@ -107,10 +107,12 @@ class TestTextModelRouter(unittest.TestCase):
             result = router.complete(
                 [{"role": "user", "content": "make title"}],
                 purpose="session_title",
+                temperature=0.2,
             )
 
         self.assertTrue(result["success"])
         self.assertEqual("title", result["content"])
+        self.assertEqual(0.2, primary.calls[0]["temperature"])
         self.assertEqual({}, router.sessions._sessions)
 
     def test_complete_model_override_uses_only_selected_candidate(self):

@@ -334,6 +334,21 @@ def run_evolution_for_session(
     Safe to call from a background thread. All failures are swallowed and
     logged — evolution must never disrupt the main pipeline.
     """
+    from agent.memory.routing import resolve_memory_route
+
+    route = resolve_memory_route(
+        agent=getattr(agent_bridge, "agents", {}).get(session_id),
+        session_id=session_id,
+        channel_type=channel_type,
+    )
+    if not route.allow_shared_evolution:
+        logger.info(
+            "[Evolution] skipped shared evolution: session=%s scope=%s",
+            session_id,
+            route.scope_type,
+        )
+        return False
+
     cfg = get_evolution_config()
     if not cfg.enabled:
         return False

@@ -1289,11 +1289,14 @@ class AgentStreamExecutor:
 
                 # Flush memory before trimming to preserve context that will be lost
                 if is_context_overflow and self.agent.memory_manager:
-                    user_id = getattr(self.agent, '_current_user_id', None)
-                    self.agent.memory_manager.flush_memory(
-                        messages=self.messages, user_id=user_id,
-                        reason="overflow", max_messages=0
-                    )
+                    memory_route = self._current_memory_route()
+                    if memory_route.allow_shared_flush:
+                        user_id = getattr(self.agent, '_current_user_id', None)
+                        self.agent.memory_manager.flush_memory(
+                            messages=self.messages, user_id=user_id,
+                            reason="overflow", max_messages=0,
+                            memory_route=memory_route,
+                        )
 
                 # Strategy: try aggressive trimming first, only clear as last resort
                 if is_context_overflow and not _overflow_retry:
@@ -2117,13 +2120,16 @@ class AgentStreamExecutor:
                 for turn in discarded_turns:
                     discarded_messages.extend(turn["messages"])
                 if discarded_messages:
-                    user_id = getattr(self.agent, '_current_user_id', None)
-                    cb = self._build_context_summary_callback(discarded_turns, turns)
-                    self.agent.memory_manager.flush_memory(
-                        messages=discarded_messages, user_id=user_id,
-                        reason="trim", max_messages=0,
-                        context_summary_callback=cb,
-                    )
+                    memory_route = self._current_memory_route()
+                    if memory_route.allow_shared_flush:
+                        user_id = getattr(self.agent, '_current_user_id', None)
+                        cb = self._build_context_summary_callback(discarded_turns, turns)
+                        self.agent.memory_manager.flush_memory(
+                            messages=discarded_messages, user_id=user_id,
+                            reason="trim", max_messages=0,
+                            context_summary_callback=cb,
+                            memory_route=memory_route,
+                        )
 
         # Step 3: Token 限制 - 保留完整轮次
         # Get context window from agent (based on model)
@@ -2214,13 +2220,16 @@ class AgentStreamExecutor:
             for turn in discarded_turns:
                 discarded_messages.extend(turn["messages"])
             if discarded_messages:
-                user_id = getattr(self.agent, '_current_user_id', None)
-                cb = self._build_context_summary_callback(discarded_turns, kept_turns)
-                self.agent.memory_manager.flush_memory(
-                    messages=discarded_messages, user_id=user_id,
-                    reason="trim", max_messages=0,
-                    context_summary_callback=cb,
-                )
+                memory_route = self._current_memory_route()
+                if memory_route.allow_shared_flush:
+                    user_id = getattr(self.agent, '_current_user_id', None)
+                    cb = self._build_context_summary_callback(discarded_turns, kept_turns)
+                    self.agent.memory_manager.flush_memory(
+                        messages=discarded_messages, user_id=user_id,
+                        reason="trim", max_messages=0,
+                        context_summary_callback=cb,
+                        memory_route=memory_route,
+                    )
 
         new_messages = []
         for turn in kept_turns:
@@ -2233,6 +2242,15 @@ class AgentStreamExecutor:
             f"   Removed {removed_count} turns "
             f"({old_count} -> {len(self.messages)} messages, "
             f"~{current_tokens + system_tokens} -> ~{kept_tokens + system_tokens} tokens)"
+        )
+
+    def _current_memory_route(self):
+        from agent.memory.routing import resolve_memory_route
+
+        return resolve_memory_route(
+            context=self.context,
+            agent=self.agent,
+            session_id=getattr(self.agent, '_current_session_id', "") or "",
         )
 
     def _clear_session_db(self):

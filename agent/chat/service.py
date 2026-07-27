@@ -53,6 +53,15 @@ class ChatService:
         # receiver/session. This streaming path bypasses agent_bridge.agent_reply,
         # so the attach step that normally happens there must be done here too.
         context = self._build_context(query, session_id, channel_type)
+        from agent.memory.routing import resolve_memory_route
+        agent._memory_route = resolve_memory_route(
+            context=context,
+            agent=agent,
+            session_id=session_id,
+            channel_type=channel_type,
+        )
+        if getattr(agent, "memory_manager", None) is not None:
+            agent.memory_manager._memory_route = agent._memory_route
         self._attach_context_aware_tools(agent, context)
 
         # Mark this session as mid-run so the self-evolution idle scan does not
