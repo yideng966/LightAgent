@@ -2,8 +2,8 @@ name: Release Desktop
 
 # Tag-driven release: push a tag like `v1.2.0` to build and publish the
 # desktop client for macOS (arm64 + x64) and Windows (x64). The tag is the
-# single source of truth for the version — it's written into package.json at
-# build time, so the maintainer never edits the version by hand.
+# single source of truth for the version — it's written into the Python package
+# metadata and package.json at build time, so it is never edited by hand.
 on:
   push:
     tags:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to stamp (e.g. 1.0.0-test). Used for package.json and R2 path."
+        description: "Version to stamp (e.g. 1.0.0-rc.1). Used for Python metadata, package.json and R2 path."
         type: string
         default: "0.0.0-dev"
       publish_r2:
@@ -70,6 +70,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Stamp Python release version
+        shell: bash
+        run: python scripts/stamp_release_version.py "${{ steps.ver.outputs.version }}"
 
       - name: Set up Node
         uses: actions/setup-node@v4

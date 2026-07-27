@@ -42,13 +42,25 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Write version from tag
+      - name: Derive release version
+        id: ver
         shell: bash
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            echo "${GITHUB_REF_NAME#v}" > cli/VERSION
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version="$(tr -d '\r\n' < cli/VERSION)"
           fi
-          echo "VERSION=$(cat cli/VERSION)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Stamp release version
+        shell: bash
+        run: python scripts/stamp_release_version.py "${{ steps.ver.outputs.version }}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

@@ -2,6 +2,25 @@
 
 ## 2026-07-27
 
+### 发布构建版本元数据同步
+
+- 新增统一版本写入脚本，校验不带 `v` 前缀的发布版本后，同时更新 `cli/VERSION` 与 `pyproject.toml` 的 `[project].version`，避免 `pip show lightagent` 持续显示旧的 `1.0.0`。
+- Docker 镜像标签构建和桌面发布均在 Python 包安装或后端打包前执行版本同步；标签构建使用标签版本，桌面手动构建沿用显式版本输入，Docker 手动构建沿用当前 `cli/VERSION`。
+- 增加版本格式、字段作用域、失败不改文件及两条工作流执行顺序的回归测试，并在 `AGENTS.md` 固化发布版本一致性要求。
+
+关键文件：
+
+- `scripts/stamp_release_version.py`
+- `.github/workflows/deploy-image.yml`
+- `.github/workflows/release.yml`
+- `tests/test_release_version.py`
+- `AGENTS.md`
+
+验证记录：
+
+- `python -m unittest tests.test_release_version tests.test_release_notes tests.test_docker_deployment` 通过（14 项）。
+- `scripts/stamp_release_version.py` 与对应测试完成 Python 编译检查，脚本命令入口、发布工作流 YAML 解析及 `git diff --check` 通过。
+
 ### GitHub Release 中文说明与自动发布
 
 - 为 GitHub Release 建立版本化中文说明：新增可复制模板与 `docs/releases/v2.1.6.md`，正文按项目定位、版本摘要、实际变更分类、安装和文档组织，不再依赖空 Release 或未经整理的提交列表。

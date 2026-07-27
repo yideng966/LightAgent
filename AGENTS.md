@@ -256,6 +256,7 @@ docker push yideng966/lightagent:latest
 - 正文不得包含内部计划、测试通过数量、文件清单、提交哈希、实现过程、未确认路线图、密钥或部署标识；贡献者致谢、关联 PR/Issue 仅在真实且有用户价值时补充。
 - 末尾必须依次保留“安装”和“文档”章节。安装命令必须使用当前完整版本标签，至少给出 Docker Hub 与 GHCR 镜像；如发布 `skills-full` 或桌面安装包，应明确变体或 Assets 获取方式。文档链接必须指向 `yideng966/LightAgent` 的当前有效页面。
 - 创建标签前必须先运行 `python scripts/validate_release_notes.py --tag <完整标签> docs/releases/<完整标签>.md`，并人工预览 Markdown；校验通过且说明文件已进入待打标签的提交后，才能推送标签。不得先打标签、后在默认分支补说明。
+- 发布构建必须在安装或打包 Python 后端前调用 `scripts/stamp_release_version.py`，使用发布标签（手动构建使用明确输入或当前 `cli/VERSION`）同时更新 `cli/VERSION` 与 `pyproject.toml`；不得只更新其中一处，避免 CLI/Web 版本与 `pip show lightagent` 不一致。
 - 标签构建成功后，`release.yml` 会创建或更新同标签 GitHub Release，并上传实际生成的 `.dmg` / `.exe` 资产；工作流重跑必须更新原 Release，不得创建重复版本。补发历史 Release 时同样使用对应版本文件，并在发布后通过 GitHub API 或页面核对标题、标签、正文和预发布状态。
 
 ## 修改原则
