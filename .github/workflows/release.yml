@@ -149,6 +149,70 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  publish-github-release:
+    name: Publish GitHub Release
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate release notes
+        id: release
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          NOTES_FILE="docs/releases/${TAG}.md"
+          python scripts/validate_release_notes.py --tag "$TAG" "$NOTES_FILE"
+          echo "notes_file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Stage GitHub Release assets
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f \( -name '*.dmg' -o -name '*.exe' \) -exec cp {} release-assets/ \;
+          find release-assets -maxdepth 1 -type f -print
+
+      - name: Create or update GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.release.outputs.version }}
+          NOTES_FILE: ${{ steps.release.outputs.notes_file }}
+        run: |
+          title="LightAgent ${VERSION}"
+          prerelease_args=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease_args+=(--prerelease)
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" \
+              --title "$title" \
+              --notes-file "$NOTES_FILE" \
+              "${prerelease_args[@]}"
+          else
+            create_args=(--verify-tag --title "$title" --notes-file "$NOTES_FILE")
+            if [[ "$VERSION" == *-* ]]; then
+              create_args+=(--prerelease --latest=false)
+            fi
+            gh release create "$TAG" "${create_args[@]}"
+          fi
+
+          mapfile -d '' assets < <(find release-assets -maxdepth 1 -type f -print0)
+          if (( ${#assets[@]} > 0 )); then
+            gh release upload "$TAG" "${assets[@]}" --clobber
+          fi
+
   # Mirror the release installers to R2 (CDN-backed) and register them in D1 so
   # lightagent.ai/download/{platform}/latest can resolve and count downloads.
   # Runs only on tag pushes, and is a no-op (skips) until the Cloudflare secrets

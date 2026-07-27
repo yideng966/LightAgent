@@ -2,6 +2,29 @@
 
 ## 2026-07-27
 
+### GitHub Release 中文说明与自动发布
+
+- 为 GitHub Release 建立版本化中文说明：新增可复制模板与 `docs/releases/v2.1.6.md`，正文按项目定位、版本摘要、实际变更分类、安装和文档组织，不再依赖空 Release 或未经整理的提交列表。
+- 新增标准库校验脚本，检查标签与文件名一致性、必需章节、变更列表、版本固定安装命令、文档链接和遗留占位符；补充定向回归测试覆盖有效说明、旧文件名、占位符和缺少变更分类等场景。
+- 扩展桌面标签发布工作流：真实 `v*` 标签构建成功后创建或更新同标签 GitHub Release，正确标记预发布版本，并覆盖上传实际生成的 `.dmg` / `.exe`；手动测试构建不会误发正式 Release。
+- 更新 `AGENTS.md`，明确发行说明的证据来源、文件命名、中文结构、分类规则、禁写内容、版本固定安装命令、标签前校验和历史 Release 补发要求。
+- 已为现有 `v2.1.6` 标签补建首个正式 Release：`https://github.com/yideng966/LightAgent/releases/tag/v2.1.6`。
+
+关键文件：
+
+- `.github/RELEASE_NOTES_TEMPLATE.md`
+- `.github/workflows/release.yml`
+- `docs/releases/v2.1.6.md`
+- `scripts/validate_release_notes.py`
+- `tests/test_release_notes.py`
+- `AGENTS.md`
+
+验证记录：
+
+- `python -m unittest tests.test_release_notes`：5 项通过。
+- `python scripts/validate_release_notes.py --tag v2.1.6 docs/releases/v2.1.6.md`、Python 编译、Release 工作流 YAML 解析和 `git diff --check` 通过。
+- GitHub CLI 与公开 API 复核通过：线上 Release 标题为 `LightAgent 2.1.6`，标签为 `v2.1.6`，正文与版本文件一致，且 `draft=false`、`prerelease=false`。
+
 ### 微信群自由回复旧话题锚定与观察历史隔离修复
 
 - 修正 `get_messages_for_distill()` 的截取方向：时间窗口内先取最新 N 条，再按时间正序返回；本地摘要统一过滤 WPS/app transport XML、base64、路径、敏感键值和 URL 查询参数，不再把原始载荷送入 Prompt。
