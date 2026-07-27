@@ -1,3 +1,6 @@
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -59,6 +62,36 @@ version = "keep-me"
             self.assertEqual(
                 original_pyproject,
                 (root / "pyproject.toml").read_bytes(),
+            )
+
+    def test_cli_succeeds_with_cp1252_stdout(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            self._create_fixture(root)
+            env = os.environ.copy()
+            env["PYTHONIOENCODING"] = "cp1252"
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts" / "stamp_release_version.py"),
+                    "2.1.8",
+                    "--root",
+                    str(root),
+                ],
+                capture_output=True,
+                check=False,
+                env=env,
+            )
+
+            self.assertEqual(
+                0,
+                result.returncode,
+                result.stderr.decode("utf-8", errors="replace"),
+            )
+            self.assertEqual(
+                b"Stamped LightAgent release version: 2.1.8",
+                result.stdout.strip(),
             )
 
     def test_release_workflows_stamp_before_packaging(self):

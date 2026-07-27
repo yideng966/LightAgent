@@ -72,7 +72,7 @@ def main() -> int:
     args = parser.parse_args()
 
     stamp_release_version(args.root, args.version)
-    print(f"已同步 LightAgent 发布版本：{args.version}")
+    print(f"Stamped LightAgent release version: {args.version}")
     return 0
 
 

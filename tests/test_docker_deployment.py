@@ -21,6 +21,15 @@ class DockerDeploymentContractTest(unittest.TestCase):
         self.assertIn("import('wechaty')", text)
         self.assertIn("libatomic1", text)
 
+    def test_apt_downloads_have_bounded_retries_in_every_stage(self):
+        text = (ROOT / "docker" / "Dockerfile.latest").read_text(encoding="utf-8")
+        apt_stages = [stage for stage in text.split("\nFROM ") if "apt-get" in stage]
+
+        self.assertGreaterEqual(len(apt_stages), 2)
+        for stage in apt_stages:
+            with self.subTest(stage=stage.splitlines()[0]):
+                self.assertIn('Acquire::Retries "3";', stage)
+
     def test_compose_persists_private_data_and_workspace(self):
         path = ROOT / "docker" / "docker-compose.yml"
         compose = yaml.safe_load(path.read_text(encoding="utf-8"))
