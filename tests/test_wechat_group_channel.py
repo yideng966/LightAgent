@@ -107,6 +107,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_free_reply_names": conf().get("wechat_group_free_reply_names"),
             "wechat_group_free_reply_force_keywords": conf().get("wechat_group_free_reply_force_keywords"),
             "wechat_group_free_reply_activity_level": conf().get("wechat_group_free_reply_activity_level"),
+            "wechat_group_free_reply_scorer_enabled": conf().get("wechat_group_free_reply_scorer_enabled"),
             "wechat_group_free_reply_mute_minutes": conf().get("wechat_group_free_reply_mute_minutes"),
             "wechat_group_free_reply_mute_mentions_enabled": conf().get("wechat_group_free_reply_mute_mentions_enabled"),
             "wechat_group_recent_context_enabled": conf().get("wechat_group_recent_context_enabled"),
@@ -2184,7 +2185,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         )
 
         with patch("time.time", return_value=1005):
-            should_enqueue, decision = channel._should_enqueue_free_reply_message(msg)
+            should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
 
         self.assertFalse(should_enqueue)
         self.assertIn("min_interval", decision["suppressions"])
@@ -2223,11 +2224,272 @@ class WechatGroupChannelTest(unittest.TestCase):
             wechat_group_stable_member_id="wgm_alice",
         )
 
-        should_enqueue, decision = channel._should_enqueue_free_reply_message(msg)
+        should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
 
         self.assertFalse(should_enqueue)
         self.assertIn("blocked_sender", decision["suppressions"])
         self.assertEqual("wgm_alice", decision["sender_id"])
+
+    def test_scorer_bypasses_only_below_threshold_and_passes_recent_messages(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_scorer_enabled"] = True
+        conf()["wechat_group_free_reply_scorer_context_limit"] = 12
+        conf()["wechat_group_emotion_enabled"] = False
+        recent = [{
+            "message_id": "m0",
+            "sender_id": "wxid_alice",
+            "sender_nickname": "Alice",
+            "text": "论文快把我吃了",
+        }]
+        scorer_timeline = [{
+            "message_id": "m1",
+            "sender_id": "__lightagent_bot__",
+            "sender_nickname": "LightBot",
+            "text": "怕你让我把论文发出来呀",
+            "is_bot": True,
+        }]
+        archive = Mock(spec=WechatGroupArchive)
+        archive.get_recent_messages.return_value = recent
+        archive.get_recent_conversation_messages.return_value = scorer_timeline
+        channel = WechatGroupChannel(
+            client=FakeClient(),
+            archive=archive,
+        )
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="啥论文",
+            text="啥论文",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            message_type="text",
+            media_path="",
+            my_msg=False,
+            create_time=1005,
+            msg_id="m2",
+        )
+
+        should_enqueue, decision, returned_recent = channel._should_enqueue_free_reply_message(msg)
+
+        self.assertTrue(should_enqueue)
+        self.assertTrue(decision["triggered"])
+        self.assertIn("below_threshold", decision["suppressions"])
+        self.assertEqual(scorer_timeline, returned_recent)
+        archive.get_recent_messages.assert_called_once_with(
+            "room@@abc",
+            limit=18,
+            minutes=120,
+            now=1005,
+        )
+        archive.get_recent_conversation_messages.assert_called_once_with(
+            "room@@abc",
+            limit=12,
+            minutes=120,
+            now=1005,
+        )
+
+    def test_scorer_does_not_bypass_hard_suppression(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_scorer_enabled"] = True
+        conf()["wechat_group_emotion_enabled"] = False
+        channel = WechatGroupChannel(
+            client=FakeClient(),
+            archive=Mock(get_recent_messages=Mock(return_value=[])),
+        )
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="token=secret",
+            text="token=secret",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            message_type="text",
+            media_path="",
+            my_msg=False,
+            create_time=1005,
+            msg_id="m2",
+        )
+
+        should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
+
+        self.assertFalse(should_enqueue)
+        self.assertIn("sensitive_or_dangerous", decision["suppressions"])
+
+    def test_scorer_allows_short_question_immediately_after_bot_reply(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_scorer_enabled"] = True
+        conf()["wechat_group_emotion_enabled"] = False
+        for text in ("人呢", "嗯？", "？"):
+            with self.subTest(text=text):
+                archive = Mock(spec=WechatGroupArchive)
+                archive.get_recent_messages.return_value = []
+                archive.get_recent_conversation_messages.return_value = [
+                    {
+                        "message_id": "assistant-reply:1",
+                        "text": "怕你让我把论文发出来呀",
+                        "created_at": 990,
+                        "is_bot": True,
+                    },
+                    {
+                        "message_id": "m2",
+                        "text": text,
+                        "created_at": 1005,
+                        "is_bot": False,
+                    },
+                ]
+                channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+                msg = Mock(
+                    ctype=ContextType.TEXT,
+                    content=text,
+                    text=text,
+                    from_user_id="room@@abc",
+                    other_user_id="room@@abc",
+                    other_user_nickname="Test Room",
+                    actual_user_id="wxid_alice",
+                    actual_user_nickname="Alice",
+                    to_user_id="wxid_bot",
+                    to_user_nickname="LightBot",
+                    is_at=False,
+                    is_quote_self=False,
+                    is_group=True,
+                    at_list=[],
+                    self_display_name="LightBot",
+                    message_type="text",
+                    media_path="",
+                    my_msg=False,
+                    create_time=1005,
+                    msg_id="m2",
+                )
+
+                should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
+
+                self.assertTrue(should_enqueue)
+                self.assertTrue(decision["contextual_short_question"])
+                self.assertNotIn("low_information", decision["suppressions"])
+
+    def test_scorer_keeps_short_question_suppressed_after_human_interjection(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_scorer_enabled"] = True
+        conf()["wechat_group_emotion_enabled"] = False
+        archive = Mock(spec=WechatGroupArchive)
+        archive.get_recent_messages.return_value = []
+        archive.get_recent_conversation_messages.return_value = [
+            {
+                "message_id": "assistant-reply:1",
+                "text": "怕你让我把论文发出来呀",
+                "created_at": 980,
+                "is_bot": True,
+            },
+            {
+                "message_id": "m1",
+                "text": "我也不知道",
+                "created_at": 1000,
+                "is_bot": False,
+            },
+            {
+                "message_id": "m2",
+                "text": "嗯？",
+                "created_at": 1005,
+                "is_bot": False,
+            },
+        ]
+        channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="嗯？",
+            text="嗯？",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            message_type="text",
+            media_path="",
+            my_msg=False,
+            create_time=1005,
+            msg_id="m2",
+        )
+
+        should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
+
+        self.assertFalse(should_enqueue)
+        self.assertIn("low_information", decision["suppressions"])
+
+    def test_plain_filler_stays_suppressed_after_bot_reply(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_scorer_enabled"] = True
+        conf()["wechat_group_emotion_enabled"] = False
+        archive = Mock(spec=WechatGroupArchive)
+        archive.get_recent_messages.return_value = []
+        archive.get_recent_conversation_messages.return_value = [{
+            "message_id": "assistant-reply:1",
+            "text": "怕你让我把论文发出来呀",
+            "created_at": 990,
+            "is_bot": True,
+        }]
+        channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="嗯",
+            text="嗯",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            message_type="text",
+            media_path="",
+            my_msg=False,
+            create_time=1005,
+            msg_id="m2",
+        )
+
+        should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
+
+        self.assertFalse(should_enqueue)
+        self.assertIn("low_information", decision["suppressions"])
 
     def test_direct_reply_from_blacklist_member_is_silently_skipped(self):
         conf()["wechat_group_room_ids"] = []
@@ -2307,7 +2569,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             wechat_group_stable_member_id="wgm_alice",
         )
 
-        should_enqueue, decision = channel._should_enqueue_free_reply_message(msg)
+        should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
 
         self.assertFalse(should_enqueue)
         self.assertIn("blocked_sender", decision["suppressions"])
@@ -2346,7 +2608,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             wechat_group_stable_member_id="wgm_alice",
         )
 
-        should_enqueue, decision = channel._should_enqueue_free_reply_message(msg)
+        should_enqueue, decision, _ = channel._should_enqueue_free_reply_message(msg)
 
         self.assertFalse(should_enqueue)
         self.assertIn("blocked_sender", decision["suppressions"])
@@ -3351,7 +3613,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_voice_interaction_mode"] = "free_reply"
         channel = WechatGroupChannel(client=FakeClient())
         channel._should_enqueue_free_reply_message = Mock(
-            return_value=(True, {"triggered": True, "reasons": []})
+            return_value=(True, {"triggered": True, "reasons": []}, [{"message_id": "m1"}])
         )
         channel._ensure_free_reply_worker_started = Mock()
         channel.free_reply_worker = Mock()
@@ -3386,6 +3648,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual("谁能帮我总结一下？", task["text"])
         self.assertEqual("谁能帮我总结一下？", task["voice_transcription"])
         self.assertEqual(ReplyType.VOICE, task["desire_rtype"])
+        self.assertEqual([{"message_id": "m1"}], task["recent_messages"])
         channel._log_free_reply_decision.assert_called_once_with(
             {"triggered": True, "reasons": []},
             "queued",
@@ -3834,7 +4097,10 @@ class WechatGroupChannelTest(unittest.TestCase):
         )
         task = {"msg": msg, "local_decision": {"triggered": True, "score": 55}}
 
-        channel._submit_free_reply_after_judge(task, {"approved": True, "confidence": 0.9})
+        channel._submit_free_reply_after_judge(
+            task,
+            {"approved": True, "confidence": 0.9, "reply_mode": "soft"},
+        )
 
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
@@ -3842,6 +4108,8 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual("wxid_alice", context["session_id"])
         self.assertTrue(context.content.endswith("哪里的用户名"))
         self.assertTrue(context["wechat_group_free_reply_triggered"])
+        self.assertEqual("soft", context["wechat_group_free_reply_mode"])
+        self.assertIn("如果你是在问我刚才提到的", context.content)
 
     def test_free_reply_does_not_mention_sender(self):
         mentions = WechatGroupChannel._build_reply_mentions({
@@ -3944,6 +4212,64 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual(1, len(members))
         self.assertEqual("wxid_bob", members[0]["sender_id"])
         self.assertEqual("Bob", members[0]["sender_nickname"])
+
+    def test_free_reply_task_uses_exact_cached_group_size(self):
+        client = FakeClient()
+        channel = WechatGroupChannel(client=client)
+        channel.room_members["room@@abc"] = [
+            {"sender_id": "wxid_alice"},
+            {"sender_id": "wxid_bob"},
+            {"sender_id": "wxid_bot"},
+        ]
+        channel._room_member_updated_at["room@@abc"] = 9999999999
+        msg = Mock(
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            content="今晚吃什么",
+            text="今晚吃什么",
+        )
+
+        task = channel._build_free_reply_task(
+            msg,
+            {"triggered": True, "score": 50},
+        )
+
+        self.assertEqual(3, task["group_size"])
+        self.assertEqual("room_member_cache", task["group_size_source"])
+        self.assertFalse(
+            any(command[0] == "list_room_members" for command in client.commands)
+        )
+
+    def test_free_reply_task_requests_unknown_group_size_without_blocking(self):
+        client = FakeClient()
+        channel = WechatGroupChannel(client=client)
+        msg = Mock(
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            content="今晚吃什么",
+            text="今晚吃什么",
+        )
+
+        first = channel._build_free_reply_task(
+            msg,
+            {"triggered": True, "score": 50},
+        )
+        second = channel._build_free_reply_task(
+            msg,
+            {"triggered": True, "score": 50},
+        )
+
+        self.assertEqual(0, first["group_size"])
+        self.assertEqual("refresh_pending", first["group_size_source"])
+        self.assertEqual(0, second["group_size"])
+        requests = [
+            command for command in client.commands if command[0] == "list_room_members"
+        ]
+        self.assertEqual(1, len(requests))
 
     def test_channel_enriches_sidecar_members_with_stable_identity(self):
         identity_service = Mock()

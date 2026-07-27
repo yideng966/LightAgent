@@ -82,10 +82,36 @@ def build_free_reply_judge_prompt(task) -> str:
 
 
 class WechatGroupFreeReplyJudge:
-    def __init__(self, bridge=None):
+    def __init__(self, bridge=None, scorer=None):
         self.bridge = bridge or Bridge()
+        self.scorer = scorer
 
     def judge(self, task, config) -> dict:
+        if config.get("scorer_enabled") and self.scorer is not None:
+            local_decision = task.get("local_decision") or {}
+            if "force_keyword_match" in (local_decision.get("reasons") or []):
+                return {
+                    "approved": True,
+                    "should_reply": True,
+                    "reply_mode": "direct",
+                    "confidence": 1.0,
+                    "reason": "force_keyword_match",
+                    "tone": "natural",
+                    "error": "",
+                    "source": "local",
+                }
+            try:
+                scorer_decision = self.scorer.score(task, config)
+            except Exception as e:
+                scorer_decision = {
+                    "approved": False,
+                    "error": "exception",
+                    "reason": type(e).__name__,
+                    "fallback_to_rules": bool(config.get("scorer_fallback_to_rules", True)),
+                    "source": "scorer",
+                }
+            if not scorer_decision.get("fallback_to_rules"):
+                return scorer_decision
         if not config.get("llm_judge_enabled", True):
             return {
                 "approved": True,

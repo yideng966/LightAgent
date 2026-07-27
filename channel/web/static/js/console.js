@@ -43,6 +43,8 @@ const I18N = {
         models_custom_add_title: '添加自定义厂商',
         models_capability_chat: '主模型',
         models_capability_chat_desc: '用于基础对话和 Agent 推理',
+        models_capability_scorer: 'LLM Scorer',
+        models_capability_scorer_desc: '用于微信群自由回复判定，不影响主模型',
         models_chat_fallbacks: '备用模型',
         models_chat_fallbacks_desc: '主模型临时不可用时按顺序尝试',
         models_chat_fallback_add: '添加备用',
@@ -454,6 +456,15 @@ const I18N = {
         wechat_group_free_reply_llm_hint: '候选消息会先通过群范围、抑制、冷却和评分筛选，再进入后台队列。大模型只判断“是否适合接话”，不生成最终回复；仅返回 should_reply=true 且置信度达到下方阈值才放行。模型失败或 JSON 无效时默认不回复。关闭后，本地初筛通过的候选直接放行；3 人及以上复读同一句且未命中抑制时也由本地规则直接放行。',
         wechat_group_free_reply_llm_timeout: '判定超时（秒）',
         wechat_group_free_reply_llm_confidence: '最低置信度',
+        wechat_group_free_reply_scorer_title: 'LLM Scorer',
+        wechat_group_free_reply_scorer_hint: '使用模型管理页单独选择的 LLM Scorer 判断普通群消息是否适合接话；关闭时保持原有规则。',
+        wechat_group_free_reply_scorer_enabled: '启用独立 Scorer',
+        wechat_group_free_reply_scorer_context_limit: '上下文消息数',
+        wechat_group_free_reply_scorer_reply_threshold: '直接回复阈值',
+        wechat_group_free_reply_scorer_soft_threshold: '低打扰回复阈值',
+        wechat_group_free_reply_scorer_max_tokens: '最大输出 Token',
+        wechat_group_free_reply_scorer_fallback: '失败时回落到原有 LLM 判定',
+        wechat_group_free_reply_scorer_stats: 'Scorer 统计',
         wechat_group_free_reply_rules: '评分规则',
         wechat_group_free_reply_last_decision: '最近判定',
         wechat_group_free_reply_no_decision: '还没有自由回复判定。开启后，普通群消息会先经过本地评分和大模型二次判定。',
@@ -942,6 +953,8 @@ const I18N = {
         models_custom_add_title: 'Add custom provider',
         models_capability_chat: 'Main Model',
         models_capability_chat_desc: 'Used for basic chat and agent reasoning',
+        models_capability_scorer: 'LLM Scorer',
+        models_capability_scorer_desc: 'Used for WeChat group free-reply decisions without changing the main model',
         models_chat_fallbacks: 'Fallback Models',
         models_chat_fallbacks_desc: 'Tried in order when the main model is temporarily unavailable',
         models_chat_fallback_add: 'Add fallback',
@@ -1353,6 +1366,15 @@ const I18N = {
         wechat_group_free_reply_llm_hint: 'Candidates first pass group scope, suppression, cooldown, and score checks, then enter the worker queue. The LLM only decides whether it is appropriate to join the conversation; it does not generate the final reply. A candidate is released only when it returns should_reply=true and reaches the threshold below. Model failures or invalid JSON default to no reply. With this switch off, locally qualified candidates pass directly; a message repeated by at least three distinct members without a suppression also passes locally without calling the LLM.',
         wechat_group_free_reply_llm_timeout: 'Decision timeout (seconds)',
         wechat_group_free_reply_llm_confidence: 'Minimum confidence',
+        wechat_group_free_reply_scorer_title: 'LLM scorer',
+        wechat_group_free_reply_scorer_hint: 'Use the dedicated LLM Scorer selected on the Models page to decide whether to join ordinary group messages. Disabled preserves legacy rules.',
+        wechat_group_free_reply_scorer_enabled: 'Enable independent scorer',
+        wechat_group_free_reply_scorer_context_limit: 'Context messages',
+        wechat_group_free_reply_scorer_reply_threshold: 'Direct reply threshold',
+        wechat_group_free_reply_scorer_soft_threshold: 'Soft reply threshold',
+        wechat_group_free_reply_scorer_max_tokens: 'Maximum output tokens',
+        wechat_group_free_reply_scorer_fallback: 'Fall back to the legacy LLM decision on failure',
+        wechat_group_free_reply_scorer_stats: 'Scorer statistics',
         wechat_group_free_reply_rules: 'Scoring rules',
         wechat_group_free_reply_last_decision: 'Latest decision',
         wechat_group_free_reply_no_decision: 'No free reply decision yet. After enabling, ordinary group messages go through local scoring and LLM decision.',
@@ -7401,6 +7423,8 @@ function showConfirmDialog({ title, message, okText, cancelText, onConfirm, hide
 const MODELS_CAPABILITY_DEFS = [
     { id: 'chat',      icon: 'fa-microchip',        editable: true,  needsModel: true,  titleKey: 'models_capability_chat',      descKey: 'models_capability_chat_desc',
       iconChip: 'bg-primary-50 dark:bg-primary-900/30',  iconGlyph: 'text-primary-500' },
+    { id: 'scorer',    icon: 'fa-gauge-high',       editable: true,  needsModel: true,  titleKey: 'models_capability_scorer',    descKey: 'models_capability_scorer_desc',
+      iconChip: 'bg-cyan-50 dark:bg-cyan-900/30',        iconGlyph: 'text-cyan-500' },
     { id: 'vision',    icon: 'fa-eye',              editable: true,  needsModel: true,  titleKey: 'models_capability_vision',    descKey: 'models_capability_vision_desc',
       iconChip: 'bg-blue-50 dark:bg-blue-900/30',        iconGlyph: 'text-blue-500' },
     { id: 'image',     icon: 'fa-image',            editable: true,  needsModel: true,  titleKey: 'models_capability_image',     descKey: 'models_capability_image_desc',
@@ -14083,6 +14107,7 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
     const profile = profiles[level] || {};
     const forceKeywords = Array.isArray(free.force_keywords) ? free.force_keywords : [];
     const worker = free.worker || {};
+    const scorer = free.scorer || {};
     const last = free.last_decision || {};
     const rules = free.rules || {};
     const roomRows = rooms.length ? rooms.map((room, index) => {
@@ -14210,6 +14235,33 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                 ${buildFreeReplyNumberField('free-reply-llm-timeout', 'wechat_group_free_reply_llm_timeout', free.llm_judge_timeout_seconds ?? 8, 1, 30, 1)}
                 ${buildFreeReplyNumberField('free-reply-llm-confidence', 'wechat_group_free_reply_llm_confidence', free.llm_judge_min_confidence ?? 0.6, 0, 1, 0.05)}
+            </div>
+        </div>
+        <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 space-y-3">
+            <div class="flex items-start justify-between gap-3">
+                <div>
+                    <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('wechat_group_free_reply_scorer_title')}</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('wechat_group_free_reply_scorer_hint')}</p>
+                </div>
+                <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer flex-shrink-0">
+                    <input id="free-reply-scorer-enabled" type="checkbox" class="accent-primary-500" ${free.scorer_enabled === true ? 'checked' : ''}>
+                    ${t('wechat_group_free_reply_scorer_enabled')}
+                </label>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                ${buildFreeReplyNumberField('free-reply-scorer-context-limit', 'wechat_group_free_reply_scorer_context_limit', free.scorer_context_limit ?? 12, 1, 50, 1)}
+                ${buildFreeReplyNumberField('free-reply-scorer-reply-threshold', 'wechat_group_free_reply_scorer_reply_threshold', free.scorer_reply_threshold ?? 0.82, 0, 1, 0.01)}
+                ${buildFreeReplyNumberField('free-reply-scorer-soft-threshold', 'wechat_group_free_reply_scorer_soft_threshold', free.scorer_soft_reply_threshold ?? 0.60, 0, 1, 0.01)}
+                ${buildFreeReplyNumberField('free-reply-scorer-max-tokens', 'wechat_group_free_reply_scorer_max_tokens', free.scorer_max_tokens ?? 256, 16, 2048, 1)}
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer">
+                <input id="free-reply-scorer-fallback" type="checkbox" class="accent-primary-500" ${free.scorer_fallback_to_rules !== false ? 'checked' : ''}>
+                ${t('wechat_group_free_reply_scorer_fallback')}
+            </label>
+            <div class="text-xs text-slate-500 dark:text-slate-400">
+                ${t('wechat_group_free_reply_scorer_stats')}: scored=${Number(scorer.scored || 0)},
+                approved=${Number(scorer.approved || 0)}, ignored=${Number(scorer.ignored || 0)},
+                timeout=${Number(scorer.timeout || 0)}, fallback=${Number(scorer.fallback || 0)}
             </div>
         </div>
         <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
@@ -14545,6 +14597,12 @@ function saveWechatGroupSettings() {
                 wechat_group_free_reply_llm_judge_enabled: freeReply.llm_judge_enabled,
                 wechat_group_free_reply_llm_judge_timeout_seconds: freeReply.llm_judge_timeout_seconds,
                 wechat_group_free_reply_llm_judge_min_confidence: freeReply.llm_judge_min_confidence,
+                wechat_group_free_reply_scorer_enabled: freeReply.scorer_enabled,
+                wechat_group_free_reply_scorer_context_limit: freeReply.scorer_context_limit,
+                wechat_group_free_reply_scorer_reply_threshold: freeReply.scorer_reply_threshold,
+                wechat_group_free_reply_scorer_soft_reply_threshold: freeReply.scorer_soft_reply_threshold,
+                wechat_group_free_reply_scorer_max_tokens: freeReply.scorer_max_tokens,
+                wechat_group_free_reply_scorer_fallback_to_rules: freeReply.scorer_fallback_to_rules,
                 wechat_group_free_reply_force_keywords: freeReply.force_keywords,
                 wechat_group_free_reply_profiles: freeReply.profiles,
                 wechat_group_free_reply_rule_scores: freeReply.rule_scores,
@@ -14785,7 +14843,7 @@ function readWechatGroupFreeReplySettings(saved = {}) {
         hourly_limit: clampNumber(document.getElementById('free-reply-hourly-limit')?.value, 0, 999, profiles[level]?.hourly_limit ?? 0),
         consecutive_limit: clampNumber(document.getElementById('free-reply-consecutive-limit')?.value, 0, 99, profiles[level]?.consecutive_limit ?? 0),
     };
-    return {
+    const result = {
         enabled: document.getElementById('free-reply-enabled') ? !!document.getElementById('free-reply-enabled').checked : !!saved.enabled,
         room_ids: roomControlsPresent
             ? selectedRoomIds
@@ -14808,10 +14866,21 @@ function readWechatGroupFreeReplySettings(saved = {}) {
         llm_judge_enabled: document.getElementById('free-reply-llm-enabled') ? !!document.getElementById('free-reply-llm-enabled').checked : saved.llm_judge_enabled !== false,
         llm_judge_timeout_seconds: clampNumber(document.getElementById('free-reply-llm-timeout')?.value, 1, 30, saved.llm_judge_timeout_seconds ?? 8),
         llm_judge_min_confidence: clampNumber(document.getElementById('free-reply-llm-confidence')?.value, 0, 1, saved.llm_judge_min_confidence ?? 0.6),
+        scorer_enabled: document.getElementById('free-reply-scorer-enabled')
+            ? !!document.getElementById('free-reply-scorer-enabled').checked
+            : saved.scorer_enabled === true,
+        scorer_context_limit: clampNumber(document.getElementById('free-reply-scorer-context-limit')?.value, 1, 50, saved.scorer_context_limit ?? 12),
+        scorer_reply_threshold: clampNumber(document.getElementById('free-reply-scorer-reply-threshold')?.value, 0, 1, saved.scorer_reply_threshold ?? 0.82),
+        scorer_soft_reply_threshold: clampNumber(document.getElementById('free-reply-scorer-soft-threshold')?.value, 0, 1, saved.scorer_soft_reply_threshold ?? 0.60),
+        scorer_max_tokens: clampNumber(document.getElementById('free-reply-scorer-max-tokens')?.value, 16, 2048, saved.scorer_max_tokens ?? 256),
+        scorer_fallback_to_rules: document.getElementById('free-reply-scorer-fallback')
+            ? !!document.getElementById('free-reply-scorer-fallback').checked
+            : saved.scorer_fallback_to_rules !== false,
         profiles,
         rule_scores: readWechatGroupFreeReplyRuleScores(saved),
         rule_enabled: readWechatGroupFreeReplyRuleEnabled(saved),
     };
+    return result;
 }
 
 function buildChannelFieldsHtml(chName, fields) {

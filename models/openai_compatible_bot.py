@@ -107,6 +107,16 @@ class OpenAICompatibleBot:
             # Add max_tokens if specified
             if kwargs.get("max_tokens"):
                 request_params["max_tokens"] = kwargs["max_tokens"]
+
+            # Stateless callers can opt into a small, explicitly allowlisted
+            # set of OpenAI-compatible request controls. Keeping these options
+            # request-scoped prevents scorer-specific reasoning settings from
+            # changing the main chat model's behavior.
+            request_options = kwargs.get("request_options")
+            if isinstance(request_options, dict):
+                for key in ("reasoning_effort", "response_format"):
+                    if request_options.get(key) is not None:
+                        request_params[key] = request_options[key]
             
             # Add tools if provided
             if tools:

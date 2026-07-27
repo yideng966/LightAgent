@@ -2626,6 +2626,21 @@ class ModelsHandler:
             ),
         }
 
+    @classmethod
+    def _scorer_capability(cls, local_config: dict) -> dict:
+        """Dedicated stateless text model for WeChat free-reply scoring."""
+        chat_capability = cls._chat_capability(local_config)
+        return {
+            "editable": True,
+            "current_provider": str(
+                local_config.get("wechat_group_free_reply_scorer_provider") or ""
+            ).strip(),
+            "current_model": str(
+                local_config.get("wechat_group_free_reply_scorer_model") or ""
+            ).strip(),
+            "providers": list(chat_capability.get("providers") or []),
+        }
+
     @staticmethod
     def _provider_id_from_bot_type(bot_type: str) -> str:
         bot_type = (bot_type or "").strip()
@@ -3195,6 +3210,7 @@ class ModelsHandler:
     def _capabilities(cls, local_config: dict) -> dict:
         return {
             "chat":      cls._chat_capability(local_config),
+            "scorer":    cls._scorer_capability(local_config),
             "vision":    cls._vision_capability(local_config),
             "asr":       cls._asr_capability(local_config),
             "tts":       cls._tts_capability(local_config),
@@ -3492,6 +3508,8 @@ class ModelsHandler:
                 if "failover_failure_threshold" in data else None
             )
             return self._set_chat(provider_id, model, fallbacks, threshold)
+        if capability == "scorer":
+            return self._set_scorer(provider_id, model)
         if capability == "vision":
             return self._set_vision(provider_id, model)
         if capability == "asr":
@@ -3508,6 +3526,52 @@ class ModelsHandler:
                 (data.get("provider") or "").strip().lower(),
             )
         return json.dumps({"status": "error", "message": f"capability not editable: {capability}"})
+
+    def _set_scorer(self, provider_id: str, model: str) -> str:
+        custom_provider = None
+        if provider_id.startswith("custom:"):
+            from models.custom_provider import parse_custom_bot_type
+            _, custom_id = parse_custom_bot_type(provider_id)
+            providers = self._normalize_custom_providers(conf().get("custom_providers"))
+            custom_provider = next(
+                (item for item in providers if item.get("id") == custom_id),
+                None,
+            )
+            if custom_provider is None:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"unknown custom provider id: {custom_id}",
+                })
+        elif provider_id and provider_id not in ConfigHandler.PROVIDER_MODELS:
+            return json.dumps({
+                "status": "error",
+                "message": f"unknown provider: {provider_id}",
+            })
+
+        if not model and custom_provider:
+            model = str(custom_provider.get("model") or "").strip()
+        if not provider_id or not model:
+            return json.dumps({
+                "status": "error",
+                "message": "provider_id and model are required",
+            })
+
+        local_config = conf()
+        file_cfg = self._read_file_config()
+        applied = {
+            "wechat_group_free_reply_scorer_provider": provider_id,
+            "wechat_group_free_reply_scorer_model": model,
+        }
+        local_config.update(applied)
+        file_cfg.update(applied)
+        self._write_file_config(file_cfg)
+        logger.info(
+            "[ModelsHandler] scorer updated: provider=%r model=%r",
+            provider_id,
+            model,
+        )
+        self._reset_bridge()
+        return json.dumps({"status": "success", "applied": applied})
 
     def _set_image(self, provider_id: str, model: str) -> str:
         # Source of truth: skills.image-generation.{provider, model}. The
@@ -4329,6 +4393,7 @@ class ChannelsHandler:
         free_reply["rules"] = free_reply_status.get("rules") or get_wechat_group_free_reply_rules()
         free_reply["last_decision"] = free_reply_status.get("last_decision") or {}
         free_reply["worker"] = free_reply_status.get("worker") or {}
+        free_reply["scorer"] = free_reply_status.get("scorer") or {}
         tools_cfg = conf().get("tools") or conf().get("tool") or {}
         if not isinstance(tools_cfg, dict):
             tools_cfg = {}
@@ -4680,6 +4745,12 @@ class ChannelsHandler:
             "wechat_group_free_reply_profiles",
             "wechat_group_free_reply_rule_scores",
             "wechat_group_free_reply_rule_enabled",
+            "wechat_group_free_reply_scorer_enabled",
+            "wechat_group_free_reply_scorer_context_limit",
+            "wechat_group_free_reply_scorer_reply_threshold",
+            "wechat_group_free_reply_scorer_soft_reply_threshold",
+            "wechat_group_free_reply_scorer_max_tokens",
+            "wechat_group_free_reply_scorer_fallback_to_rules",
             "github_commit_notify_enabled",
             "github_commit_notify_repository",
             "github_commit_notify_branches",
@@ -4815,6 +4886,8 @@ class ChannelsHandler:
                 "wechat_group_free_reply_enabled",
                 "wechat_group_free_reply_mute_mentions_enabled",
                 "wechat_group_free_reply_llm_judge_enabled",
+                "wechat_group_free_reply_scorer_enabled",
+                "wechat_group_free_reply_scorer_fallback_to_rules",
                 "github_commit_notify_enabled",
             ):
                 value = cls._normalize_bool(value)
@@ -4942,6 +5015,14 @@ class ChannelsHandler:
                 value = cls._clamp_int(value, 1, 30, 8)
             elif key == "wechat_group_free_reply_llm_judge_min_confidence":
                 value = cls._clamp_float(value, 0.0, 1.0, 0.6)
+            elif key == "wechat_group_free_reply_scorer_context_limit":
+                value = cls._clamp_int(value, 1, 50, 12)
+            elif key == "wechat_group_free_reply_scorer_reply_threshold":
+                value = cls._clamp_float(value, 0.0, 1.0, 0.82)
+            elif key == "wechat_group_free_reply_scorer_soft_reply_threshold":
+                value = cls._clamp_float(value, 0.0, 1.0, 0.60)
+            elif key == "wechat_group_free_reply_scorer_max_tokens":
+                value = cls._clamp_int(value, 16, 2048, 256)
             elif key == "wechat_group_free_reply_profiles":
                 value = normalize_wechat_group_free_reply_profiles(value)
             elif key == "wechat_group_free_reply_rule_scores":

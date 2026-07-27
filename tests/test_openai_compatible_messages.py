@@ -2,6 +2,7 @@
 import os
 import sys
 import unittest
+from unittest.mock import Mock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -25,6 +26,52 @@ class TestOpenAICompatibleMessageConversion(unittest.TestCase):
 
         self.assertEqual(converted, [{"role": "user", "content": "hello world"}])
         self.assertIsInstance(converted[0]["content"], str)
+
+    def test_request_options_are_allowlisted_and_forwarded(self):
+        bot = OpenAICompatibleBot()
+        bot.get_api_config = Mock(return_value={
+            "api_key": "test-key",
+            "api_base": "https://example.test/v1",
+            "model": "test-model",
+        })
+        bot._handle_sync_response = Mock(return_value={
+            "choices": [{"message": {"content": '{"ok":true}'}}],
+        })
+
+        bot.call_with_tools(
+            [{"role": "user", "content": "score"}],
+            request_options={
+                "reasoning_effort": "none",
+                "response_format": {"type": "json_object"},
+                "unsupported": "must-not-forward",
+            },
+        )
+
+        request_params = bot._handle_sync_response.call_args.args[0]
+        self.assertEqual("none", request_params["reasoning_effort"])
+        self.assertEqual(
+            {"type": "json_object"},
+            request_params["response_format"],
+        )
+        self.assertNotIn("unsupported", request_params)
+        self.assertNotIn("request_options", request_params)
+
+    def test_request_options_are_absent_from_regular_calls(self):
+        bot = OpenAICompatibleBot()
+        bot.get_api_config = Mock(return_value={
+            "api_key": "test-key",
+            "api_base": "https://example.test/v1",
+            "model": "test-model",
+        })
+        bot._handle_sync_response = Mock(return_value={
+            "choices": [{"message": {"content": "answer"}}],
+        })
+
+        bot.call_with_tools([{"role": "user", "content": "hello"}])
+
+        request_params = bot._handle_sync_response.call_args.args[0]
+        self.assertNotIn("reasoning_effort", request_params)
+        self.assertNotIn("response_format", request_params)
 
 
 if __name__ == "__main__":

@@ -55,6 +55,33 @@
 
 ## 2026-07-25
 
+### 微信群自由回复 Scorer 复用模型管理
+
+- 将自由回复 LLM Scorer 从通道层独立 OpenAI-compatible HTTP 请求迁移到共享 `TextModelRouter.complete()`，通过单次 Provider/模型覆盖执行，且不修改主聊天模型配置或熔断状态。
+- Web 模型管理新增 LLM Scorer 能力卡，支持标准 Provider 和 `custom:<id>` 模型；群管理自由回复设置只保留开关、上下文长度、判定阈值、Token 上限、失败回落与统计。
+- 删除 Scorer 独立 API Base、API Key、超时和 Temperature 配置；共享路由通过仅作用于当前 Scorer 请求的 `reasoning_effort=none` 与 JSON Mode 禁用思考并约束结构化输出，主聊天模型及其他无状态文本任务不受影响。
+- 补充共享路由覆盖、Scorer、模型管理和 Web 设置回归，并同步配置模板、项目规则、实施计划与 Web 控制台文档。
+
+关键文件：
+
+- `bridge/agent_bridge.py`
+- `bridge/bridge.py`
+- `channel/wechat_group/wechat_group_free_reply_scorer.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `config.py`
+- `config-template.json`
+- `tests/test_text_model_router.py`
+- `tests/test_wechat_group_free_reply_scorer.py`
+- `tests/test_models_handler.py`
+
+验证记录：
+
+- Scorer、共享路由、OpenAI-compatible 请求参数隔离、模型管理、控制台、Judge 与自由回复定向回归 122 项通过；微信群消息、通道与 Web 规范三件套 234 项通过。
+- 本机 Ollama `qwen3.6:27b` 使用 256 最大输出 Token 完成真实 Scorer 请求，3.7 秒返回 `target=group + soft_reply`、`confidence=0.95`，无 `invalid_json` 或模型错误。
+- 全量 Python 回归运行 938 项，结果为 923 项通过、1 项失败、11 项错误、3 项跳过；错误来自缺少可选依赖和 Windows 符号链接权限，失败为既有 `chat.html` 预置缓存查询参数断言，与当前缓存时间戳注入规则冲突，均与本次改动无关。
+- Python 编译、JavaScript 语法、配置模板 JSON 与 `git diff --check` 通过。
+
 ### LightAgent Skill Hub 集成
 
 - 新增签名静态注册表客户端与最后一次验证通过的本地缓存，对索引执行 Ed25519 验签，对技能包和外部下载执行 SHA-256 校验。
@@ -135,6 +162,45 @@
 - 本轮报告定向回归 17 项通过；Python 编译、`node --check` 与 `git diff --check` 通过。实际六模块样例渲染为 `941 × 1952` PNG，浏览器连续两次模拟报告轮询后滚动位置均保持在 `260px`。
 - 变基后的复验：群聊报告 7 个测试模块 29 项、消息/Web/权限/调度/SSRF 组合 157 项、群聊记忆 UI 5 项以及 sidecar Node 37 项均通过。
 - 按用户最新指示，Docker 镜像构建与远端容器部署已暂停，真实微信群日/周/月/自定义报告投递验收待用户执行。
+
+### 微信群自由回复独立 LLM Scorer
+
+- 新增默认关闭的独立 Scorer 配置和执行链路，通过 `OpenAIHTTPClient` 直连专用 OpenAI-compatible endpoint，独立解析 provider、model、API Base、API Key、超时和阈值，不修改全局聊天模型或共享 Bot。
+- Scorer 请求默认使用 `reasoning_effort=none` 与 JSON mode，避免 Ollama/Qwen 思考内容耗尽输出预算导致正文为空；不支持这些扩展参数的 OpenAI-compatible endpoint 会在明确返回参数不支持时自动回退基础请求。
+- Scorer 的 `reason` 与 `evidence` 强制使用简洁的简体中文并限制长度，使自由回复判定日志便于直接排查，同时保持固定英文 JSON 字段名和严格 schema 不变。
+- Scorer 从单一“是否针对机器人”扩展为双通道判定：无 @、无引用消息若明确指向机器人，继续使用 `target=bot` 的 direct/soft 回复；若面向全群且适合自然参与，可使用 `target=group + action=soft_reply` 低打扰插话；明确指向其他群友时仍强制忽略。
+- 复用 Wechaty 群成员缓存并为启用自由回复的群异步预热人数，消息判定过程不等待成员查询；8 人及以下的小群将群聊参与阈值从默认 `0.60` 降为 `0.50`，21 人及以上提高为 `0.75`，人数未知时保持默认阈值，避免按短期活跃人数误判群规模。
+- Scorer Prompt 明确区分机器人追问、开放群聊和人对人会话，并将群人数、规模档位和参与策略作为隔离上下文；日志新增 `group_size`、`group_band` 和实际生效阈值，便于观察小群增频及误插话。
+- Scorer 上下文改为按时间合并当前群的成员入站消息与 `wechat_group_assistant_replies` 机器人回复，并显式标记 `is_bot=true`；本地规则仍使用纯入站消息，合并查询继续严格遵守 stable room 隔离，修复机器人刚提到某个话题后用户追问却被误判为群成员对话的问题。
+- 将“人呢”“嗯？”和纯问号等疑惑型微短句从普通低信息文本中细分出来：仅当其紧跟 60 秒内的机器人回复、且中间没有群成员插话时解除 `low_information` 并交给 Scorer；“嗯”“哦”“哈”等无问号填充词继续硬拦截。
+- Scorer 启用时仅旁路 `below_threshold` 软门槛，禁言、冷却、黑名单、敏感内容和媒体等硬抑制继续在入队前生效；显式强触发词和复读快路径保持原行为。
+- 新增群聊上下文归一化、`CURRENT_MESSAGE` 标记、严格 JSON 判定、direct/soft 回复模式、失败闭合与 Bridge judge 回落，并对上下文、日志、状态和 Web 响应进行凭证及本地路径脱敏。
+- Web 控制台已接通 Scorer 开关、Provider、模型、API Base、API Key、超时、上下文长度、阈值、Temperature、Token 上限、回落策略和运行统计；API Key 支持环境变量优先、配置兜底和掩码保存。
+- 补充 Scorer 纯函数、独立客户端、凭证优先级、规则旁路、硬抑制、Judge 回落、三类消息任务、soft Prompt、Web 保存和状态脱敏回归测试。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_free_reply_scorer.py`
+- `channel/wechat_group/wechat_group_free_reply.py`
+- `channel/wechat_group/wechat_group_free_reply_judge.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `config.py`
+- `config-template.json`
+- `tests/test_wechat_group_free_reply_scorer.py`
+
+验证记录：
+
+- 变基到上游 `master` 最新提交后，消息、通道、上下文、自由回复、Judge、Scorer 与 Web 相关回归共 328 项通过。
+- 双通道、小群增频、群成员缓存以及现有微信群消息/通道/Web/自由回复/Judge/Worker/上下文相关回归共 335 项通过；为避免单进程执行通道测试时的既有高内存累积，130 项通道测试分三批完成。
+- Scorer、自由回复、Judge、Worker、上下文、频道和 Web 相关回归共 318 项通过。
+- 疑惑型微短句条件放行相关的消息、频道、Web、自由回复和 Scorer 回归共 286 项通过，覆盖机器人紧邻放行、群成员插话后拦截及普通填充词继续拦截。
+- 使用真实归档时间线回放“机器人提到论文后用户继续追问”的误判样本，本机 Ollama `qwen3.6:27b` 已改判为 `action=reply`、`target=bot`、`mode=direct`、`confidence=0.98`、`followup=True`，中文理由和证据均符合约束。
+- 使用本机 Ollama `qwen3.6:27b` 验证双通道样本：机器人紧邻追问“你叫啥名字”判为 `target=bot + reply`；5 人小群开放问题“大家周末想去哪里玩？”判为 `target=group + soft_reply`；明确询问 Alice 的消息判为 `target=user:alice + ignore`。
+- 重启本地服务后微信侧车恢复 `connected`，4 个已启用自由回复的群获取到精确成员数 `4/5/7/13`；真实入站的“@某群友 你别说话”携带 `group_size=7/group_band=small` 进入 `qwen3.6:27b`，正确返回 `target=user:* + ignore`，未误插话。
+- 全量 Python 回归共运行 898 项，其中 896 项通过、1 项跳过；1 项既有的 `chat.html` 静态缓存参数断言失败，该断言要求预置查询参数，与当前协作规则中“查询参数统一由 `ChatHandler` 注入”的要求冲突，和本次改动无关。
+- JavaScript 语法、配置模板 JSON、相关 Python 文件编译和 `git diff --check` 均通过。
 
 ## 2026-07-24
 

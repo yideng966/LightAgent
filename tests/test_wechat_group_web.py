@@ -101,6 +101,14 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_free_reply_llm_judge_enabled": conf().get("wechat_group_free_reply_llm_judge_enabled"),
             "wechat_group_free_reply_llm_judge_timeout_seconds": conf().get("wechat_group_free_reply_llm_judge_timeout_seconds"),
             "wechat_group_free_reply_llm_judge_min_confidence": conf().get("wechat_group_free_reply_llm_judge_min_confidence"),
+            "wechat_group_free_reply_scorer_enabled": conf().get("wechat_group_free_reply_scorer_enabled"),
+            "wechat_group_free_reply_scorer_provider": conf().get("wechat_group_free_reply_scorer_provider"),
+            "wechat_group_free_reply_scorer_model": conf().get("wechat_group_free_reply_scorer_model"),
+            "wechat_group_free_reply_scorer_context_limit": conf().get("wechat_group_free_reply_scorer_context_limit"),
+            "wechat_group_free_reply_scorer_reply_threshold": conf().get("wechat_group_free_reply_scorer_reply_threshold"),
+            "wechat_group_free_reply_scorer_soft_reply_threshold": conf().get("wechat_group_free_reply_scorer_soft_reply_threshold"),
+            "wechat_group_free_reply_scorer_max_tokens": conf().get("wechat_group_free_reply_scorer_max_tokens"),
+            "wechat_group_free_reply_scorer_fallback_to_rules": conf().get("wechat_group_free_reply_scorer_fallback_to_rules"),
             "wechat_group_free_reply_profiles": conf().get("wechat_group_free_reply_profiles"),
             "wechat_group_free_reply_rule_scores": conf().get("wechat_group_free_reply_rule_scores"),
             "wechat_group_free_reply_rule_enabled": conf().get("wechat_group_free_reply_rule_enabled"),
@@ -1223,6 +1231,12 @@ class WechatGroupWebTest(unittest.TestCase):
                 "wechat_group_free_reply_llm_judge_enabled": False,
                 "wechat_group_free_reply_llm_judge_timeout_seconds": "99",
                 "wechat_group_free_reply_llm_judge_min_confidence": "2",
+                "wechat_group_free_reply_scorer_enabled": True,
+                "wechat_group_free_reply_scorer_context_limit": "99",
+                "wechat_group_free_reply_scorer_reply_threshold": "2",
+                "wechat_group_free_reply_scorer_soft_reply_threshold": "-1",
+                "wechat_group_free_reply_scorer_max_tokens": "9999",
+                "wechat_group_free_reply_scorer_fallback_to_rules": False,
                 "wechat_group_free_reply_force_keywords": "小灯，小风\n前夜",
                 "wechat_group_free_reply_profiles": {
                     "active": {
@@ -1267,6 +1281,12 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertFalse(conf()["wechat_group_free_reply_llm_judge_enabled"])
         self.assertEqual(30, conf()["wechat_group_free_reply_llm_judge_timeout_seconds"])
         self.assertEqual(1.0, conf()["wechat_group_free_reply_llm_judge_min_confidence"])
+        self.assertTrue(conf()["wechat_group_free_reply_scorer_enabled"])
+        self.assertEqual(50, conf()["wechat_group_free_reply_scorer_context_limit"])
+        self.assertEqual(1.0, conf()["wechat_group_free_reply_scorer_reply_threshold"])
+        self.assertEqual(0.0, conf()["wechat_group_free_reply_scorer_soft_reply_threshold"])
+        self.assertEqual(2048, conf()["wechat_group_free_reply_scorer_max_tokens"])
+        self.assertFalse(conf()["wechat_group_free_reply_scorer_fallback_to_rules"])
         self.assertEqual(["小灯", "小风", "前夜"], conf()["wechat_group_free_reply_force_keywords"])
         self.assertEqual(25, conf()["wechat_group_free_reply_profiles"]["active"]["min_score"])
         self.assertEqual(40, conf()["wechat_group_free_reply_rule_scores"]["group_question"])
@@ -1289,6 +1309,40 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("legacy_room_ids: roomControlsPresent ? []", console_js)
         self.assertIn("const selectable = isWechatGroupRoomSelectable(room);", console_js)
         self.assertIn("const pendingStatuses = ['suspected', 'legacy_imported', 'conflict', 'identity_unresolved'];", console_js)
+
+    def test_group_settings_do_not_accept_scorer_model_credentials(self):
+        from channel.web.web_channel import ChannelsHandler
+        from config import conf
+
+        conf()["wechat_group_free_reply_scorer_provider"] = "openai"
+        conf()["wechat_group_free_reply_scorer_model"] = "gpt-5.4-mini"
+        applied = ChannelsHandler._apply_wechat_group_config({
+            "wechat_group_free_reply_scorer_provider": "custom:unexpected",
+            "wechat_group_free_reply_scorer_model": "unexpected-model",
+            "wechat_group_free_reply_scorer_api_key": "unexpected-secret",
+        })
+
+        self.assertNotIn("wechat_group_free_reply_scorer_provider", applied)
+        self.assertNotIn("wechat_group_free_reply_scorer_model", applied)
+        self.assertNotIn("wechat_group_free_reply_scorer_api_key", applied)
+        self.assertEqual("openai", conf()["wechat_group_free_reply_scorer_provider"])
+        self.assertEqual("gpt-5.4-mini", conf()["wechat_group_free_reply_scorer_model"])
+
+    def test_console_keeps_scorer_behavior_fields_without_credentials(self):
+        console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="free-reply-scorer-enabled"', console_js)
+        self.assertIn(
+            "buildFreeReplyNumberField('free-reply-scorer-context-limit'",
+            console_js,
+        )
+        self.assertIn(
+            "wechat_group_free_reply_scorer_fallback_to_rules: freeReply.scorer_fallback_to_rules",
+            console_js,
+        )
+        self.assertNotIn('id="free-reply-scorer-provider"', console_js)
+        self.assertNotIn('id="free-reply-scorer-model"', console_js)
+        self.assertNotIn('id="free-reply-scorer-api-key"', console_js)
 
     def test_console_explains_wechat_group_free_reply_llm_decision(self):
         from pathlib import Path
@@ -1731,6 +1785,7 @@ class WechatGroupWebTest(unittest.TestCase):
             "rules": {"positive": [], "negative": []},
             "last_decision": {"triggered": True},
             "worker": {"running": True},
+            "scorer": {"scored": 3},
         }))
 
         with patch.object(ChannelsHandler, "_get_running_wechat_group_channel", return_value=running):
@@ -1740,6 +1795,7 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertTrue(extra["free_reply"]["enabled"])
         self.assertEqual({"triggered": True}, extra["free_reply"]["last_decision"])
         self.assertEqual({"running": True}, extra["free_reply"]["worker"])
+        self.assertEqual({"scored": 3}, extra["free_reply"]["scorer"])
 
     def test_wechat_group_emotion_state_api_uses_service_and_running_status(self):
         from channel.web.web_channel import WechatGroupEmotionHandler

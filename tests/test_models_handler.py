@@ -29,6 +29,91 @@ if "web" not in sys.modules:
 
 
 class TestModelsHandler(unittest.TestCase):
+    def test_scorer_capability_exposes_dedicated_selection(self):
+        from channel.web.web_channel import ModelsHandler
+
+        local_config = {
+            "bot_type": "deepseek",
+            "model": "deepseek-chat",
+            "wechat_group_free_reply_scorer_provider": "custom:score01",
+            "wechat_group_free_reply_scorer_model": "score-model",
+            "custom_providers": [{
+                "id": "score01",
+                "name": "Scorer",
+                "api_key": "secret",
+                "api_base": "https://score.example/v1",
+                "model": "score-model",
+            }],
+        }
+
+        with patch(
+            "models.custom_provider.get_custom_providers",
+            return_value=local_config["custom_providers"],
+        ):
+            cap = ModelsHandler._scorer_capability(local_config)
+
+        self.assertEqual("custom:score01", cap["current_provider"])
+        self.assertEqual("score-model", cap["current_model"])
+        self.assertIn("custom:score01", cap["providers"])
+
+    def test_set_scorer_persists_without_changing_main_model(self):
+        from channel.web.web_channel import ModelsHandler
+
+        local_config = {
+            "bot_type": "deepseek",
+            "model": "deepseek-chat",
+        }
+        file_config = dict(local_config)
+        handler = ModelsHandler()
+
+        with patch("channel.web.web_channel.conf", return_value=local_config), \
+                patch.object(ModelsHandler, "_read_file_config", return_value=file_config), \
+                patch.object(ModelsHandler, "_write_file_config") as write_file, \
+                patch.object(ModelsHandler, "_reset_bridge") as reset_bridge:
+            result = json.loads(handler._handle_set_capability({
+                "capability": "scorer",
+                "provider_id": "openai",
+                "model": "gpt-5.4-mini",
+            }))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual("openai", local_config["wechat_group_free_reply_scorer_provider"])
+        self.assertEqual("gpt-5.4-mini", local_config["wechat_group_free_reply_scorer_model"])
+        self.assertEqual("deepseek", local_config["bot_type"])
+        self.assertEqual("deepseek-chat", local_config["model"])
+        self.assertEqual(local_config, file_config)
+        write_file.assert_called_once_with(file_config)
+        reset_bridge.assert_called_once()
+
+    def test_set_scorer_uses_custom_provider_default_model(self):
+        from channel.web.web_channel import ModelsHandler
+
+        local_config = {
+            "bot_type": "deepseek",
+            "model": "deepseek-chat",
+            "custom_providers": [{
+                "id": "score01",
+                "api_key": "secret",
+                "api_base": "https://score.example/v1",
+                "model": "score-model",
+            }],
+        }
+        file_config = dict(local_config)
+        handler = ModelsHandler()
+
+        with patch("channel.web.web_channel.conf", return_value=local_config), \
+                patch.object(ModelsHandler, "_read_file_config", return_value=file_config), \
+                patch.object(ModelsHandler, "_write_file_config"), \
+                patch.object(ModelsHandler, "_reset_bridge"):
+            result = json.loads(handler._handle_set_capability({
+                "capability": "scorer",
+                "provider_id": "custom:score01",
+                "model": "",
+            }))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual("score-model", local_config["wechat_group_free_reply_scorer_model"])
+
     def test_chat_capability_exposes_model_fallbacks_for_ui(self):
         from channel.web.web_channel import ModelsHandler
 
