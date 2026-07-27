@@ -5060,7 +5060,7 @@ class ChannelsHandler:
     @staticmethod
     def _normalize_wechat_group_voice_interaction_mode(value) -> str:
         mode = str(value or "").strip().lower()
-        if mode == "free_reply":
+        if mode in ("free_reply", "ignore"):
             return mode
         return "force_reply"
 

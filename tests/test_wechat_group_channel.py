@@ -15,7 +15,9 @@ from channel.wechat_group.protocol import SidecarEventType, parse_sidecar_event
 from channel.wechat_group.wechat_group_client import WechatGroupClient
 from channel.wechat_group.wechat_group_channel import (
     WECHAT_GROUP_DEFAULT_IMAGE_REPLY_QUESTION,
+    WECHAT_GROUP_VOICE_INTERACTION_IGNORE,
     WechatGroupChannel,
+    normalize_wechat_group_voice_interaction_mode,
 )
 from channel.wechat_group.wechat_group_archive import WechatGroupArchive
 from channel.wechat_group.wechat_group_message import WechatGroupMessage
@@ -3664,6 +3666,100 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual("voice_message", kwargs["wechat_group_trigger_source"])
         self.assertEqual(ContextType.VOICE, kwargs["origin_ctype"])
         self.assertEqual(ReplyType.VOICE, kwargs["desire_rtype"])
+
+    def test_voice_ignore_mode_skips_all_reply_processing_for_direct_and_ambient_messages(self):
+        conf()["wechat_group_voice_interaction_mode"] = "ignore"
+        channel = WechatGroupChannel(client=FakeClient())
+        channel._log_inbound_message = Mock()
+        channel._observe_emotion = Mock()
+        channel._compose_context = Mock()
+        channel.produce = Mock()
+
+        for index, flags in enumerate((
+            {"is_at": False, "is_quote_self": False},
+            {"is_at": True, "is_quote_self": False},
+            {"is_at": False, "is_quote_self": True},
+        )):
+            with self.subTest(flags=flags):
+                msg = Mock(
+                    ctype=ContextType.VOICE,
+                    message_type="voice",
+                    msg_id="voice-ignore-{}".format(index),
+                    other_user_id="room@@abc",
+                    actual_user_id="wxid_alice",
+                    is_pat_self=False,
+                    **flags,
+                )
+
+                channel.handle_text(msg)
+
+        self.assertEqual(3, channel._log_inbound_message.call_count)
+        channel._observe_emotion.assert_not_called()
+        channel._compose_context.assert_not_called()
+        channel.produce.assert_not_called()
+
+    def test_voice_ignore_mode_keeps_inbound_archive_before_handling_stops(self):
+        conf()["wechat_group_voice_interaction_mode"] = "ignore"
+        conf()["wechat_group_record_messages"] = True
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = WechatGroupArchive(os.path.join(tmp, "archive.db"))
+            channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+            channel._resolve_message_identity = Mock(return_value={})
+            channel._is_selected_room = Mock(return_value=True)
+            channel._observe_emotion = Mock()
+            channel._compose_context = Mock()
+            channel.produce = Mock()
+            event = parse_sidecar_event({
+                "type": SidecarEventType.MESSAGE,
+                "message_id": "voice-ignore-archive",
+                "room_id": "room@@abc",
+                "room_name": "Test Room",
+                "sender_id": "wxid_alice",
+                "sender_name": "Alice",
+                "self_id": "wxid_bot",
+                "self_name": "LightBot",
+                "message_type": "audio",
+                "file_path": "D:/tmp/voice.silk",
+                "is_at": True,
+            })
+
+            with patch(
+                "channel.wechat_group.wechat_group_profile_evolution_trigger.note_wechat_group_profile_signal"
+            ):
+                consumed = channel._consume_message(event)
+
+            archived = archive.get_message_by_id("room@@abc", "voice-ignore-archive")
+
+        self.assertTrue(consumed)
+        self.assertIsNotNone(archived)
+        self.assertEqual("audio", archived["message_type"])
+        self.assertEqual("D:/tmp/voice.silk", archived["media_path"])
+        channel._observe_emotion.assert_not_called()
+        channel._compose_context.assert_not_called()
+        channel.produce.assert_not_called()
+
+    def test_voice_transcription_ignore_mode_is_defensively_dropped(self):
+        conf()["wechat_group_voice_interaction_mode"] = "ignore"
+        channel = WechatGroupChannel(client=FakeClient())
+        channel._compose_context = Mock()
+        channel._should_enqueue_free_reply_message = Mock()
+        context = Context(ContextType.VOICE, "D:/tmp/voice.mp3", {"msg": Mock()})
+
+        result = channel._handle_voice_transcription(context, "不会进入回复链路")
+
+        self.assertIsNone(result)
+        channel._compose_context.assert_not_called()
+        channel._should_enqueue_free_reply_message.assert_not_called()
+
+    def test_voice_interaction_mode_normalizes_ignore_and_invalid_values(self):
+        self.assertEqual(
+            WECHAT_GROUP_VOICE_INTERACTION_IGNORE,
+            normalize_wechat_group_voice_interaction_mode(" IGNORE "),
+        )
+        self.assertEqual(
+            "force_reply",
+            normalize_wechat_group_voice_interaction_mode("unsupported"),
+        )
 
     def test_voice_transcription_free_reply_mode_queues_text_candidate(self):
         conf()["wechat_group_voice_interaction_mode"] = "free_reply"

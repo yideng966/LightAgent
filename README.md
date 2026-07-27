@@ -584,7 +584,7 @@ Web 使用路径：
 
 - `voice_to_text` 支持 OpenAI、百度、Google、Azure、讯飞、阿里、DashScope、智谱、LinkAI 等目录中的 Provider。
 - `text_to_voice` 支持 OpenAI、百度、Google、Azure、讯飞、阿里、pytts、ElevenLabs、Edge、腾讯、MiniMax、MiMo 等实现。
-- 群语音识别、始终语音回复、语音回复开关均由配置控制。
+- Web 控制台「群聊 -> 语音交互」支持强制回复、依赖自由回复规则和忽略语音三种模式；忽略模式仍保留侧车下载与群归档，但不会转写、调用模型或发送回复。始终语音回复和语音回复开关继续由通用语音配置控制。
 - 微信群 `.sil` / `.silk` / `.slk` 语音转 WAV 需要可选依赖 `pysilk-mod>=1.6.4`（发行包名为 `pysilk-mod`，Python 导入名为 `pysilk`）。Silk 转换不依赖 `ffmpeg`；MP3、M4A、OGG 等通过 `pydub` 转换的格式仍需系统可执行的 `ffmpeg`。
 - 自定义 OpenAI-compatible Provider（`custom:<id>`）可在 Web 控制台中独立用于 ASR/TTS，并复用该 Provider 的 `api_key` 与 `api_base`。ASR 通过 `/audio/transcriptions` 完成转写；通用 TTS 通过 `/audio/speech` 返回 MP3，`mimo-v2.5-tts*` 模型通过 `/chat/completions` 返回 base64 WAV。语音模型必须单独填写，不能直接沿用聊天模型。
 - Web 控制台内置 ASR Provider 为 `openai`、`dashscope`、`zhipu`、`linkai`，内置 TTS Provider 为 `openai`、`minimax`、`dashscope`、`mimo`、`linkai`，两者都会追加凭据完整的 `custom:<id>`。Custom TTS 没有预置音色目录时可直接填写 voice ID；不存在、缺少 Key/Base 或未填写对应语音模型的自定义 Provider 会在保存前被拒绝。

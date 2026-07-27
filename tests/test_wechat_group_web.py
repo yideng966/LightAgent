@@ -1066,6 +1066,27 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual("force_reply", applied["wechat_group_voice_interaction_mode"])
         self.assertEqual("force_reply", conf()["wechat_group_voice_interaction_mode"])
 
+    def test_channels_save_voice_interaction_ignore_mode(self):
+        from channel.web.web_channel import ChannelsHandler
+        from config import conf
+
+        applied = ChannelsHandler._apply_wechat_group_config({
+            "wechat_group_voice_interaction_mode": "ignore",
+        })
+
+        self.assertEqual("ignore", applied["wechat_group_voice_interaction_mode"])
+        self.assertEqual("ignore", conf()["wechat_group_voice_interaction_mode"])
+
+    def test_channels_extra_exposes_voice_interaction_ignore_mode(self):
+        from channel.web.web_channel import ChannelsHandler
+        from config import conf
+
+        conf()["wechat_group_voice_interaction_mode"] = "ignore"
+
+        extra = ChannelsHandler._wechat_group_extra()
+
+        self.assertEqual("ignore", extra["voice_interaction"]["mode"])
+
     def test_console_exposes_wechat_group_voice_interaction_menu(self):
         console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
 
@@ -1074,6 +1095,9 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn('name="groups-voice-interaction-mode"', console_js)
         self.assertIn("wechat_group_voice_interaction_mode: voiceInteractionMode", console_js)
         self.assertIn("saved.mode || 'force_reply'", console_js)
+        self.assertIn("value: 'ignore'", console_js)
+        self.assertIn("groups_voice_interaction_ignore_hint", console_js)
+        self.assertIn("['free_reply', 'ignore'].includes(mode)", console_js)
 
     def test_channels_save_converts_runtime_id_submitted_as_stable_room_id(self):
         from channel.web.web_channel import ChannelsHandler
