@@ -265,15 +265,48 @@ def _resource_limits(entrypoint):
     memory = max(64, min(2048, int(entrypoint.get("max_memory_mb", 512)))) * 1024 * 1024
     processes = max(1, min(64, int(entrypoint.get("max_processes", 16))))
     timeout = max(1, min(600, int(entrypoint.get("timeout_seconds", 60))))
+    existing_tasks = _current_uid_task_count()
 
     def apply_limits():
         try:
             import resource
             resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
             resource.setrlimit(resource.RLIMIT_CPU, (timeout + 1, timeout + 1))
-            if hasattr(resource, "RLIMIT_NPROC"):
-                resource.setrlimit(resource.RLIMIT_NPROC, (processes, processes))
+            if hasattr(resource, "RLIMIT_NPROC") and existing_tasks is not None:
+                _, hard_limit = resource.getrlimit(resource.RLIMIT_NPROC)
+                task_limit = existing_tasks + processes
+                if hard_limit != resource.RLIM_INFINITY:
+                    task_limit = min(task_limit, hard_limit)
+                resource.setrlimit(resource.RLIMIT_NPROC, (task_limit, hard_limit))
         except Exception:
             pass
 
     return apply_limits
+
+
+def _current_uid_task_count():
+    """Return visible Linux UID tasks when RLIMIT_NPROC can be applied safely."""
+    if os.name != "posix" or not sys.platform.startswith("linux"):
+        return None
+    if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
+        return None
+    try:
+        cgroup = Path("/proc/1/cgroup").read_text(encoding="utf-8")
+        if any(marker in cgroup for marker in ("docker", "containerd", "kubepods", "libpod")):
+            return None
+        real_uid = str(os.getuid())
+        total = 0
+        for status_path in Path("/proc").glob("[0-9]*/status"):
+            try:
+                fields = dict(
+                    line.split(":", 1)
+                    for line in status_path.read_text(encoding="utf-8").splitlines()
+                    if ":" in line
+                )
+                if fields.get("Uid", "").split()[:1] == [real_uid]:
+                    total += int(fields.get("Threads", "1"))
+            except (OSError, ValueError):
+                continue
+        return total or None
+    except (OSError, ValueError):
+        return None

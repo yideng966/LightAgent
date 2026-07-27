@@ -1,5 +1,13 @@
 # CHANGES
 
+## 2026-07-28
+
+### Skill Runner 进程预算修复
+
+- 修复 Linux 下把技能 `max_processes` 错误设置为整个 LightAgent 运行用户总任务上限的问题；Runner 现在以该用户已有任务数为基线，为当前技能追加声明的进程/线程预算。
+- 保留父进程的 `RLIMIT_NPROC` 硬上限，并仅在非容器 Linux 的 `/proc` 可可靠取得真实 UID 任务数时应用该限制；Docker/Kubernetes 的 PID 命名空间无法看到宿主同 UID 任务，改由部署层 `pids`/cgroup 限制，避免误杀合法技能线程。
+- 增加真实线程入口回归测试，覆盖 LightAgent 主进程已经存在多个线程时，声明两个任务预算的技能仍可启动并回收一个工作线程。
+
 ## 2026-07-27
 
 ### 全局记忆与微信群永久记忆隔离及 Dream 蒸馏

@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import tempfile
 import time
 import unittest
@@ -95,6 +96,27 @@ class SkillRunnerTest(unittest.TestCase):
 
         self.assertEqual("error", result.status)
         self.assertIn("输出超过", result.result)
+
+    @unittest.skipUnless(sys.platform.startswith("linux"), "RLIMIT_NPROC task accounting is Linux-specific")
+    def test_process_budget_is_relative_to_existing_user_tasks(self):
+        script = Path(self.skill.base_dir) / "scripts" / "run.py"
+        script.write_text(
+            "import threading\n"
+            "thread = threading.Thread(target=lambda: None)\n"
+            "thread.start()\n"
+            "thread.join()\n"
+            "print('thread-ok')\n",
+            encoding="utf-8",
+        )
+        entrypoint = self.skill.frontmatter["lightagent"]["entrypoints"][0]
+        entrypoint["max_processes"] = 2
+
+        result = self.tool.execute({
+            "skill_name": "sample-skill", "entrypoint": "run", "arguments": ["value"],
+        })
+
+        self.assertEqual("success", result.status)
+        self.assertEqual("thread-ok", result.result)
 
     def test_environment_only_exposes_declared_secret(self):
         script = Path(self.skill.base_dir) / "scripts" / "run.py"
