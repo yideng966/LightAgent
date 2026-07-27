@@ -94,7 +94,12 @@ jobs:
 
       - name: Install desktop deps
         working-directory: desktop
-        run: npm ci
+        run: >-
+          npm ci
+          --fetch-retries=5
+          --fetch-retry-factor=2
+          --fetch-retry-mintimeout=10000
+          --fetch-retry-maxtimeout=60000
 
       - name: Write version into package.json
         working-directory: desktop

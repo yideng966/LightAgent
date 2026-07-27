@@ -110,6 +110,10 @@ version = "keep-me"
             desktop_workflow.index("scripts/stamp_release_version.py"),
             desktop_workflow.index("pyinstaller desktop/build/lightagent-backend.spec"),
         )
+        self.assertIn("--fetch-retries=5", desktop_workflow)
+        self.assertIn("--fetch-retry-factor=2", desktop_workflow)
+        self.assertIn("--fetch-retry-mintimeout=10000", desktop_workflow)
+        self.assertIn("--fetch-retry-maxtimeout=60000", desktop_workflow)
 
 
 if __name__ == "__main__":
