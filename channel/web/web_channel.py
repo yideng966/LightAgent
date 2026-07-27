@@ -5994,7 +5994,7 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 })
             if action == "groups":
                 knowledge_service = self._get_knowledge_service()
-                selected_ids = conf().get("wechat_group_stable_room_ids", []) or conf().get("wechat_group_room_ids", []) or []
+                selected_ids = conf().get("wechat_group_stable_room_ids", []) or []
                 room_name_map = self._get_room_name_map()
                 rooms = [
                     {

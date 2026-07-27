@@ -856,44 +856,62 @@
 
                             <!-- Header -->
                             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 md:mb-6 md:flex-shrink-0">
-                                <div>
+                                <div class="min-w-0">
                                     <h2 class="text-xl font-bold text-slate-800 dark:text-slate-100" data-i18n="knowledge_title">知识库</h2>
-                                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="knowledge_desc">浏览和探索你的知识库</p>
+                                    <p id="knowledge-desc" class="text-sm text-slate-500 dark:text-slate-400 mt-1" data-i18n="knowledge_desc">浏览和探索你的知识库</p>
                                 </div>
-                                <div class="flex items-center gap-2">
-                                    <span id="knowledge-stats" class="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline"></span>
-                                    <span id="knowledge-action-status" class="text-xs opacity-0 transition-opacity duration-200"></span>
-                                    <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5">
-                                        <button id="knowledge-tab-docs" onclick="switchKnowledgeTab('docs')"
-                                                class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
-                                            <i class="fas fa-folder-tree mr-1.5"></i><span data-i18n="knowledge_tab_docs">文档</span>
+                                <div class="flex flex-wrap items-center justify-end gap-2">
+                                    <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5" role="group" aria-label="Knowledge scope">
+                                        <button id="knowledge-scope-global" type="button" onclick="switchKnowledgeScope('global')"
+                                                class="knowledge-scope px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active"
+                                                aria-pressed="true">
+                                            <i class="fas fa-globe mr-1.5"></i><span data-i18n="knowledge_scope_global">全局知识</span>
                                         </button>
-                                        <button id="knowledge-tab-graph" onclick="switchKnowledgeTab('graph')"
-                                                class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
-                                            <i class="fas fa-diagram-project mr-1.5"></i><span data-i18n="knowledge_tab_graph">图谱</span>
+                                        <button id="knowledge-scope-group" type="button" onclick="switchKnowledgeScope('group')"
+                                                class="knowledge-scope px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150"
+                                                aria-pressed="false">
+                                            <i class="fas fa-users mr-1.5"></i><span data-i18n="knowledge_scope_group">群知识</span>
                                         </button>
                                     </div>
-                                    <div id="knowledge-new-menu" class="relative">
-                                        <button onclick="toggleKnowledgeNewMenu(event)"
-                                                class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium cursor-pointer transition-colors">
-                                            <i class="fas fa-plus"></i><span data-i18n="knowledge_new">新建</span><i class="fas fa-chevron-down text-[9px] ml-0.5"></i>
-                                        </button>
-                                        <div id="knowledge-new-menu-list"
-                                             class="hidden absolute right-0 mt-1.5 w-44 z-50 bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-lg shadow-lg py-1">
-                                            <button onclick="createKnowledgeCategory(); closeKnowledgeNewMenu()"
-                                                    class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
-                                                <i class="fas fa-folder-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_category">新建分类</span>
+                                    <span id="knowledge-stats" class="text-xs text-slate-400 dark:text-slate-500 hidden sm:inline"></span>
+                                    <span id="knowledge-action-status" class="text-xs opacity-0 transition-opacity duration-200" aria-live="polite"></span>
+                                    <div id="knowledge-global-actions" class="flex items-center gap-2">
+                                        <div class="flex items-center bg-slate-100 dark:bg-white/10 rounded-lg p-0.5">
+                                            <button id="knowledge-tab-docs" onclick="switchKnowledgeTab('docs')"
+                                                    class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150 active">
+                                                <i class="fas fa-folder-tree mr-1.5"></i><span data-i18n="knowledge_tab_docs">文档</span>
                                             </button>
-                                            <button onclick="createKnowledgeDocument(); closeKnowledgeNewMenu()"
-                                                    class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
-                                                <i class="fas fa-file-circle-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_document">新建文档</span>
-                                            </button>
-                                            <button onclick="selectKnowledgeImportFiles(); closeKnowledgeNewMenu()"
-                                                    class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
-                                                <i class="fas fa-file-arrow-up w-3.5 text-slate-400"></i><span data-i18n="knowledge_import_documents">导入文档</span>
+                                            <button id="knowledge-tab-graph" onclick="switchKnowledgeTab('graph')"
+                                                    class="knowledge-tab px-3 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors duration-150">
+                                                <i class="fas fa-diagram-project mr-1.5"></i><span data-i18n="knowledge_tab_graph">图谱</span>
                                             </button>
                                         </div>
+                                        <div id="knowledge-new-menu" class="relative">
+                                            <button onclick="toggleKnowledgeNewMenu(event)"
+                                                    class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium cursor-pointer transition-colors">
+                                                <i class="fas fa-plus"></i><span data-i18n="knowledge_new">新建</span><i class="fas fa-chevron-down text-[9px] ml-0.5"></i>
+                                            </button>
+                                            <div id="knowledge-new-menu-list"
+                                                 class="hidden absolute right-0 mt-1.5 w-44 z-50 bg-white dark:bg-[#1A1A1A] border border-slate-200 dark:border-white/10 rounded-lg shadow-lg py-1">
+                                                <button onclick="createKnowledgeCategory(); closeKnowledgeNewMenu()"
+                                                        class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
+                                                    <i class="fas fa-folder-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_category">新建分类</span>
+                                                </button>
+                                                <button onclick="createKnowledgeDocument(); closeKnowledgeNewMenu()"
+                                                        class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
+                                                    <i class="fas fa-file-circle-plus w-3.5 text-slate-400"></i><span data-i18n="knowledge_new_document">新建文档</span>
+                                                </button>
+                                                <button onclick="selectKnowledgeImportFiles(); closeKnowledgeNewMenu()"
+                                                        class="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors">
+                                                    <i class="fas fa-file-arrow-up w-3.5 text-slate-400"></i><span data-i18n="knowledge_import_documents">导入文档</span>
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
+                                    <button id="knowledge-group-new" type="button" onclick="createGroupKnowledge()"
+                                            class="hidden items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                        <i class="fas fa-plus"></i><span data-i18n="knowledge_group_new">新增群知识</span>
+                                    </button>
                                     <input id="knowledge-import-input" type="file" class="hidden" multiple accept=".md,.txt,text/markdown,text/plain">
                                 </div>
                             </div>
@@ -962,6 +980,37 @@
                             <div id="knowledge-panel-graph" class="hidden">
                                 <div class="bg-white dark:bg-[#1A1A1A] rounded-xl border border-slate-200 dark:border-white/10 overflow-hidden">
                                     <div id="knowledge-graph-container" class="w-full h-[60vh] md:h-[calc(100vh-220px)]"></div>
+                                </div>
+                            </div>
+
+                            <!-- Group knowledge panel -->
+                            <div id="knowledge-panel-group" class="hidden md:flex-1 md:min-h-0">
+                                <div class="h-full flex flex-col min-h-0">
+                                    <div class="flex flex-col lg:flex-row lg:items-end gap-3 pb-4 border-b border-slate-200 dark:border-white/10">
+                                        <label class="block min-w-0 lg:w-72">
+                                            <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="knowledge_group_room_label">目标群</span>
+                                            <select id="knowledge-group-room" onchange="selectGroupKnowledgeRoom(this.value)"
+                                                    class="w-full min-h-10 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors disabled:opacity-50">
+                                            </select>
+                                        </label>
+                                        <label class="block flex-1 min-w-0">
+                                            <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5" data-i18n="knowledge_group_search_label">搜索当前群知识</span>
+                                            <span class="relative block">
+                                                <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                                <input id="knowledge-group-search" type="search"
+                                                       class="w-full min-h-10 pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-primary-500 transition-colors disabled:opacity-50"
+                                                       data-i18n-placeholder="knowledge_group_search_placeholder"
+                                                       placeholder="输入关键词"
+                                                       onkeydown="if (event.key === 'Enter') searchGroupKnowledge()">
+                                            </span>
+                                        </label>
+                                        <button id="knowledge-group-search-button" type="button" onclick="searchGroupKnowledge()"
+                                                class="min-h-10 px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                            <i class="fas fa-search mr-1.5"></i><span data-i18n="knowledge_group_search_action">搜索</span>
+                                        </button>
+                                    </div>
+                                    <div id="knowledge-group-state" class="hidden flex-1 min-h-48 items-center justify-center py-16" role="status" aria-live="polite"></div>
+                                    <div id="knowledge-group-list" class="hidden grid grid-cols-1 xl:grid-cols-2 gap-3 py-4 overflow-y-auto" role="list"></div>
                                 </div>
                             </div>
 

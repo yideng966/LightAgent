@@ -24,6 +24,14 @@ class WechatGroupKnowledgeServiceTest(unittest.TestCase):
         self.assertEqual(1, len(rows))
         self.assertEqual("A群周六早上发布", rows[0]["content"])
 
+    def test_group_knowledge_query_api_isolated_by_room(self):
+        self.service.add_group_memory("wgr_a", "A群发布窗口是周五晚上")
+        self.service.add_group_memory("wgr_b", "B群发布窗口是周六早上")
+
+        rows = self.service.search_group_knowledge("wgr_a", "发布窗口", limit=5)
+
+        self.assertEqual(["A群发布窗口是周五晚上"], [item["content"] for item in rows])
+
     def test_disable_group_memory_marks_status_inactive(self):
         memory = self.service.add_group_memory("room@@a", "临时规则", ["m3"], "管理员", "manual")
 

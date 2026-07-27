@@ -105,7 +105,7 @@ class WechatGroupAgentBridgeToolsTest(unittest.TestCase):
         ) as profile_class, patch(
             "channel.wechat_group.wechat_group_memory_tools.create_wechat_group_memory_tools",
             return_value=[],
-        ), patch(
+        ) as create_memory_tools, patch(
             "channel.wechat_group.wechat_group_sticker_tools.create_wechat_group_sticker_tools",
             return_value=[],
         ):
@@ -113,6 +113,8 @@ class WechatGroupAgentBridgeToolsTest(unittest.TestCase):
 
         identity_class.assert_called_once_with()
         profile_class.assert_called_once_with(identity_service=identity)
+        self.assertEqual("wgr_room", create_memory_tools.call_args.kwargs["room_id"])
+        self.assertEqual("wgm_alice", create_memory_tools.call_args.kwargs["sender_id"])
 
     def test_file_reply_preserves_online_sticker_metadata(self):
         bridge = HarnessAgentBridge(FakeAgent(self.manager))

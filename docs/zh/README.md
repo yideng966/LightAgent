@@ -152,7 +152,7 @@ LightAgent 支持国内外主流厂商的大语言模型。**文本对话、图�
 
 **长期记忆**采用三层架构：对话上下文（短期）→ 天级记忆（中期）→ MEMORY.md（长期）。每日自动执行**梦境蒸馏（Deep Dream）**，将分散记忆整合为精炼的长期记忆并生成叙事日记。详见 [长期记忆](https://docs.cowagent.ai/zh/memory) · [梦境蒸馏](https://docs.cowagent.ai/zh/memory/deep-dream)。
 
-**个人知识库** 与按时间记录的记忆不同，以**主题为维度**组织结构化知识。Agent 在对话中自动整理有价值信息，维护交叉引用与索引，Web 控制台可可视化浏览知识图谱。详见 [个人知识库](https://docs.cowagent.ai/zh/knowledge)。
+**个人知识库** 与按时间记录的记忆不同，以**主题为维度**组织结构化知识。Agent 在对话中自动整理有价值信息，维护交叉引用与索引，Web 控制台可可视化浏览知识图谱；“知识”页还可切换到按稳定群 ID 隔离的群知识，查看和管理当前群的独立知识。详见 [个人知识库](https://docs.cowagent.ai/zh/knowledge)。
 
 <table>
   <tr>

@@ -116,6 +116,8 @@ const I18N = {
         save: '保存',
         ok: '确定',
         knowledge_title: '知识库', knowledge_desc: '浏览和探索你的知识库',
+        knowledge_group_desc: '查看和管理当前微信群独立保存的知识',
+        knowledge_scope_global: '全局知识', knowledge_scope_group: '群知识',
         knowledge_tab_docs: '文档', knowledge_tab_graph: '图谱',
         knowledge_loading: '加载知识库中...', knowledge_loading_desc: '知识页面将显示在这里',
         knowledge_select_hint: '选择一个文档查看', knowledge_empty_hint: '暂无知识页面',
@@ -125,6 +127,29 @@ const I18N = {
         knowledge_new_category: '新建分类',
         knowledge_new_document: '新建文档',
         knowledge_import_documents: '导入文档',
+        knowledge_group_new: '新增群知识',
+        knowledge_group_room_label: '目标群',
+        knowledge_group_search_label: '搜索当前群知识',
+        knowledge_group_search_placeholder: '输入关键词',
+        knowledge_group_search_action: '搜索',
+        knowledge_group_loading: '正在加载群知识...',
+        knowledge_group_no_rooms: '尚未配置可用的稳定群',
+        knowledge_group_no_rooms_action: '前往群聊设置',
+        knowledge_group_empty: '当前群还没有匹配的知识',
+        knowledge_group_retry: '重试',
+        knowledge_group_count: '{count} 条',
+        knowledge_group_source_manual: '手动添加',
+        knowledge_group_source_learning: '自动学习',
+        knowledge_group_source_report: '群聊报告',
+        knowledge_group_disable: '停用',
+        knowledge_group_disable_title: '停用群知识',
+        knowledge_group_disable_message: '确认停用这条群知识？停用后不会再提供给当前群 Agent。',
+        knowledge_group_create_title: '新增群知识',
+        knowledge_group_create_label: '知识内容',
+        knowledge_group_create_hint: '内容只保存到当前群，不会写入全局知识库。',
+        knowledge_group_saved: '群知识已保存',
+        knowledge_group_disabled: '群知识已停用',
+        knowledge_group_request_failed: '请求失败，请稍后重试',
         welcome_subtitle: '我可以帮你解答问题、管理计算机、创造和执行技能，并通过<br>长期记忆和知识库不断成长',
         example_sys_title: '系统管理', example_sys_text: '查看工作空间里有哪些文件',
         example_task_title: '定时任务', example_task_text: '1分钟后提醒我检查服务器',
@@ -1027,6 +1052,8 @@ const I18N = {
         save: 'Save',
         ok: 'OK',
         knowledge_title: 'Knowledge', knowledge_desc: 'Browse and explore your knowledge base',
+        knowledge_group_desc: 'View and manage knowledge isolated to the current WeChat group',
+        knowledge_scope_global: 'Global', knowledge_scope_group: 'Group',
         knowledge_tab_docs: 'Documents', knowledge_tab_graph: 'Graph',
         knowledge_loading: 'Loading knowledge base...', knowledge_loading_desc: 'Knowledge pages will be displayed here',
         knowledge_select_hint: 'Select a document to view', knowledge_empty_hint: 'No knowledge pages yet',
@@ -1036,6 +1063,29 @@ const I18N = {
         knowledge_new_category: 'New category',
         knowledge_new_document: 'New document',
         knowledge_import_documents: 'Import documents',
+        knowledge_group_new: 'Add group knowledge',
+        knowledge_group_room_label: 'Group',
+        knowledge_group_search_label: 'Search this group',
+        knowledge_group_search_placeholder: 'Enter keywords',
+        knowledge_group_search_action: 'Search',
+        knowledge_group_loading: 'Loading group knowledge...',
+        knowledge_group_no_rooms: 'No stable groups are configured',
+        knowledge_group_no_rooms_action: 'Open group settings',
+        knowledge_group_empty: 'No matching knowledge in this group',
+        knowledge_group_retry: 'Retry',
+        knowledge_group_count: '{count} items',
+        knowledge_group_source_manual: 'Manual',
+        knowledge_group_source_learning: 'Auto-learned',
+        knowledge_group_source_report: 'Group report',
+        knowledge_group_disable: 'Disable',
+        knowledge_group_disable_title: 'Disable group knowledge',
+        knowledge_group_disable_message: 'Disable this group knowledge item? It will no longer be available to the current group agent.',
+        knowledge_group_create_title: 'Add group knowledge',
+        knowledge_group_create_label: 'Knowledge content',
+        knowledge_group_create_hint: 'This content is saved only to the current group, not the global knowledge base.',
+        knowledge_group_saved: 'Group knowledge saved',
+        knowledge_group_disabled: 'Group knowledge disabled',
+        knowledge_group_request_failed: 'Request failed. Please try again.',
         welcome_subtitle: 'I can help you answer questions, manage your computer, create and execute skills, and keep growing through <br> long-term memory and a personal knowledge base.',
         example_sys_title: 'System', example_sys_text: 'Show me the files in the workspace',
         example_task_title: 'Scheduler', example_task_text: 'Remind me to check the server in 5 minutes',
@@ -1959,6 +2009,10 @@ function rerenderDynamicViews() {
     }
     if (currentView === 'groups') {
         renderGroupsView();
+    }
+    if (currentView === 'knowledge') {
+        _updateKnowledgeScopeUi();
+        if (_knowledgeScope === 'group') _renderGroupKnowledgePanel();
     }
 }
 
@@ -16101,11 +16155,28 @@ let _knowledgeTreeData = [];
 let _knowledgeRootFiles = [];
 let _knowledgeCurrentFile = null;
 let _knowledgeGraphLoaded = false;
+let _knowledgeScope = 'global';
+const _groupKnowledgeState = {
+    groups: [],
+    selectedRoomId: '',
+    query: '',
+    memories: [],
+    groupsLoaded: false,
+    loading: false,
+    error: '',
+    requestId: 0,
+    pendingMemoryId: '',
+};
 const KNOWLEDGE_IMPORT_MAX_FILES = 100;
 const KNOWLEDGE_IMPORT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 const KNOWLEDGE_IMPORT_MAX_TOTAL_SIZE = 200 * 1024 * 1024;
 
 function loadKnowledgeView(targetPath) {
+    _updateKnowledgeScopeUi();
+    if (_knowledgeScope === 'group') {
+        loadGroupKnowledgeView(true);
+        return;
+    }
     // Reset to docs tab
     switchKnowledgeTab('docs');
     _knowledgeGraphLoaded = false;
@@ -16166,6 +16237,303 @@ function loadKnowledgeView(targetPath) {
             document.getElementById('knowledge-content-viewer').classList.add('hidden');
         }
     }).catch(() => {});
+}
+
+function switchKnowledgeScope(scope) {
+    const nextScope = scope === 'group' ? 'group' : 'global';
+    closeKnowledgeNewMenu();
+    if (_knowledgeScope === nextScope) {
+        if (nextScope === 'group') loadGroupKnowledgeView(true);
+        return;
+    }
+    _knowledgeScope = nextScope;
+    loadKnowledgeView();
+}
+
+function _updateKnowledgeScopeUi() {
+    const isGlobal = _knowledgeScope === 'global';
+    const globalButton = document.getElementById('knowledge-scope-global');
+    const groupButton = document.getElementById('knowledge-scope-group');
+    [
+        [globalButton, isGlobal],
+        [groupButton, !isGlobal],
+    ].forEach(([button, active]) => {
+        if (!button) return;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+
+    const globalActions = document.getElementById('knowledge-global-actions');
+    const groupNew = document.getElementById('knowledge-group-new');
+    if (globalActions) globalActions.classList.toggle('hidden', !isGlobal);
+    if (groupNew) {
+        groupNew.classList.toggle('hidden', isGlobal);
+        groupNew.classList.toggle('flex', !isGlobal);
+        groupNew.disabled = !_groupKnowledgeState.selectedRoomId;
+    }
+
+    const desc = document.getElementById('knowledge-desc');
+    if (desc) desc.textContent = t(isGlobal ? 'knowledge_desc' : 'knowledge_group_desc');
+    const groupPanel = document.getElementById('knowledge-panel-group');
+    if (groupPanel) groupPanel.classList.toggle('hidden', isGlobal);
+    if (!isGlobal) {
+        document.getElementById('knowledge-empty')?.classList.add('hidden');
+        document.getElementById('knowledge-panel-docs')?.classList.add('hidden');
+        document.getElementById('knowledge-panel-graph')?.classList.add('hidden');
+    }
+}
+
+async function loadGroupKnowledgeView(forceGroups = false) {
+    _updateKnowledgeScopeUi();
+    if (_knowledgeScope !== 'group') return;
+    if (_groupKnowledgeState.groupsLoaded && !forceGroups) {
+        _renderGroupKnowledgePanel();
+        await loadGroupKnowledgeMemories();
+        return;
+    }
+
+    const requestId = ++_groupKnowledgeState.requestId;
+    _groupKnowledgeState.loading = true;
+    _groupKnowledgeState.error = '';
+    _renderGroupKnowledgePanel();
+    try {
+        const response = await fetch('/api/wechat-group/memories/groups');
+        const result = await response.json();
+        if (result.status !== 'success') throw new Error(result.message || 'load failed');
+        if (requestId !== _groupKnowledgeState.requestId) return;
+        _groupKnowledgeState.groups = Array.isArray(result.groups) ? result.groups : [];
+        _groupKnowledgeState.groupsLoaded = true;
+        if (!_groupKnowledgeState.groups.some(item => item.room_id === _groupKnowledgeState.selectedRoomId)) {
+            _groupKnowledgeState.selectedRoomId = _groupKnowledgeState.groups[0]?.room_id || '';
+            _groupKnowledgeState.query = '';
+        }
+        _groupKnowledgeState.loading = false;
+        _renderGroupKnowledgePanel();
+        if (_groupKnowledgeState.selectedRoomId) await loadGroupKnowledgeMemories();
+    } catch (error) {
+        if (requestId !== _groupKnowledgeState.requestId) return;
+        _groupKnowledgeState.loading = false;
+        _groupKnowledgeState.error = t('knowledge_group_request_failed');
+        _renderGroupKnowledgePanel();
+    }
+}
+
+async function loadGroupKnowledgeMemories() {
+    const roomId = _groupKnowledgeState.selectedRoomId;
+    if (!roomId || _knowledgeScope !== 'group') {
+        _groupKnowledgeState.memories = [];
+        _renderGroupKnowledgePanel();
+        return;
+    }
+    const requestId = ++_groupKnowledgeState.requestId;
+    _groupKnowledgeState.loading = true;
+    _groupKnowledgeState.error = '';
+    _renderGroupKnowledgePanel();
+    const params = new URLSearchParams({
+        stable_room_id: roomId,
+        q: _groupKnowledgeState.query,
+        limit: '200',
+    });
+    try {
+        const response = await fetch(`/api/wechat-group/memories/group?${params.toString()}`);
+        const result = await response.json();
+        if (result.status !== 'success') throw new Error(result.message || 'load failed');
+        if (requestId !== _groupKnowledgeState.requestId) return;
+        _groupKnowledgeState.memories = Array.isArray(result.memories) ? result.memories : [];
+        _groupKnowledgeState.loading = false;
+        _renderGroupKnowledgePanel();
+    } catch (error) {
+        if (requestId !== _groupKnowledgeState.requestId) return;
+        _groupKnowledgeState.loading = false;
+        _groupKnowledgeState.error = t('knowledge_group_request_failed');
+        _renderGroupKnowledgePanel();
+    }
+}
+
+function selectGroupKnowledgeRoom(roomId) {
+    _groupKnowledgeState.selectedRoomId = String(roomId || '');
+    _groupKnowledgeState.query = '';
+    _groupKnowledgeState.memories = [];
+    const search = document.getElementById('knowledge-group-search');
+    if (search) search.value = '';
+    _updateKnowledgeScopeUi();
+    loadGroupKnowledgeMemories();
+}
+
+function searchGroupKnowledge() {
+    _groupKnowledgeState.query = (document.getElementById('knowledge-group-search')?.value || '').trim();
+    loadGroupKnowledgeMemories();
+}
+
+function _renderGroupKnowledgePanel() {
+    const groups = _groupKnowledgeState.groups;
+    const roomSelect = document.getElementById('knowledge-group-room');
+    const searchInput = document.getElementById('knowledge-group-search');
+    const searchButton = document.getElementById('knowledge-group-search-button');
+    const state = document.getElementById('knowledge-group-state');
+    const list = document.getElementById('knowledge-group-list');
+    const stats = document.getElementById('knowledge-stats');
+    const addButton = document.getElementById('knowledge-group-new');
+    if (!roomSelect || !searchInput || !searchButton || !state || !list) return;
+
+    roomSelect.innerHTML = groups.map(item => {
+        const roomId = String(item.room_id || '');
+        const name = String(item.room_name || roomId);
+        return `<option value="${escapeHtml(roomId)}" ${roomId === _groupKnowledgeState.selectedRoomId ? 'selected' : ''}>${escapeHtml(name)}</option>`;
+    }).join('');
+    roomSelect.disabled = !groups.length || _groupKnowledgeState.loading;
+    searchInput.value = _groupKnowledgeState.query;
+    searchInput.disabled = !groups.length || _groupKnowledgeState.loading;
+    searchButton.disabled = !groups.length || _groupKnowledgeState.loading;
+    if (addButton) addButton.disabled = !_groupKnowledgeState.selectedRoomId || _groupKnowledgeState.loading;
+    if (stats) {
+        stats.textContent = groups.length
+            ? t('knowledge_group_count').replace('{count}', String(_groupKnowledgeState.memories.length))
+            : '';
+    }
+
+    state.classList.add('hidden');
+    state.classList.remove('flex');
+    list.classList.add('hidden');
+    list.innerHTML = '';
+
+    if (_groupKnowledgeState.loading) {
+        _showGroupKnowledgeState(`<div class="text-center text-slate-500 dark:text-slate-400"><i class="fas fa-spinner fa-spin text-lg"></i><p class="mt-3 text-sm">${escapeHtml(t('knowledge_group_loading'))}</p></div>`);
+        return;
+    }
+    if (_groupKnowledgeState.error) {
+        _showGroupKnowledgeState(`<div class="text-center text-slate-500 dark:text-slate-400"><i class="fas fa-circle-exclamation text-lg text-red-400"></i><p class="mt-3 text-sm">${escapeHtml(_groupKnowledgeState.error)}</p><button type="button" onclick="loadGroupKnowledgeView(true)" class="mt-4 min-h-10 px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-sm hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors"><i class="fas fa-rotate-right mr-1.5"></i>${escapeHtml(t('knowledge_group_retry'))}</button></div>`);
+        return;
+    }
+    if (!groups.length) {
+        _showGroupKnowledgeState(`<div class="text-center text-slate-500 dark:text-slate-400"><i class="fas fa-users-slash text-2xl opacity-60"></i><p class="mt-3 text-sm">${escapeHtml(t('knowledge_group_no_rooms'))}</p><button type="button" onclick="navigateTo('groups')" class="mt-4 min-h-10 px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-sm hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer transition-colors"><i class="fas fa-sliders mr-1.5"></i>${escapeHtml(t('knowledge_group_no_rooms_action'))}</button></div>`);
+        return;
+    }
+    if (!_groupKnowledgeState.memories.length) {
+        _showGroupKnowledgeState(`<div class="text-center text-slate-500 dark:text-slate-400"><i class="fas fa-book-open text-2xl opacity-60"></i><p class="mt-3 text-sm">${escapeHtml(t('knowledge_group_empty'))}</p></div>`);
+        return;
+    }
+
+    list.innerHTML = _groupKnowledgeState.memories.map(item => {
+        const memoryId = String(item.memory_id || '');
+        const source = _groupKnowledgeSourceLabel(item.source_kind);
+        const updated = _formatGroupKnowledgeTime(item.updated_at);
+        const pending = memoryId && memoryId === _groupKnowledgeState.pendingMemoryId;
+        return `<article role="listitem" class="min-w-0 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] p-4">
+            <p class="text-sm leading-6 text-slate-700 dark:text-slate-200 whitespace-pre-wrap break-words">${escapeHtml(item.content || '')}</p>
+            <div class="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-400 dark:text-slate-500">
+                <span class="inline-flex items-center gap-1.5"><i class="fas fa-database text-[10px]"></i>${escapeHtml(source)}</span>
+                ${updated ? `<time class="tabular-nums">${escapeHtml(updated)}</time>` : ''}
+                <button type="button" onclick="disableGroupKnowledge('${escapeJs(memoryId)}')" ${pending ? 'disabled' : ''}
+                        class="ml-auto min-h-9 px-3 py-1.5 rounded-md border border-slate-200 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400 hover:text-red-500 hover:border-red-200 dark:hover:border-red-900 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i class="fas ${pending ? 'fa-spinner fa-spin' : 'fa-ban'} mr-1.5"></i>${escapeHtml(t('knowledge_group_disable'))}
+                </button>
+            </div>
+        </article>`;
+    }).join('');
+    list.classList.remove('hidden');
+}
+
+function _showGroupKnowledgeState(html) {
+    const state = document.getElementById('knowledge-group-state');
+    if (!state) return;
+    state.innerHTML = html;
+    state.classList.remove('hidden');
+    state.classList.add('flex');
+}
+
+function _groupKnowledgeSourceLabel(sourceKind) {
+    const source = String(sourceKind || 'manual');
+    if (source === 'manual') return t('knowledge_group_source_manual');
+    if (source === 'learning') return t('knowledge_group_source_learning');
+    if (source === 'daily_report' || source === 'report') return t('knowledge_group_source_report');
+    return source;
+}
+
+function _formatGroupKnowledgeTime(value) {
+    const timestamp = Number(value || 0);
+    if (!Number.isFinite(timestamp) || timestamp <= 0) return '';
+    const date = new Date(timestamp < 1000000000000 ? timestamp * 1000 : timestamp);
+    return Number.isNaN(date.getTime()) ? '' : formatTime(date);
+}
+
+function createGroupKnowledge() {
+    const roomId = _groupKnowledgeState.selectedRoomId;
+    if (!roomId) {
+        _setKnowledgeStatus(t('knowledge_group_no_rooms'), true);
+        return;
+    }
+    const room = _groupKnowledgeState.groups.find(item => item.room_id === roomId);
+    openKnowledgeDialog({
+        title: t('knowledge_group_create_title'),
+        subtitle: String(room?.room_name || roomId),
+        label: t('knowledge_group_create_label'),
+        hint: t('knowledge_group_create_hint'),
+        type: 'textarea',
+        icon: 'fa-users',
+        onSubmit: content => _saveGroupKnowledge(content),
+    });
+}
+
+async function _saveGroupKnowledge(content) {
+    const roomId = _groupKnowledgeState.selectedRoomId;
+    _setKnowledgeStatus(t('knowledge_group_loading'), false, true);
+    try {
+        const response = await fetch('/api/wechat-group/memories/group', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                stable_room_id: roomId,
+                content,
+                source_kind: 'manual',
+            }),
+        });
+        const result = await response.json();
+        if (result.status !== 'success') throw new Error(result.message || 'save failed');
+        _groupKnowledgeState.query = '';
+        _setKnowledgeStatus(t('knowledge_group_saved'), false);
+        await loadGroupKnowledgeMemories();
+        return result.memory || true;
+    } catch (error) {
+        _setKnowledgeStatus(t('knowledge_group_request_failed'), true);
+        return null;
+    }
+}
+
+function disableGroupKnowledge(memoryId) {
+    if (!memoryId || !_groupKnowledgeState.selectedRoomId) return;
+    showConfirmDialog({
+        title: t('knowledge_group_disable_title'),
+        message: t('knowledge_group_disable_message'),
+        okText: t('confirm_yes'),
+        cancelText: t('confirm_cancel'),
+        onConfirm: () => _disableGroupKnowledge(memoryId),
+    });
+}
+
+async function _disableGroupKnowledge(memoryId) {
+    _groupKnowledgeState.pendingMemoryId = memoryId;
+    _renderGroupKnowledgePanel();
+    try {
+        const response = await fetch('/api/wechat-group/memories/disable', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                stable_room_id: _groupKnowledgeState.selectedRoomId,
+                memory_type: 'group',
+                memory_id: memoryId,
+            }),
+        });
+        const result = await response.json();
+        if (result.status !== 'success' || !result.disabled) throw new Error(result.message || 'disable failed');
+        _setKnowledgeStatus(t('knowledge_group_disabled'), false);
+        await loadGroupKnowledgeMemories();
+    } catch (error) {
+        _setKnowledgeStatus(t('knowledge_group_request_failed'), true);
+    } finally {
+        _groupKnowledgeState.pendingMemoryId = '';
+        _renderGroupKnowledgePanel();
+    }
 }
 
 // Find a file's display title by its relative path within the knowledge tree.
@@ -16818,6 +17186,7 @@ function knowledgeMobileBack() {
 }
 
 function switchKnowledgeTab(tab) {
+    if (_knowledgeScope !== 'global') return;
     document.querySelectorAll('.knowledge-tab').forEach(el => el.classList.remove('active'));
     document.getElementById('knowledge-tab-' + tab).classList.add('active');
 

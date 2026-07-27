@@ -38,7 +38,7 @@ class WechatGroupKnowledgeService:
     def disable_group_memory(self, room_id: str, memory_id: str) -> bool:
         return self.store.update_group_memory_status(room_id, memory_id, "inactive")
 
-    def search_group_memories(
+    def search_group_knowledge(
         self,
         room_id: str,
         query: str,
@@ -57,6 +57,15 @@ class WechatGroupKnowledgeService:
                 matched.sort(key=lambda item: (-int(item.get("updated_at") or 0), item.get("memory_id") or ""))
                 return matched[:max_limit]
         return rows[:max_limit]
+
+    def search_group_memories(
+        self,
+        room_id: str,
+        query: str,
+        limit: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """兼容旧调用方；群知识查询统一走显式作用域入口。"""
+        return self.search_group_knowledge(room_id=room_id, query=query, limit=limit)
 
 
 def _normalize_lookup_text(value: Any) -> str:

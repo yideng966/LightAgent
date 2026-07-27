@@ -773,6 +773,61 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual(("wgr_room", None, 5), fake.args)
         self.assertEqual("wgr_room", result["identity"]["stable_room_id"])
 
+    def test_wechat_group_memory_groups_exposes_only_configured_stable_rooms(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        class FakeConfig:
+            def get(self, key, default=None):
+                values = {
+                    "wechat_group_stable_room_ids": ["wgr_a"],
+                    "wechat_group_room_ids": ["room@@legacy"],
+                }
+                return values.get(key, default)
+
+        class FakeKnowledgeService:
+            def list_group_memories(self, room_id, limit=20):
+                return [{"memory_id": f"memory-{room_id}"}]
+
+        handler = WechatGroupMemoriesHandler()
+        with patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.conf", return_value=FakeConfig()), \
+                patch.object(WechatGroupMemoriesHandler, "_get_knowledge_service", return_value=FakeKnowledgeService()), \
+                patch.object(WechatGroupMemoriesHandler, "_get_room_name_map", return_value={"wgr_a": "A群"}), \
+                patch("channel.web.web_channel.web.input", return_value=types.SimpleNamespace(
+                    stable_room_id="", runtime_room_id="", room_id="", stable_member_id="",
+                    runtime_sender_id="", sender_id="", status="active", limit="20", offset="0", q="",
+                    run_id="",
+                )):
+            result = json.loads(handler.GET("groups"))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(["wgr_a"], [item["room_id"] for item in result["groups"]])
+        self.assertEqual("A群", result["groups"][0]["room_name"])
+
+    def test_wechat_group_memory_groups_does_not_fallback_to_runtime_rooms(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        class FakeConfig:
+            def get(self, key, default=None):
+                values = {
+                    "wechat_group_stable_room_ids": [],
+                    "wechat_group_room_ids": ["room@@legacy"],
+                }
+                return values.get(key, default)
+
+        handler = WechatGroupMemoriesHandler()
+        with patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.conf", return_value=FakeConfig()), \
+                patch("channel.web.web_channel.web.input", return_value=types.SimpleNamespace(
+                    stable_room_id="", runtime_room_id="", room_id="", stable_member_id="",
+                    runtime_sender_id="", sender_id="", status="active", limit="20", offset="0", q="",
+                    run_id="",
+                )):
+            result = json.loads(handler.GET("groups"))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual([], result["groups"])
+
     def test_wechat_group_memory_group_get_converts_legacy_room_id(self):
         from channel.web.web_channel import WechatGroupMemoriesHandler
 

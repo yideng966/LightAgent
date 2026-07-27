@@ -65,6 +65,13 @@ python -m pip install -e .
 python app.py
 ```
 
+开发任务的验证约束：
+
+- 自动化回归继续使用 `python -m unittest ...` 等本地测试命令。
+- 需要验证真实运行链路时，必须在当前本地仓库使用 `python app.py` 启动实际环境并完成验证。
+- 不得把远端 Docker 部署环境作为本地开发测试环境；除非用户针对部署或运维另行明确授权，否则不得为验证代码而连接、更新、重启远端容器或操作远端数据。
+- 下文 Docker 内容只作为构建与部署参考，不属于默认开发验证流程。
+
 或安装 CLI 后：
 
 ```powershell
@@ -340,6 +347,7 @@ docker push yideng966/lightagent:latest
 - 普通群成员可以问答、查询、总结和读取上下文，但不能触发知识库写入、永久记忆写入、群记忆写入、群友画像写入、自主进化、workspace 文件写入/编辑、定时任务修改或微信群配置修改。
 - 管理员门禁必须同时包含通道层拒绝、Agent 工具过滤和 Prompt 权限提示；不能只依赖模型自觉遵守提示词。
 - 微信群稳定身份改造后，`wechat_group_room_id` / `wechat_group_sender_id` 继续表示当前 Wechaty 登录态 runtime ID；长期配置、权限、会话、归档、记忆、画像、焦点、情绪、风格、表情和 scheduler 必须优先使用显式 stable 字段。
+- Web“知识”页的群知识只允许列出 `wechat_group_stable_room_ids`，不得回退展示 runtime 群快照；群知识存储、上下文注入和 Agent 查询必须统一绑定当前 stable room，群知识工具 schema 不得接收模型传入的 `room_id`，全局 Markdown 知识库继续保持独立。
 - 微信群归档按群查询必须优先严格匹配 `stable_room_id`；只有归档记录自身未绑定稳定群 ID 时，才允许使用 legacy `room_id` 兼容读取，不得用无条件 `stable_room_id OR room_id` 扩大检索范围。
 - 微信群成员会话默认按 `stable_room_id + stable_member_id` 隔离；旧配置缺少 `group_shared_session` 时必须按 `false` 处理，不能回退为全群共享。显式开启全群共享时保持兼容，但不要通过提高同一共享会话的 `concurrency_in_session` 解决阻塞，以免引入会话历史和回复顺序竞争。
 - 身份恢复必须按 stable account -> stable room -> stable member 的顺序确认；未确认 account 不得确认 room，未确认 member 不得写入管理员 stable 配置或继承敏感权限。

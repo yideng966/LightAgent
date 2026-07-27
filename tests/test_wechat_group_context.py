@@ -466,6 +466,7 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         ])
         knowledge_service = WechatGroupKnowledgeService(WechatGroupKnowledgeStore(self.knowledge_db_path))
         knowledge_service.add_group_memory(room_id, "发布窗口是周五晚上", ["m1"], "讨论结果", "manual")
+        knowledge_service.add_group_memory("wgr_other", "另一个群的发布窗口是周六早上", ["m2"], "其他群讨论", "manual")
         profile_service.upsert_manual_profile(
             sender_id=members["alice-runtime"],
             primary_nickname="Alice",
@@ -498,6 +499,8 @@ class WechatGroupRecentContextTest(unittest.TestCase):
 
         self.assertIn("<wechat-group-memory>", preview["content"])
         self.assertIn("[group_memory]", preview["content"])
+        self.assertIn("发布窗口是周五晚上", preview["content"])
+        self.assertNotIn("另一个群的发布窗口是周六早上", preview["content"])
         self.assertIn('[speaker_profile sender_id="{}"]'.format(members["alice-runtime"]), preview["content"])
         self.assertIn('[mentioned_profile sender_id="{}"]'.format(members["bob-runtime"]), preview["content"])
 
