@@ -41,7 +41,7 @@ class WechatGroupContextService:
         ))
 
         if knowledge_enabled:
-            group_memories = self.knowledge_service.search_group_memories(
+            group_memories = self.knowledge_service.search_group_knowledge(
                 room_id,
                 query=query,
                 limit=int(conf().get("wechat_group_group_memory_context_limit", 5) or 5),

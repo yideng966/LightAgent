@@ -27,6 +27,31 @@
 - `node --check channel/web/static/js/console.js`、`python -m json.tool config-template.json`、Python 编译和 `git diff --check` 通过。
 - 本地 `python app.py` 启动后 `192.168.3.113:9901` 返回 HTTP 200；两个稳定群的 memory-only 手动运行分别返回“无新增材料”和“10 条材料低于 20 条阈值”，确认阈值不足时不调用 LLM、不推进游标且不触发群画像。
 - 本地 `agent_workspace` 完成受控重置：删除 10 个全局文件/目录目标、16 条 shared 记忆索引和 10 条进化注入消息；二次 dry-run 三类计数均为 0，群归档仍保留 31754 条，短期回退快照已在验收后删除。
+### 知识库按群隔离
+
+- Web 控制台“知识”页新增“全局知识 / 群知识”作用域切换；全局 Markdown 文档、导入和图谱行为保持不变，群知识可按已配置稳定群选择、搜索、新增和停用，并提供加载、空数据和失败重试状态。
+- 群知识继续复用现有 `wechat_group_group_memories` 存储，不新增平行数据库；可选群接口只返回 `wechat_group_stable_room_ids`，不再用 runtime 群快照作为长期知识管理入口。
+- `WechatGroupKnowledgeService` 新增显式 `search_group_knowledge()` 查询入口，群聊上下文与 `wechat_group_memory_search` 统一调用该入口；旧 `search_group_memories()` 保留兼容，Agent 工具仍由服务端绑定当前 stable room 且不暴露 `room_id` 参数。
+- 增加服务、AgentBridge、上下文、Web API 和知识页合同测试，覆盖跨群知识不进入当前群 prompt、工具 stable scope 绑定、群列表不回退 runtime ID 及全局知识功能兼容。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_knowledge_service.py`
+- `channel/wechat_group/wechat_group_context_service.py`
+- `channel/wechat_group/wechat_group_memory_tools.py`
+- `channel/web/web_channel.py`
+- `channel/web/chat.html`
+- `channel/web/static/js/console.js`
+- `channel/web/static/css/console.css`
+- `AGENTS.md`
+
+验证记录：
+
+- 群知识存储、服务、Agent 工具、AgentBridge 与上下文定向回归 47 项通过；全局知识服务与 Web 合同 21 项通过。
+- `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`：238 项通过。
+- `PYTHONUTF8=1 python -m unittest discover -s tests`：1074 项通过，1 项按条件跳过。
+- 当前 worktree 使用独立临时数据目录执行 `python app.py`，Playwright 在 1440px 与 375px、浅色与暗色模式验证全局/群知识切换、搜索、新增和停用；9 次群知识请求均只使用 `stable_room_id`，移动端无横向溢出，浏览器无控制台或页面异常。
+- JavaScript 语法、Python 编译、配置模板 JSON、HTML ID 唯一性与 `git diff --check` 通过。
 
 ### 发布构建版本元数据同步
 

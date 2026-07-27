@@ -13,7 +13,7 @@ from channel.wechat_group.wechat_group_profile_service import WechatGroupProfile
 class WechatGroupMemorySearchTool(BaseTool):
     name = "wechat_group_memory_search"
     description = (
-        "Search long-term memories for the current WeChat group only. "
+        "Search long-term knowledge and memories for the current WeChat group only. "
         "Use this for current group rules, preferences, historical agreements, "
         "project facts, or recurring decisions. The current room is bound by "
         "the server and cannot be changed by tool arguments."
@@ -50,7 +50,7 @@ class WechatGroupMemorySearchTool(BaseTool):
             return ToolResult.fail("Error: query parameter is required")
         max_results = _to_int(params.get("max_results"), 5)
         try:
-            rows = self.service.search_group_memories(
+            rows = self.service.search_group_knowledge(
                 self.room_id,
                 query=query,
                 limit=max_results,

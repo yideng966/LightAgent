@@ -87,6 +87,22 @@ class WechatGroupMemoryToolsTest(unittest.TestCase):
         self.assertIn("A room release window is Friday night", result.result)
         self.assertNotIn("B room release window is Saturday morning", result.result)
 
+    def test_memory_search_tool_uses_group_knowledge_query_api(self):
+        class FakeKnowledgeService:
+            def search_group_knowledge(self, room_id, query, limit=5):
+                self.args = (room_id, query, limit)
+                return [{"content": "仅当前群知识"}]
+
+        service = FakeKnowledgeService()
+        result = WechatGroupMemorySearchTool(service, self.room_a).execute({
+            "query": "发布窗口",
+            "max_results": 3,
+        })
+
+        self.assertEqual("success", result.status)
+        self.assertEqual((self.room_a, "发布窗口", 3), service.args)
+        self.assertIn("仅当前群知识", result.result)
+
     def test_profile_tool_resolves_runtime_sender_to_canonical_profile(self):
         tool = WechatGroupProfileGetTool(
             self.profile_service,
