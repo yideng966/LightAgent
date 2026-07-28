@@ -33,6 +33,13 @@ class DockerDeploymentContractTest(unittest.TestCase):
     def test_dockerfile_caches_stable_dependencies_before_application_sources(self):
         text = (ROOT / "docker" / "Dockerfile.latest").read_text(encoding="utf-8")
         source_copy = "COPY --chown=agent:agent . ${BUILD_PREFIX}"
+        stable_runtime_copies = (
+            "COPY --from=wechat-group-sidecar-build /usr/local/bin/node /usr/local/bin/node",
+            "COPY --from=wechat-group-sidecar-build /usr/local/bin/npm /usr/local/bin/npm",
+            "COPY --from=wechat-group-sidecar-build /usr/local/bin/npx /usr/local/bin/npx",
+            "COPY --from=wechat-group-sidecar-build /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm",
+            "COPY --from=wechat-group-sidecar-build --chown=agent:agent",
+        )
 
         self.assertIn("ARG INSTALL_BROWSER=true", text)
         self.assertLess(
@@ -44,6 +51,10 @@ class DockerDeploymentContractTest(unittest.TestCase):
             text.index(source_copy),
         )
         self.assertLess(text.index("python -m playwright install chromium"), text.index(source_copy))
+        for copy_instruction in stable_runtime_copies:
+            with self.subTest(copy_instruction=copy_instruction):
+                self.assertLess(text.index(copy_instruction), text.index(source_copy))
+        self.assertLess(text.index("wechat-group-sidecar imports ok"), text.index(source_copy))
         self.assertLess(text.index(source_copy), text.index("pip install --no-cache --no-deps -e ."))
 
     def test_compose_persists_private_data_and_workspace(self):
@@ -165,9 +176,20 @@ class DockerDeploymentContractTest(unittest.TestCase):
         self.assertIn("docker/data/", lines)
         self.assertIn("docker/lightagent/", lines)
         self.assertIn(".worktrees/", lines)
+        self.assertIn(".github/", lines)
+        self.assertIn(".playwright-mcp/", lines)
+        self.assertIn("desktop/", lines)
+        self.assertIn("docs/", lines)
+        self.assertIn("plans/", lines)
+        self.assertIn("tests/", lines)
         self.assertIn("workspace/", lines)
         self.assertIn("*.log", lines)
+        self.assertIn("nohup.out", lines)
+        self.assertIn("*.pid", lines)
         self.assertIn("user_datas.pkl", lines)
+        self.assertIn("AGENTS.md", lines)
+        self.assertIn("CHANGES.md", lines)
+        self.assertIn("SERVER_ACCESS.md", lines)
 
 
 if __name__ == "__main__":

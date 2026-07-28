@@ -74,8 +74,6 @@ RUN printf '%s\n' 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries \
     && useradd -r -g agent -s /bin/bash -d /home/agent agent \
     && chown -R agent:agent /home/agent ${BUILD_PREFIX} /usr/local/lib
 
-COPY --chown=agent:agent . ${BUILD_PREFIX}
-
 COPY --from=wechat-group-sidecar-build /usr/local/bin/node /usr/local/bin/node
 COPY --from=wechat-group-sidecar-build /usr/local/bin/npm /usr/local/bin/npm
 COPY --from=wechat-group-sidecar-build /usr/local/bin/npx /usr/local/bin/npx
@@ -84,11 +82,14 @@ COPY --from=wechat-group-sidecar-build --chown=agent:agent \
     /build/wechat-group-sidecar/node_modules \
     /app/channel/wechat_group/sidecar/node_modules
 
-RUN cd ${BUILD_PREFIX} \
-    && pip install --no-cache --no-deps -e . \
-    && cd /app/channel/wechat_group/sidecar \
+RUN cd /app/channel/wechat_group/sidecar \
     && node --version \
     && node -e "Promise.all([import('wechaty'), import('wechaty-puppet-wechat4u'), import('file-box')]).then(() => console.log('wechat-group-sidecar imports ok'))"
+
+COPY --chown=agent:agent . ${BUILD_PREFIX}
+
+RUN cd ${BUILD_PREFIX} \
+    && pip install --no-cache --no-deps -e .
 
 WORKDIR ${BUILD_PREFIX}
 

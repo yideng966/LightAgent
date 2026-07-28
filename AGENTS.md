@@ -251,6 +251,7 @@ docker push yideng966/lightagent:latest
 - 创建标签前必须先运行 `python scripts/validate_release_notes.py --tag <完整标签> docs/releases/<完整标签>.md`，并人工预览 Markdown；校验通过且说明文件已进入待打标签的提交后，才能推送标签。不得先打标签、后在默认分支补说明。
 - `deploy-image.yml` 只能由 `v*` 标签推送触发，不得开放 `workflow_dispatch` 或从仓库内旧版本文件推导正式镜像版本；`docker/metadata-action` 必须关闭隐式 `latest`，基础版与 `skills-full` 只能通过矩阵中显式的浮动标签发布，避免完整技能版覆盖基础版 `latest`；Docker 发布构建必须在安装 Python 后端前调用 `scripts/stamp_release_version.py`，使用当前发布标签同时更新 `cli/VERSION` 与 `pyproject.toml`，避免 CLI/Web 版本与 `pip show lightagent` 不一致。
 - Docker 多架构发布必须使用原生 AMD64 与 ARM64 GitHub Hosted Runner 分架构构建，按 canonical digest 汇集后分别为 Docker Hub 和 GHCR 创建 manifest，不得回退到在 AMD64 Runner 上通过 QEMU 执行 ARM64 重依赖安装；跨版本缓存必须使用按 `variant + arch` 隔离且可跨 `v*` 标签复用的 Registry Cache，不能依赖不同标签不可互访的 GitHub Actions Cache；`latest` 默认保留微信群图片报告所需的 Playwright Chromium。
+- Dockerfile 中系统、Python、Playwright Chromium、Node.js 与微信群 sidecar 依赖等稳定重层必须位于应用源码复制之前；普通源码或版本号变更不得使这些重层失去直接缓存命中，构建上下文不得包含测试、文档、计划、历史桌面端、运行日志或服务器访问信息。
 - 发布脚本的成功路径必须兼容非 UTF-8 标准输出编码，不得因中文状态文本导致构建失败；Docker 多架构构建中的 APT 获取必须配置有限重试，但不得用 `--fix-missing` 或无限重试掩盖真实依赖错误。
 - `release.yml` 只校验版本化发行说明并创建或更新同标签 GitHub Release，不得安装桌面依赖、编译 Electron、运行 PyInstaller 或上传桌面资产；Docker 镜像由独立的 `deploy-image.yml` 发布。
 - 工作流重跑必须更新原 Release，不得创建重复版本。

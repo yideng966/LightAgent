@@ -1,5 +1,7 @@
 .git
+.github/
 .worktrees/
+.playwright-mcp/
 .env
 docker/.env
 config.json
@@ -11,7 +13,10 @@ client_config.json
 **/node_modules/
 .venv/
 venv*/
-desktop/dist/
+desktop/
+docs/
+plans/
+tests/
 docker/config/
 docker/data/
 docker/lightagent/
@@ -21,5 +26,11 @@ workspace/
 local/
 images/
 *.log
+nohup.out
+*.pid
 QR.png
 user_datas.pkl
+AGENTS.md
+CHANGES.md
+CONTRIBUTING.md
+SERVER_ACCESS.md

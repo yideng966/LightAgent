@@ -2,6 +2,30 @@
 
 ## 2026-07-28
 
+### 缩小 Docker 后续增量拉取并保持构建缓存
+
+- 调整最终镜像层顺序，将 Node.js、npm 与微信群 sidecar 生产依赖放到应用源码之前；普通源码或版本号更新现在可直接复用系统、Python、Chromium 和 Node 重层，且不再重复执行 sidecar 运行时导入校验。
+- 收紧 Docker 构建上下文，排除测试、文档、计划、历史桌面端、开发工具状态、运行日志和服务器访问信息，减小每次必然变化的应用源码层，同时保留完整运行时能力。
+- 保持 AMD64、ARM64 原生 Runner 与按 `variant + arch` 隔离的跨标签 Registry Cache 不变，避免以减小用户增量下载量为代价增加 GitHub Actions 构建时间。
+
+关键文件：
+
+- `docker/Dockerfile.latest`
+- `.dockerignore`
+- `tests/test_docker_deployment.py`
+- `AGENTS.md`
+- `docs/releases/v2.1.14.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `plans/20260728_Docker增量拉取与构建缓存优化.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest discover -s tests`：1143 项通过，1 项按条件跳过。
+- Docker 发布、版本和 Skill Hub 定向回归 26 项通过；微信群 sidecar Node 单元测试 53 项通过。
+- `v2.1.14` 发行说明校验与 `git diff --check` 通过；Dockerfile 变更保持在现有 618 MiB 重依赖安装层之后，避免本次发布主动重建该层。
+- 本机 Docker Windows 服务可启动，但当前会话无法启动 Docker Desktop Linux Engine，因此未执行真实本地镜像构建；`v2.1.14` 标签推送后由原生双架构 GitHub Actions 完成构建。
+
 ### 优化 Docker 多架构镜像发布
 
 - Docker 发布改为 AMD64 与 ARM64 分别在原生 GitHub Hosted Runner 构建，移除 QEMU 模拟；每个平台先按 digest 推送，随后分别为 Docker Hub 与 GHCR 生成基础版和完整技能版多架构 manifest，降低 ARM64 构建耗时并避免 QEMU 段错误影响发布。
