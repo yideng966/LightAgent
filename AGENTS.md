@@ -49,7 +49,7 @@ LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目，包含�
 
 访问 GitHub 时如果直连请求超时或不稳定，可以使用本地代理 `http://192.168.3.5:1082` 重试；仅在网络访问场景使用该代理，不要把代理地址写入项目运行配置或代码默认值。
 
-整理或创建 GitHub issue 时，一律提交到 `yideng966/LightAgent` 项目；标题和正文描述应使用简体中文，避免默认写英文；提交时必须注明合适的 label，至少明确是 `bug`、功能需求、文档或其他类型；不要默认使用当前 remote、fork 或其他仓库。
+整理或创建 GitHub issue 时，一律提交到 `yideng966/LightAgent` 项目；标题和正文描述应使用简体中文，避免默认写英文；提交时必须注明合适的 label，至少明确是 `bug`、功能需求、文档或其他类型；不要默认使用当前 remote、fork 或其他仓库；docs\images目录不要提交开发过程截图。
 
 后端依赖：
 
