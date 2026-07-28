@@ -13,7 +13,7 @@ LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目，包含�
 - Agent 核心协议、工具、技能、记忆、知识库：`agent/`
 - 插件系统：`plugins/`
 - CLI：`cli/`
-- Electron + Vite + React 桌面端：`desktop/`
+- 历史桌面端归档：`desktop/`（停止维护，不参与构建发布）
 - 文档站内容：`docs/`
 - 回归测试：`tests/`
 
@@ -39,7 +39,7 @@ LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目，包含�
 - `models/`：不同 LLM Provider 的 Bot 与 Session。新增 Provider 要同步 `common/const.py`、`models/bot_factory.py` 和相关配置/文档。
 - `plugins/`：聊天命令插件与插件管理器。不要把 Agent 工具和插件混为一类。
 - `voice/`、`translate/`：ASR/TTS 与翻译 Provider。
-- `desktop/`：Electron 主进程、React 渲染端和桌面打包配置。桌面后端默认由 `desktop/src/main/python-manager.ts` 管理。
+- `desktop/`：已停止维护的 Electron 历史源码归档，不再开发、修复、构建或发布；Python 后端 `app.py` 不属于桌面端，继续作为项目主入口维护。
 - `docs/`：英文、中文。涉及用户可见能力变更时，优先补充对应文档。
 - `tests/`：`unittest` 风格回归测试，很多测试通过 stub/mocking 避免真实网络和外部服务。
 
@@ -92,21 +92,7 @@ python -m unittest discover -s tests
 python -m unittest tests.test_models_handler
 ```
 
-桌面端：
-
-```powershell
-Set-Location -LiteralPath .\desktop
-npm install
-npm run build
-npm run dev
-```
-
-桌面端热开发：
-
-```powershell
-Set-Location -LiteralPath .\desktop
-npm run dev:hot
-```
+`desktop/` 已停止维护并仅作历史归档，不再作为本地开发或验证目标。源码运行继续使用 `python app.py`，图形管理入口使用随 Python 后端启动的 Web 控制台。
 
 ## Docker 构建与部署
 
@@ -261,19 +247,19 @@ docker push yideng966/lightagent:latest
 - 变更正文按实际内容从“新增功能”“优化改进”“Bug 修复”“安全修复”“破坏性变更”中选用，至少保留一个分类；空分类必须删除。存在不兼容变化时必须单列“破坏性变更”，说明受影响用户、旧行为、新行为和迁移步骤，不能埋在优化或修复条目中。
 - 每个列表项只表达一项用户可感知的变化，优先写“解决什么问题、现在表现如何”；同一功能的代码、配置、测试和文档提交应合并为一个条目，不按文件或提交逐条展开。
 - 正文不得包含内部计划、测试通过数量、文件清单、提交哈希、实现过程、未确认路线图、密钥或部署标识；贡献者致谢、关联 PR/Issue 仅在真实且有用户价值时补充。
-- 末尾必须依次保留“安装”和“文档”章节。安装命令必须使用当前完整版本标签，至少给出 Docker Hub 与 GHCR 镜像；如发布 `skills-full` 或桌面安装包，应明确变体或 Assets 获取方式。文档链接必须指向 `yideng966/LightAgent` 的当前有效页面。
+- 末尾必须依次保留“安装”和“文档”章节。安装命令必须使用当前完整版本标签，至少给出 Docker Hub 与 GHCR 镜像；如发布 `skills-full`，应明确变体。文档链接必须指向 `yideng966/LightAgent` 的当前有效页面。
 - 创建标签前必须先运行 `python scripts/validate_release_notes.py --tag <完整标签> docs/releases/<完整标签>.md`，并人工预览 Markdown；校验通过且说明文件已进入待打标签的提交后，才能推送标签。不得先打标签、后在默认分支补说明。
-- 发布构建必须在安装或打包 Python 后端前调用 `scripts/stamp_release_version.py`，使用发布标签（手动构建使用明确输入或当前 `cli/VERSION`）同时更新 `cli/VERSION` 与 `pyproject.toml`；不得只更新其中一处，避免 CLI/Web 版本与 `pip show lightagent` 不一致。
-- 发布脚本的成功路径必须兼容 Windows Runner 的非 UTF-8 标准输出编码，不得因中文状态文本导致构建失败；Docker 多架构构建中的 APT 获取和桌面端 npm 依赖下载必须配置有限重试，但不得用 `--fix-missing` 或无限重试掩盖真实依赖错误。
-- 桌面端源码编译与 electron-builder 打包必须使用独立工作流步骤；每个平台上传安装包时必须使用 `if-no-files-found: error`，缺少 `.exe` 或 `.dmg` 不得被视为矩阵成功，也不得继续创建部分 GitHub Release。
-- 标签构建成功后，`release.yml` 会创建或更新同标签 GitHub Release，并上传实际生成的 `.dmg` / `.exe` 资产；工作流重跑必须更新原 Release，不得创建重复版本。补发历史 Release 时同样使用对应版本文件，并在发布后通过 GitHub API 或页面核对标题、标签、正文和预发布状态。
+- Docker 发布构建必须在安装 Python 后端前调用 `scripts/stamp_release_version.py`，使用发布标签（手动构建使用当前 `cli/VERSION`）同时更新 `cli/VERSION` 与 `pyproject.toml`；不得只更新其中一处，避免 CLI/Web 版本与 `pip show lightagent` 不一致。
+- 发布脚本的成功路径必须兼容非 UTF-8 标准输出编码，不得因中文状态文本导致构建失败；Docker 多架构构建中的 APT 获取必须配置有限重试，但不得用 `--fix-missing` 或无限重试掩盖真实依赖错误。
+- `release.yml` 只校验版本化发行说明并创建或更新同标签 GitHub Release，不得安装桌面依赖、编译 Electron、运行 PyInstaller 或上传桌面资产；Docker 镜像由独立的 `deploy-image.yml` 发布。
+- 工作流重跑必须更新原 Release，不得创建重复版本；发布后通过 GitHub API 或页面核对标题、标签、正文和预发布状态。
 
 ## 修改原则
 
 - 修改前先读当前文件，禁止凭记忆改代码。
 - 遵守最小修改原则：只改让当前需求成立的必要文件。
 - 不顺手重构无关代码；发现无关问题时在回复里单独说明。
-- 用户要求修改 UI、页面、布局、交互或样式但未明确指定端时，默认只修改 Web 控制台（`channel/web/chat.html`、`channel/web/static/js/console.js`、`channel/web/static/css/console.css` 等）；不要同时修改桌面端 `desktop/`。只有用户明确要求“桌面端”“Electron”“桌面应用”或指定 `desktop/` 文件时，才修改桌面端 UI。
+- 用户要求修改 UI、页面、布局、交互或样式时，默认且仅修改 Web 控制台（`channel/web/chat.html`、`channel/web/static/js/console.js`、`channel/web/static/css/console.css` 等）；`desktop/` 已停止维护，不再承接 UI 需求。
 - Web 控制台开关使用绝对定位伪元素绘制滑块时，定位上下文必须放在开关轨道本身；`chat.html` 中的 `console.js` / `console.css` 地址不得预置查询参数，缓存时间戳统一由 `ChatHandler` 注入，避免形成重复查询串并继续加载旧资源。
 - 仅在新增或修改代码并提交/交付代码变更时，才同步更新根目录 `CHANGES.md`，记录本次修改日期、任务背景、关键改动文件和验证结果；纯文档、计划、规则、配置说明等非代码变更不更新 `CHANGES.md`。
 - 提交 Git 代码变更时，必须将根目录 `AGENTS.md` 与 `CHANGES.md` 纳入同一次提交范围；提交前检查两者状态，确保规则说明与变更记录不会遗漏。
@@ -282,7 +268,7 @@ docker push yideng966/lightagent:latest
 - 跟进开发计划文档进行开发时，开发完成后必须回写对应开发计划文档，更新已完成进度、实际改动、验证结果与剩余事项，确保计划状态与代码交付一致。
 - 优先沿用现有工厂、单例、配置读取和日志模式。
 - 不要把真实密钥、token、cookie、部署 ID 写入仓库。
-- 修改跨渠道逻辑时，评估 Web、IM、CLI、桌面端是否都会受影响。
+- 修改跨渠道逻辑时，评估 Web、IM 和 CLI 是否都会受影响；归档的 `desktop/` 不再作为兼容目标。
 - 修改 `config.py` 默认配置时，同步检查 `config-template.json`、Web 设置页、文档和相关测试。
 - 修改模型路由时，同步检查 `Bridge`、`models/bot_factory.py`、`common/const.py`、Web 模型管理接口和测试。
 - 通用文本推理必须通过共享 `TextModelRouter` 使用同一主备顺序与熔断状态；视觉、生图、Embedding、ASR、TTS 保持独立路由，新增标题、总结、判断、画像等无状态文本任务时使用统一 `complete()` 入口。
@@ -300,7 +286,6 @@ docker push yideng966/lightagent:latest
 - 技能系统能力只能使用 `requirements.capabilities` 稳定名称声明，系统包只在 Docker 构建或管理员部署阶段准备；技能安装和运行时不得执行 `sudo`、`apt` 或 `brew`。
 - `.laskill-backup` 只允许包含单个技能的配置和用户数据；备份口令不得记录或持久化，恢复必须校验认证标签、技能名和解压路径。
 - Web 技能页不得直接展开完整在线技能目录；在线技能统一通过独立二级弹窗按搜索、分类和分页浏览，主页面只展示本地技能与内置工具，避免 Registry 增长后撑长页面。
-- 修改桌面后端启动逻辑时，特别注意端口、数据目录、打包后路径和 Windows 行为。
 
 ## 安全边界
 
@@ -317,7 +302,7 @@ docker push yideng966/lightagent:latest
 - Python 代码保持现有风格，优先小函数、明确异常处理和 `common.log.logger` 日志。
 - 仓库贡献规范要求 issue、PR 和代码注释尽量使用中文；新增代码注释也应优先中文。Git 提交说明（commit message）必须使用简体中文，清晰概括本次变更。
 - 用户对话可以使用中文，但写入项目代码和面向国际社区的文档时遵循仓库既有语言策略。
-- 避免引入新的全局依赖；确需新增依赖时，同步更新 `requirements.txt`、`requirements-optional.txt` 或 `desktop/package.json`，并说明原因。
+- 避免引入新的全局依赖；确需新增依赖时，同步更新 `requirements.txt` 或 `requirements-optional.txt`，并说明原因。
 - README 或文档中如出现编码异常，先确认文件实际编码，不要盲目整体重写。
 
 ## 常见开发路径
@@ -367,12 +352,12 @@ docker push yideng966/lightagent:latest
 
 1. 优先查看 `channel/wechat_group/wechat_group_channel.py`、`wechat_group_client.py`、`wechat_group_message.py`、`protocol.py` 和 `channel/wechat_group/sidecar/wechaty-sidecar.mjs`。
 2. 扫码入口必须在通道管理中完成：`通道管理 -> 接入通道 -> 个人微信群`，由界面展示二维码；不要把“看日志扫码”作为主要交互路径。
-3. Web 控制台入口涉及 `channel/web/web_channel.py` 与 `channel/web/static/js/console.js`；桌面端入口涉及 `desktop/src/renderer/src/pages/ChannelsPage.tsx`、`components/QrLoginModal.tsx`、`api/client.ts` 和 `i18n.ts`。
+3. Web 控制台入口涉及 `channel/web/web_channel.py` 与 `channel/web/static/js/console.js`；归档的桌面端不再同步接入能力。
 4. 微信群回复 @ 用户时，正文不要手工拼接普通文本 `@昵称` 或 `@@id`；应将发送者 ID 作为 `mention_ids` 传给 sidecar，并由 Wechaty `room.say(text, ...mentions)` 执行真实 mention。
 5. sidecar 与 Python 之间只通过 JSON Lines 协议通信。新增事件或命令时，先更新 `protocol.py`，再同步 Python client、channel 和 `wechaty-sidecar.mjs`，并补充对应测试。
 6. Wechaty 登录态、媒体目录等运行数据必须放在仓库外的数据目录，不能写入 Git 跟踪内容；新增 npm 依赖时同步检查 `channel/wechat_group/sidecar/package.json` 与 lock 文件。
 7. 涉及群选择时优先使用 `wechat_group_stable_room_ids` 做精确限制；`wechat_group_room_ids` 只保留为 runtime legacy 快照；`group_name_white_list: ["ALL_GROUP"]` 只适合开发测试，不应作为长期生产默认。
-8. 修改后至少运行 `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`。涉及桌面二维码、连接状态或通道页时，还要在 `desktop` 目录运行 `npm run build`。
+8. 修改后至少运行 `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`。涉及二维码、连接状态或通道页时，在 Web 控制台完成对应验证。
 9. 外部真实链路仍需手动验证：启动后打开通道管理，选择“个人微信群”，扫码登录，在目标群 @ 机器人确认能收到回复，并确认回复真实 @ 到发送者。
 
 ### 个人微信群 LLM 请求上下文链路
@@ -609,52 +594,15 @@ messages:
 3. 如果提供脚本，放在技能目录下的 `scripts/`。
 4. 可用 `skills/skill-creator/scripts/quick_validate.py` 做最小校验。
 
-修改桌面端：
+桌面端归档边界：
 
-1. 主进程在 `desktop/src/main/`，渲染端在 `desktop/src/renderer/src/`。
-2. 后端端口和启动流程集中在 `desktop/src/main/python-manager.ts`。
-3. UI 状态优先沿用现有 Zustand store 和组件风格。
-4. 修改后至少运行 `npm run build`。
+1. `desktop/` 只保留历史源码，不再新增功能、修复问题或同步后端能力。
+2. GitHub Actions、发布验证和用户安装说明不得重新引入桌面编译或安装包。
+3. `app.py` 是独立的 Python 后端主入口，继续正常开发、运行和发布。
 
 ## 前端 UI 开发规则
 
-默认界面修改目标是 Web 控制台。除非用户明确指定桌面端，所有 UI 需求优先落在 `channel/web/chat.html`、`channel/web/static/js/console.js` 与 `channel/web/static/css/console.css`；桌面端规则仅在任务明确涉及 Electron / `desktop/` 时适用。
-
-本项目桌面端当前技术栈是 Electron + Vite + React 18 + TypeScript + Tailwind CSS + Zustand + `lucide-react`。新增或修改 UI 时必须优先贴合现有实现，不要引入新的 UI 框架、组件库或设计系统，除非需求明确且已说明必要性。
-
-### 结构与复用
-
-- 渲染端代码位于 `desktop/src/renderer/src/`，按现有目录拆分：`pages/` 放页面、`components/` 放通用组件、`layout/` 放框架布局、`store/` 放 Zustand 状态、`api/` 放后端请求封装。
-- 设置页能力优先复用 `desktop/src/renderer/src/pages/settings/primitives.tsx` 中的 `Card`、`Field`、`Dropdown`、`Toggle`、`TextInput`、`SaveRow`、`Modal`、`Btn`，不要为同类表单控件重复造一套样式。
-- 渠道相关 UI 优先参考 `ChannelsPage.tsx` 的 `ChannelCard`、`ChannelDropdown`、`QrLoginModal` 交互模式；模型/配置类 UI 优先参考 `SettingsPage.tsx`、`BasicSettings.tsx`、`ModelsTab.tsx`。
-- 图标优先使用 `lucide-react`，只有项目已有自定义图标如 `components/icons.tsx` 不足时才新增；不要使用 emoji 作为结构性图标或按钮图标。
-- 文案必须走现有 `i18n.ts` 的 `t()` / `localizedLabel()` 体系；新增可见文案要同步补充中英文键值，避免硬编码在组件里。
-
-### 视觉与主题
-
-- 必须使用 `index.css` 中已有语义 token 和 Tailwind 语义类，例如 `bg-base`、`bg-surface`、`bg-surface-2`、`bg-elevated`、`bg-inset`、`text-content`、`text-content-secondary`、`text-content-tertiary`、`border-default`、`border-strong`、`bg-accent`、`text-accent`。
-- 不要在组件里随意新增硬编码颜色；确需新增颜色时，优先在 `index.css` 中定义语义变量，并同时考虑 `.dark` 主题。
-- 保持当前克制、工具型、信息密度适中的桌面应用风格。设置页和运维面板应使用清晰表单、状态徽标、列表/表格和少量卡片，不做营销式 hero、大面积插画、装饰性渐变或复杂动效。
-- 圆角、间距和层级沿用现有约定：`rounded-btn`、`rounded-card`、`border-default`、`shadow-lg`、`px-6`、`py-5`、`space-y-*` 等。不要在同一页面混用一套新的圆角/阴影体系。
-- 组件必须同时适配浅色和深色主题；不能只在当前主题下看起来正常。
-
-### 布局与交互
-
-- 桌面端页面优先采用现有框架：外层 `flex-1`、`min-h-0`、必要区域 `overflow-y-auto`，内容宽度通常控制在 `max-w-3xl` 或与相邻页面一致。
-- 表单字段必须有可见 label，不要只靠 placeholder 表达含义；复杂字段应提供短 hint。
-- 按钮、开关、下拉、图标按钮必须有明确 hover / disabled / loading 状态；异步操作期间按钮应禁用并显示 `Loader2` 或等价反馈。
-- 弹窗沿用现有 `Modal` 或 `QrLoginModal` 模式，必须有明确关闭路径；涉及破坏性操作时使用 danger 样式并二次确认。
-- 状态展示要可诊断：连接中、成功、失败、空状态、加载中都要有明确 UI，不允许静默失败或只写 `console.error`。
-- 长文本、路径、room ID、模型名等必须可换行或截断，使用 `min-w-0`、`truncate`、`break-words`、`font-mono` 等现有模式，避免撑破布局。
-- 动画只用于状态反馈或内容出现，沿用 `transition-colors`、`animate-spin`、`animate-reveal`、`skeleton` 等轻量模式，并尊重 `prefers-reduced-motion`。
-
-### 可访问性与质量
-
-- 交互控件必须使用语义元素：按钮用 `<button>`，输入用 `<input>` / `<textarea>`，开关保留 `role="switch"` 和 `aria-checked`。
-- 图标按钮需要 `title` 或 `aria-label`；图片需要有意义的 `alt`。
-- 颜色不能是唯一状态表达，重要状态需要结合文本或图标。
-- 正文和表单文字保持可读对比度，优先使用现有 `text-content*` token，不要使用低对比灰色。
-- 修改 UI 后至少运行 `Set-Location -LiteralPath .\desktop` 再运行 `npm run build`。涉及窗口布局、二维码、连接状态、设置页或渠道页时，还应启动 `npm run dev` 或 `npm run dev:hot` 做手动验证；如无法验证必须说明原因。
+所有 UI 需求落在 Web 控制台，主要文件是 `channel/web/chat.html`、`channel/web/static/js/console.js` 与 `channel/web/static/css/console.css`。优先沿用现有结构、组件、语义颜色、交互状态和响应式布局；修改后执行 JavaScript 语法检查，并按影响范围使用 `python app.py` 完成真实页面验证。
 
 ### 微信群机器人 UI 边界
 
@@ -669,9 +617,8 @@ messages:
 
 - 纯文档：检查文档是否能直接指导开发，无需运行测试。
 - 配置/路由：运行对应 `tests/test_*` 单测。
-- 微信群通道：运行 `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`；如改动桌面通道接入或二维码弹窗，再运行 `Set-Location -LiteralPath .\desktop` 后执行 `npm run build`。
+- 微信群通道：运行 `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`；涉及 Web 通道接入或二维码弹窗时，再启动 `python app.py` 完成页面验证。
 - 安全相关：运行相关安全回归测试，必要时新增测试。
-- 桌面端：运行 `npm run build`，涉及启动流程时再手动启动验证。
 - 跨模块核心逻辑：运行 `python -m unittest discover -s tests`。
 
 如果无法运行测试，必须在交付说明中写明原因和未验证风险。

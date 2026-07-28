@@ -2,6 +2,32 @@
 
 ## 2026-07-28
 
+### 停止维护桌面端并收敛 GitHub Release 流程
+
+- 将 `desktop/` 明确为停止维护的历史源码归档，不再开发、修复、编译或发布 Electron 桌面端；Python 后端 `app.py`、Web 控制台、CLI、消息渠道和 Docker 继续维护。
+- 将标签触发的 GitHub Release 工作流精简为发行说明校验与 Release 创建/更新，移除桌面矩阵、PyInstaller、npm、electron-builder、安装包 artifact 及桌面 R2/D1 发布步骤。
+- 保留独立的 Docker Hub 与 GHCR 标签发布工作流；取消仍在执行的 `v2.1.9` 桌面打包 Run，未取消其 Docker 构建。
+- 更新发行说明模板、项目 README、桌面归档说明和协作规则，删除继续维护或下载桌面安装包的当前态指引，并新增 `v2.1.10` 迁移说明。
+- 将发布合同测试改为强制断言 GitHub Release 工作流不含桌面构建和二进制资产上传，同时继续验证 Docker 构建前的版本同步顺序。
+
+关键文件：
+
+- `.github/workflows/release.yml`
+- `.github/RELEASE_NOTES_TEMPLATE.md`
+- `tests/test_release_version.py`
+- `tests/test_release_notes.py`
+- `README.md`
+- `desktop/README.md`
+- `docs/releases/v2.1.10.md`
+- `plans/20260728_停止桌面端维护.md`
+- `AGENTS.md`
+
+验证记录：
+
+- `python -m unittest tests.test_release_version tests.test_release_notes tests.test_docker_deployment`：17 项通过。
+- `python -X utf8 -m unittest discover -s tests`：1112 项通过，1 项按条件跳过。
+- `v2.1.10` 发行说明校验、GitHub Actions YAML 解析、全部工作流桌面构建关键词扫描和 `git diff --check` 通过。
+
 ### 发布打包失败与产物完整性修复
 
 - 修复 Windows GitHub Actions 在版本同步脚本成功写入文件后，因 `cp1252` 无法编码中文状态文本而退出的问题；脚本成功输出改为 ASCII，避免非 UTF-8 Runner 把已完成的版本写入误判为失败。

@@ -14,7 +14,7 @@
   </a>
 </p>
 
-LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目。它把 Web 控制台、即时通信平台、终端、桌面端、模型路由、工具调用、技能、长期记忆、知识库和个人微信群通道组合成一套可长期运行的 AI 助手框架。
+LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目。它把 Web 控制台、即时通信平台、终端、模型路由、工具调用、技能、长期记忆、知识库和个人微信群通道组合成一套可长期运行的 AI 助手框架。
 
 它不是单一聊天机器人，也不是只绑定某一个模型厂商的客户端。LightAgent 的核心目标是把“用户从任意渠道发来的消息”转成统一上下文，再通过普通聊天模型或 Agent 模式处理，最后把文本、图片、语音、文件或工具执行结果发回原渠道。
 
@@ -26,7 +26,7 @@ LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目。它把 
 - Agent 能力：多轮工具调用、流式事件、任务规划、上下文压缩、工具结果回填、取消执行、定时任务、自主进化。
 - 知识与记忆：会话持久化、长期记忆、每日记忆、知识库 Markdown 组织、关键词与向量检索、微信群专属群记忆与群友画像。
 - 扩展体系：内置工具、MCP 动态工具、插件命令、技能系统、Skill Hub / GitHub / 本地技能安装。
-- 运维界面：Web 控制台和 Electron 桌面端可管理模型、渠道、群聊、知识库、记忆、定时任务和技能。
+- 运维界面：Web 控制台可管理模型、渠道、群聊、知识库、记忆、定时任务和技能。
 
 ## 快速启动
 
@@ -107,21 +107,7 @@ lightagent skill install <name>
 lightagent install-browser
 ```
 
-桌面端：
-
-```powershell
-Set-Location -LiteralPath .\desktop
-npm install
-npm run build
-npm run dev
-```
-
-桌面端热开发：
-
-```powershell
-Set-Location -LiteralPath .\desktop
-npm run dev:hot
-```
+> `desktop/` 中的 Electron 客户端已停止维护并仅作历史归档。源码运行继续使用 `python app.py`，图形管理请使用 Web 控制台。
 
 ## 项目架构
 
@@ -168,7 +154,7 @@ LightAgent 的主链路由五层组成：
 | `plugins/` | 聊天命令插件，与 Agent 工具分离 |
 | `voice/` | ASR / TTS Provider |
 | `translate/` | 翻译 Provider |
-| `desktop/` | Electron + Vite + React 桌面端 |
+| `desktop/` | 已停止维护的 Electron 历史源码归档 |
 | `docs/` | 文档站内容 |
 | `skills/` | 项目内置技能，启动时同步到 workspace |
 | `tests/` | `unittest` 回归测试 |
@@ -283,24 +269,9 @@ Web 控制台是默认入口，启动后访问 `http://localhost:9899`。
 
 ## 桌面端
 
-桌面端位于 `desktop/`，技术栈是 Electron + Vite + React 18 + TypeScript + Tailwind CSS + Zustand + `lucide-react`。
+`desktop/` 中的 Electron 客户端已停止维护，不再开发新功能、修复问题、执行 CI 构建或发布 `.exe` / `.dmg` 安装包，目录仅用于保留历史源码。
 
-桌面端职责：
-
-- 管理内置 Python 后端进程。
-- 提供聊天、设置、渠道、群聊等图形界面。
-- 使用 `desktop/src/main/python-manager.ts` 管理后端启动、端口和数据目录。
-- 打包时将后端资源放入 Electron 应用资源目录。
-
-常用命令：
-
-```powershell
-Set-Location -LiteralPath .\desktop
-npm run build
-npm run dev
-npm run dev:hot
-npm run dist:win
-```
+这不影响 LightAgent 的 Python 后端。`app.py` 仍是项目主入口，可直接通过 `python app.py` 启动；Web 控制台、CLI、Docker 和各消息渠道继续维护。
 
 ## Agent 内部逻辑
 
@@ -657,13 +628,6 @@ python -m unittest tests.test_wechat_group_context tests.test_wechat_group_topic
 
 ```powershell
 node --check .\channel\web\static\js\console.js
-```
-
-桌面端构建：
-
-```powershell
-Set-Location -LiteralPath .\desktop
-npm run build
 ```
 
 ## 常见开发路径

@@ -94,41 +94,41 @@ version = "keep-me"
                 result.stdout.strip(),
             )
 
-    def test_release_workflows_stamp_before_packaging(self):
+    def test_docker_workflow_stamps_before_packaging(self):
         docker_workflow = (
             ROOT / ".github" / "workflows" / "deploy-image.yml"
-        ).read_text(encoding="utf-8")
-        desktop_workflow = (
-            ROOT / ".github" / "workflows" / "release.yml"
         ).read_text(encoding="utf-8")
 
         self.assertLess(
             docker_workflow.index("scripts/stamp_release_version.py"),
             docker_workflow.index("docker/build-push-action"),
         )
-        self.assertLess(
-            desktop_workflow.index("scripts/stamp_release_version.py"),
-            desktop_workflow.index("pyinstaller desktop/build/lightagent-backend.spec"),
-        )
-        self.assertIn("--fetch-retries=5", desktop_workflow)
-        self.assertIn("--fetch-retry-factor=2", desktop_workflow)
-        self.assertIn("--fetch-retry-mintimeout=10000", desktop_workflow)
-        self.assertIn("--fetch-retry-maxtimeout=60000", desktop_workflow)
 
-    def test_desktop_source_build_and_packaging_are_separate_strict_steps(self):
+    def test_github_release_workflow_has_no_desktop_packaging(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"
         )
-        source_step = workflow.index("- name: Build desktop sources")
-        package_step = workflow.index("- name: Package desktop installer")
-        upload_step = workflow.index("- name: Upload artifacts")
+        workflow_lower = workflow.lower()
 
-        self.assertLess(source_step, package_step)
-        self.assertLess(package_step, upload_step)
-        self.assertIn("npm run build", workflow[source_step:package_step])
-        self.assertNotIn("electron-builder", workflow[source_step:package_step])
-        self.assertIn("npx electron-builder", workflow[package_step:upload_step])
-        self.assertIn("if-no-files-found: error", workflow[upload_step:])
+        self.assertIn("publish-github-release:", workflow)
+        self.assertIn("scripts/validate_release_notes.py", workflow)
+        self.assertIn('gh release create "$TAG"', workflow)
+        self.assertNotIn("workflow_dispatch", workflow)
+        for forbidden in (
+            "desktop",
+            "pyinstaller",
+            "electron-builder",
+            "setup-node",
+            "npm ci",
+            "upload-artifact",
+            "download-artifact",
+            "gh release upload",
+            "publish-r2",
+            ".dmg",
+            ".exe",
+        ):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, workflow_lower)
 
 
 if __name__ == "__main__":

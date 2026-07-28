@@ -42,10 +42,6 @@ docker pull ghcr.io/yideng966/lightagent:vX.Y.Z
 docker pull yideng966/lightagent:vX.Y.Z-skills-full
 ```
 
-**桌面端：**
-
-从本页 Assets 下载适用于当前平台的安装包。
-
 ## 文档
 
 - [GitHub 仓库](https://github.com/yideng966/LightAgent)
