@@ -569,6 +569,90 @@ export async function buildRoomLeavePayload(options = {}) {
   })
 }
 
+function normalizeMembershipRuntimeIds(value) {
+  const result = []
+  const seen = new Set()
+  for (const rawId of Array.isArray(value) ? value : []) {
+    const runtimeId = String(rawId || '').trim()
+    if (!runtimeId || seen.has(runtimeId)) continue
+    seen.add(runtimeId)
+    result.push(runtimeId)
+  }
+  return result
+}
+
+async function resolvePuppetMembershipRoom(roomId, findRoom) {
+  if (!roomId) return { id: '' }
+  let room = null
+  try {
+    room = typeof findRoom === 'function' ? await findRoom(roomId) : null
+  } catch {}
+  if (!room) return { id: roomId }
+  try { await room.sync?.() } catch {}
+  return room
+}
+
+async function resolvePuppetMembershipContact(runtimeId, findContact) {
+  if (!runtimeId) return null
+  try {
+    const contact = typeof findContact === 'function' ? await findContact(runtimeId) : null
+    if (contact) return contact
+  } catch {}
+  return { id: runtimeId }
+}
+
+async function buildRoomMembershipPayloadFromPuppetEvent(rawPayload = {}, {
+  self = null,
+  findRoom = null,
+  findContact = null,
+  now = Date.now,
+  memberIdField,
+  operatorIdField,
+  operatorField,
+} = {}) {
+  const roomId = String(rawPayload?.roomId || '').trim()
+  const rawMemberIds = rawPayload?.[memberIdField]
+  const memberIds = normalizeMembershipRuntimeIds(rawMemberIds)
+  const operatorId = String(rawPayload?.[operatorIdField] || '').trim()
+  const room = await resolvePuppetMembershipRoom(roomId, findRoom)
+  const members = []
+  for (const runtimeId of memberIds) {
+    members.push(await resolvePuppetMembershipContact(runtimeId, findContact))
+  }
+  const operator = await resolvePuppetMembershipContact(operatorId, findContact)
+  const payload = await buildRoomMembershipPayload({
+    room,
+    members,
+    operator,
+    self,
+    date: rawPayload?.timestamp,
+    now,
+    operatorField,
+  })
+  return {
+    ...payload,
+    member_info_missing: memberIds.length === 0,
+  }
+}
+
+export async function buildRoomJoinPayloadFromPuppetEvent(rawPayload = {}, options = {}) {
+  return buildRoomMembershipPayloadFromPuppetEvent(rawPayload, {
+    ...options,
+    memberIdField: 'inviteeIdList',
+    operatorIdField: 'inviterId',
+    operatorField: 'inviter',
+  })
+}
+
+export async function buildRoomLeavePayloadFromPuppetEvent(rawPayload = {}, options = {}) {
+  return buildRoomMembershipPayloadFromPuppetEvent(rawPayload, {
+    ...options,
+    memberIdField: 'removeeIdList',
+    operatorIdField: 'removerId',
+    operatorField: 'remover',
+  })
+}
+
 export function buildMessageIdentityPayload({
   roomId = '',
   roomName = '',

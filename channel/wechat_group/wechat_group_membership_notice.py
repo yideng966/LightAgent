@@ -112,11 +112,14 @@ def build_membership_notice_template_values(
     operator_key = "inviter" if event == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN else "remover"
     operator_fallback = "群成员" if event == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN else "群管理员"
     operator = payload.get(operator_key) if isinstance(payload.get(operator_key), Mapping) else {}
+    member_count = len(members)
+    if event == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN:
+        member_count = max(1, member_count)
     values = {
         "room_name": _clean_visible_text(payload.get("room_name")) or "当前群",
         "member_name": names[0],
         "member_names": "、".join(names),
-        "member_count": str(len(members)),
+        "member_count": str(member_count),
         "event_time": _format_event_time(payload.get("timestamp"), now=now),
         "bot_name": _clean_visible_text(payload.get("self_name")) or "机器人",
     }

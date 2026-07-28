@@ -8,7 +8,9 @@ import {
   buildMediaFilePath,
   buildRoomMemberPayload,
   buildRoomJoinPayload,
+  buildRoomJoinPayloadFromPuppetEvent,
   buildRoomLeavePayload,
+  buildRoomLeavePayloadFromPuppetEvent,
   detectMessageMediaType,
   downloadStickerMediaWithFallback,
   extractQuotedMessageFromRawPayload,
@@ -34,6 +36,7 @@ const state = {
   bot: null,
   memory: null,
   self: null,
+  usesPuppetMembershipEvents: false,
 }
 
 function emit(type, payload = {}) {
@@ -122,6 +125,7 @@ async function refreshRoomsAfterSelfMembershipChange(payload) {
 }
 
 async function handleRoomJoin(room, inviteeList, inviter, date) {
+  if (state.usesPuppetMembershipEvents) return
   try {
     const payload = await buildRoomJoinPayload({
       room,
@@ -138,6 +142,7 @@ async function handleRoomJoin(room, inviteeList, inviter, date) {
 }
 
 async function handleRoomLeave(room, leaverList, remover, date) {
+  if (state.usesPuppetMembershipEvents) return
   try {
     const payload = await buildRoomLeavePayload({
       room,
@@ -151,6 +156,42 @@ async function handleRoomLeave(room, leaverList, remover, date) {
   } catch (error) {
     emit('error', { message: `failed to handle room-leave: ${error.message || String(error)}` })
   }
+}
+
+async function handlePuppetRoomJoin(rawPayload) {
+  try {
+    const payload = await buildRoomJoinPayloadFromPuppetEvent(rawPayload, {
+      self: state.self,
+      findRoom: roomId => findRoomById(state.bot, roomId),
+      findContact: contactId => findContactById(state.bot, contactId),
+    })
+    emit('room_join', payload)
+    await refreshRoomsAfterSelfMembershipChange(payload)
+  } catch (error) {
+    emit('error', { message: `failed to handle puppet room-join: ${error.message || String(error)}` })
+  }
+}
+
+async function handlePuppetRoomLeave(rawPayload) {
+  try {
+    const payload = await buildRoomLeavePayloadFromPuppetEvent(rawPayload, {
+      self: state.self,
+      findRoom: roomId => findRoomById(state.bot, roomId),
+      findContact: contactId => findContactById(state.bot, contactId),
+    })
+    emit('room_leave', payload)
+    await refreshRoomsAfterSelfMembershipChange(payload)
+  } catch (error) {
+    emit('error', { message: `failed to handle puppet room-leave: ${error.message || String(error)}` })
+  }
+}
+
+function registerPuppetMembershipHandlers(puppet) {
+  if (state.usesPuppetMembershipEvents || typeof puppet?.on !== 'function') return
+  // 联系人 ID 缺失时 Wechaty 不会触发高层回调，直接保留 puppet 结构化事件。
+  state.usesPuppetMembershipEvents = true
+  puppet.on('room-join', handlePuppetRoomJoin)
+  puppet.on('room-leave', handlePuppetRoomLeave)
 }
 
 async function downloadMessageMedia(message, roomId, mediaType, rawContent = '') {
@@ -270,6 +311,7 @@ async function start() {
   state.memory = memory
 
   state.bot
+    .on('puppet', registerPuppetMembershipHandlers)
     .on('scan', (qrcode, status) => {
       emit('qr', {
         status,
@@ -295,6 +337,9 @@ async function start() {
 
   emit('status', { status: 'starting' })
   await state.bot.start()
+  if (!state.usesPuppetMembershipEvents) {
+    try { registerPuppetMembershipHandlers(state.bot.puppet) } catch {}
+  }
 }
 
 async function findRoom(roomId) {
