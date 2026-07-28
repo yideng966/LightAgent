@@ -57,6 +57,9 @@ class GitHubCommitWebhookServiceTest(unittest.TestCase):
             "github_commit_notify_enabled": True,
             "github_commit_notify_repository": "owner/repository",
             "github_commit_notify_branches": ["main"],
+            "github_commit_notify_event_mode": "selected",
+            "github_commit_notify_events": ["push"],
+            "github_commit_notify_event_actions": {},
             "github_commit_notify_stable_room_id": "wgr_target",
             "github_commit_notify_max_commits": 8,
             "github_commit_notify_retry_hours": 72,
@@ -219,6 +222,149 @@ class GitHubCommitWebhookServiceTest(unittest.TestCase):
         self.assertIn("1234567 fix login with regression coverage", task["content"])
         self.assertEqual("queued", self.store.records["delivery-1"]["status"])
 
+    def test_selected_pull_request_action_is_safely_formatted_and_queued(self):
+        self.config["github_commit_notify_events"] = ["push", "pull_request"]
+        self.config["github_commit_notify_event_actions"] = {
+            "pull_request": ["opened"],
+        }
+        payload = {
+            "action": "opened",
+            "repository": {
+                "full_name": "owner/repository",
+                "html_url": "https://github.com/owner/repository",
+            },
+            "sender": {"login": "alice"},
+            "pull_request": {
+                "number": 42,
+                "title": "Add webhook event filtering",
+                "body": "pull-request-body-secret-canary",
+                "html_url": "https://github.com/owner/repository/pull/42",
+                "base": {"ref": "main"},
+            },
+        }
+
+        result = self._request(
+            self._service(),
+            payload=payload,
+            event="pull_request",
+            delivery_id="delivery-pr",
+        )
+
+        self.assertEqual("accepted", result["status"])
+        self.assertEqual("opened", result["action"])
+        task = self.enqueued[0]
+        self.assertIn("PR #42 Add webhook event filtering", task["content"])
+        self.assertNotIn("pull-request-body-secret-canary", task["content"])
+        self.assertEqual("pull_request", task["metadata"]["github_event"])
+        self.assertEqual("opened", task["metadata"]["github_action"])
+        self.assertEqual("main", task["metadata"]["ref"])
+
+    def test_action_filter_and_selected_event_are_ignored_without_queueing(self):
+        self.config["github_commit_notify_events"] = ["pull_request"]
+        self.config["github_commit_notify_event_actions"] = {
+            "pull_request": ["opened"],
+        }
+        payload = {
+            "action": "synchronize",
+            "repository": {"full_name": "owner/repository"},
+            "sender": {"login": "alice"},
+            "pull_request": {"number": 42, "title": "Update"},
+        }
+
+        result = self._request(
+            self._service(),
+            payload=payload,
+            event="pull_request",
+            delivery_id="delivery-pr-filtered",
+        )
+
+        self.assertEqual("ignored", result["status"])
+        self.assertEqual("action_not_selected", result["reason"])
+        self.assertEqual([], self.enqueued)
+
+    def test_all_mode_accepts_unknown_repository_event_with_minimal_summary(self):
+        self.config["github_commit_notify_event_mode"] = "all"
+        payload = {
+            "action": "created",
+            "repository": {
+                "full_name": "owner/repository",
+                "html_url": "https://github.com/owner/repository",
+            },
+            "sender": {"login": "alice"},
+            "unknown": {"secret": "unknown-event-secret-canary"},
+        }
+
+        result = self._request(
+            self._service(),
+            payload=payload,
+            event="future_event",
+            delivery_id="delivery-future",
+        )
+
+        self.assertEqual("accepted", result["status"])
+        task = self.enqueued[0]
+        self.assertIn("[GitHub future_event] owner/repository", task["content"])
+        self.assertNotIn("unknown-event-secret-canary", task["content"])
+        self.assertEqual("future_event", task["metadata"]["github_event"])
+
+    def test_malformed_nested_action_is_not_serialized_or_persisted(self):
+        self.config["github_commit_notify_event_mode"] = "all"
+        payload = {
+            "action": {"secret": "nested-action-secret-canary"},
+            "repository": {
+                "full_name": "owner/repository",
+                "html_url": "https://github.com/owner/repository",
+            },
+            "sender": {"login": {"secret": "nested-sender-secret-canary"}},
+        }
+
+        result = self._request(
+            self._service(),
+            payload=payload,
+            event="future_event",
+            delivery_id="delivery-nested-action",
+        )
+
+        self.assertEqual("accepted", result["status"])
+        self.assertEqual("", result["action"])
+        task = self.enqueued[0]
+        self.assertEqual("", task["metadata"]["github_action"])
+        self.assertNotIn("secret-canary", task["content"])
+
+    def test_missing_repository_is_ignored_before_target_group_validation(self):
+        self.config["github_commit_notify_event_mode"] = "all"
+        self.config["github_commit_notify_stable_room_id"] = ""
+
+        result = self._request(
+            self._service(),
+            payload={"action": "created", "sender": {"login": "alice"}},
+            event="organization",
+            delivery_id="delivery-org",
+        )
+
+        self.assertEqual("ignored", result["status"])
+        self.assertEqual("repository_missing", result["reason"])
+        self.assertEqual([], self.enqueued)
+
+        malformed = self._request(
+            self._service(),
+            payload={"repository": ["not", "an", "object"]},
+            event="issues",
+            delivery_id="delivery-malformed-repository",
+        )
+        self.assertEqual("repository_missing", malformed["reason"])
+
+    def test_invalid_event_header_is_rejected(self):
+        with self.assertRaises(GitHubWebhookRequestError) as raised:
+            self._request(
+                self._service(),
+                event="invalid event",
+                delivery_id="delivery-invalid-event",
+            )
+
+        self.assertEqual(400, raised.exception.status_code)
+        self.assertEqual("invalid_event", raised.exception.code)
+
     def test_delivered_delivery_is_idempotent(self):
         self.store.record_queued(
             "delivery-1",
@@ -253,12 +399,20 @@ class GitHubCommitWebhookServiceTest(unittest.TestCase):
 
     def test_non_target_events_and_pushes_are_ignored(self):
         cases = [
-            ("issues", self._payload(), "unsupported_event"),
+            ("issues", self._payload(), "event_not_selected"),
             ("push", self._payload(repository={"full_name": "other/repository"}), "repository_not_allowed"),
             ("push", self._payload(ref="refs/tags/v1.0.0"), "non_branch_push"),
             ("push", self._payload(deleted=True), "branch_deleted"),
             ("push", self._payload(ref="refs/heads/dev"), "branch_not_allowed"),
             ("push", self._payload(commits=[], head_commit=None), "no_commits"),
+            (
+                "push",
+                self._payload(
+                    commits={"message": "malformed-commits-secret-canary"},
+                    head_commit=None,
+                ),
+                "no_commits",
+            ),
         ]
         for index, (event, payload, reason) in enumerate(cases):
             with self.subTest(reason=reason):
@@ -288,6 +442,27 @@ class GitHubCommitWebhookServiceTest(unittest.TestCase):
         self.assertLessEqual(len(message), 240)
         self.assertIn("另有", message)
         self.assertNotIn("message-2", message)
+
+    def test_push_formatter_does_not_serialize_nested_scalar_fields(self):
+        message = format_github_push_message(
+            self._payload(
+                pusher={"name": {"secret": "nested-pusher-secret-canary"}},
+                sender={"login": {"secret": "nested-sender-secret-canary"}},
+                compare={"secret": "nested-url-secret-canary"},
+                commits=[{
+                    "id": {"secret": "nested-id-secret-canary"},
+                    "message": {"secret": "nested-message-secret-canary"},
+                    "url": {"secret": "nested-commit-url-secret-canary"},
+                }],
+                size=1,
+            ),
+            repository="owner/repository",
+            branch="main",
+        )
+
+        self.assertIn("推送者：unknown", message)
+        self.assertIn("unknown (无提交说明)", message)
+        self.assertNotIn("secret-canary", message)
 
     def test_target_room_must_be_selected_in_wechat_group_config(self):
         self.config["wechat_group_stable_room_ids"] = ["wgr_other"]

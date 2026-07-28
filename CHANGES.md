@@ -2,6 +2,41 @@
 
 ## 2026-07-28
 
+### GitHub Webhook 全事件通知配置
+
+- 将原有单一 `push` 提交通知扩展为 GitHub 仓库事件通知，内置当前 53 个仓库级事件目录，支持“选定事件 / 全部事件”模式和按事件筛选 `action`；默认仍为 `push + main`，升级不会扩大通知范围。
+- 所有允许事件继续复用 HMAC-SHA256 验签、delivery 去重、稳定群、scheduler 重试与投递标记链路；`ping` 只做健康检查，未来未知事件在全部模式下使用最小安全摘要。
+- 增加事件安全格式器，只读取白名单标量字段并限制长度与 GitHub 链接，不保存或转发原始 payload、评论正文、嵌套对象、Secret scanning 内容和私有安全公告摘要。
+- Web“群聊 -> 基础设置”新增事件模式、选择摘要和二级配置弹窗，支持搜索、分类、常用/全选/清空、action 过滤、草稿取消、错误聚焦、键盘焦点恢复及移动端单列布局；高级参数继续渐进披露，Secret 掩码和环境变量优先级不变。
+
+关键文件：
+
+- `channel/web/github_webhook_events.py`
+- `channel/web/github_commit_webhook.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `agent/tools/scheduler/integration.py`
+- `config.py`
+- `config-template.json`
+- `tests/test_github_webhook_events.py`
+- `tests/test_github_commit_webhook.py`
+- `tests/test_wechat_group_web.py`
+- `tests/test_scheduler_wechat_group_delivery.py`
+- `docs/zh/guide/github-commit-wechat.mdx`
+- `docs/releases/v2.1.15.md`
+- `plans/20260728_GitHub全事件通知配置开发计划.md`
+- `AGENTS.md`
+- `cli/VERSION`
+- `pyproject.toml`
+
+验证记录：
+
+- GitHub Webhook 事件与接收服务专项 32 项、Web 配置与 scheduler 组合 120 项、微信群通道与消息回归 148 项均通过。
+- `python -X utf8 -m unittest discover -s tests`：共运行 1160 项，结果 OK，1 项按条件跳过；微信群 sidecar Node 单元测试 53 项通过。
+- Python 编译、JavaScript 语法、JSON 配置解析、发行说明校验与 `git diff --check` 通过。
+- 本地 `python app.py` 隔离为 Web 通道后，在 1440x900 暗色与 375x812 亮色视口完成 Playwright 验收；事件搜索/分类、action 过滤、selected/all 切换、Escape、焦点恢复、保存回读和 44px 触控区均正常，页面与弹窗无横向溢出，浏览器无脚本错误。
+- 真实 GitHub 测试仓库与真实微信群的 `ping`、push、PR、Issue、workflow、release 和 redelivery 矩阵仍需在具备测试凭据及在线群后人工验收。
+
 ### 缩小 Docker 后续增量拉取并保持构建缓存
 
 - 调整最终镜像层顺序，将 Node.js、npm 与微信群 sidecar 生产依赖放到应用源码之前；普通源码或版本号更新现在可直接复用系统、Python、Chromium 和 Node 重层，且不再重复执行 sidecar 运行时导入校验。

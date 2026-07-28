@@ -52,6 +52,9 @@ class WechatGroupWebTest(unittest.TestCase):
             "github_commit_notify_enabled": conf().get("github_commit_notify_enabled"),
             "github_commit_notify_repository": conf().get("github_commit_notify_repository"),
             "github_commit_notify_branches": conf().get("github_commit_notify_branches"),
+            "github_commit_notify_event_mode": conf().get("github_commit_notify_event_mode"),
+            "github_commit_notify_events": conf().get("github_commit_notify_events"),
+            "github_commit_notify_event_actions": conf().get("github_commit_notify_event_actions"),
             "github_commit_notify_stable_room_id": conf().get("github_commit_notify_stable_room_id"),
             "github_commit_notify_max_commits": conf().get("github_commit_notify_max_commits"),
             "github_commit_notify_retry_hours": conf().get("github_commit_notify_retry_hours"),
@@ -1247,6 +1250,9 @@ class WechatGroupWebTest(unittest.TestCase):
         conf()["github_commit_notify_enabled"] = True
         conf()["github_commit_notify_repository"] = "owner/repository"
         conf()["github_commit_notify_branches"] = ["main", "develop"]
+        conf()["github_commit_notify_event_mode"] = "selected"
+        conf()["github_commit_notify_events"] = ["push", "pull_request"]
+        conf()["github_commit_notify_event_actions"] = {"pull_request": ["opened"]}
         conf()["github_commit_notify_stable_room_id"] = "wgr_room"
         conf()["github_commit_notify_webhook_secret"] = "local-secret-value"
         with patch.dict(os.environ, {GITHUB_WEBHOOK_SECRET_ENV: ""}):
@@ -1256,6 +1262,12 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertTrue(github["enabled"])
         self.assertEqual("owner/repository", github["repository"])
         self.assertEqual(["main", "develop"], github["branches"])
+        self.assertEqual("selected", github["event_mode"])
+        self.assertEqual(["push", "pull_request"], github["events"])
+        self.assertEqual({"pull_request": ["opened"]}, github["event_actions"])
+        self.assertEqual(53, len(github["event_catalog"]))
+        self.assertEqual(7, len(github["event_categories"]))
+        self.assertNotIn("ping", {item["name"] for item in github["event_catalog"]})
         self.assertEqual("wgr_room", github["stable_room_id"])
         self.assertTrue(github["secret_configured"])
         self.assertEqual("config", github["secret_source"])
@@ -1287,6 +1299,11 @@ class WechatGroupWebTest(unittest.TestCase):
                 "github_commit_notify_enabled": True,
                 "github_commit_notify_repository": "  owner/repository  ",
                 "github_commit_notify_branches": ["main", "develop", "main"],
+                "github_commit_notify_event_mode": "selected",
+                "github_commit_notify_events": ["pull_request", "push", "pull_request"],
+                "github_commit_notify_event_actions": {
+                    "pull_request": ["opened", "closed", "opened"],
+                },
                 "github_commit_notify_stable_room_id": "wgr_room",
                 "github_commit_notify_max_commits": 99,
                 "github_commit_notify_retry_hours": 999,
@@ -1306,6 +1323,12 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertTrue(conf()["github_commit_notify_enabled"])
         self.assertEqual("owner/repository", conf()["github_commit_notify_repository"])
         self.assertEqual(["main", "develop"], conf()["github_commit_notify_branches"])
+        self.assertEqual("selected", conf()["github_commit_notify_event_mode"])
+        self.assertEqual(["pull_request", "push"], conf()["github_commit_notify_events"])
+        self.assertEqual(
+            {"pull_request": ["opened", "closed"]},
+            conf()["github_commit_notify_event_actions"],
+        )
         self.assertEqual("wgr_room", conf()["github_commit_notify_stable_room_id"])
         self.assertEqual(20, conf()["github_commit_notify_max_commits"])
         self.assertEqual(720, conf()["github_commit_notify_retry_hours"])
@@ -1325,8 +1348,39 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("extra.stable_selected_room_ids", basic_block)
         self.assertIn('type="password" value=""', basic_block)
         self.assertIn("saved.secret_source === 'environment'", basic_block)
+        self.assertIn('name="groups-github-event-mode"', basic_block)
+        self.assertIn('id="groups-github-events-configure"', basic_block)
+        self.assertIn("openGroupsGithubEventModal()", basic_block)
+        self.assertIn("groups-github-event-modal", basic_block)
+        self.assertIn('role="dialog" aria-modal="true"', basic_block)
+        self.assertIn("groupsGithubEventModalState", basic_block)
+        self.assertIn("data-github-action-event", basic_block)
+        self.assertIn("handleGroupsGithubEventModalKeydown", basic_block)
+        self.assertIn("if (!document.getElementById('groups-github-notify-enabled')) return true", basic_block)
+        self.assertIn("github_commit_notify_event_mode", console_js)
+        self.assertIn("github_commit_notify_events", console_js)
+        self.assertIn("github_commit_notify_event_actions", console_js)
         self.assertIn("github_commit_notify_webhook_secret", console_js)
         self.assertIn("...githubCommitNotifyConfig", console_js)
+
+    def test_channels_reject_invalid_github_event_configuration(self):
+        from channel.web.web_channel import ChannelsHandler
+
+        with self.assertRaisesRegex(ValueError, "Unsupported GitHub webhook events"):
+            ChannelsHandler._apply_wechat_group_config({
+                "github_commit_notify_event_mode": "selected",
+                "github_commit_notify_events": ["push", "not_a_github_event"],
+                "github_commit_notify_event_actions": {},
+            })
+
+        with self.assertRaisesRegex(ValueError, "Unsupported actions"):
+            ChannelsHandler._apply_wechat_group_config({
+                "github_commit_notify_event_mode": "selected",
+                "github_commit_notify_events": ["pull_request"],
+                "github_commit_notify_event_actions": {
+                    "pull_request": ["not_an_action"],
+                },
+            })
 
     def test_channels_save_invalid_voice_interaction_mode_falls_back_to_force_reply(self):
         from channel.web.web_channel import ChannelsHandler

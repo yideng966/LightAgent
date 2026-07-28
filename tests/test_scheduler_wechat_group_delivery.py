@@ -238,6 +238,8 @@ class SchedulerWechatGroupDeliveryTest(unittest.TestCase):
                     "external_delivery_id": "delivery-1",
                     "repository": "owner/repository",
                     "ref": "refs/heads/main",
+                    "github_event": "push",
+                    "github_action": "",
                 },
             )
             second = integration.enqueue_wechat_group_message(
@@ -259,6 +261,8 @@ class SchedulerWechatGroupDeliveryTest(unittest.TestCase):
         self.assertTrue(action["no_need_at"])
         self.assertEqual("github_webhook", action["source"])
         self.assertEqual("delivery-1", action["external_delivery_id"])
+        self.assertEqual("push", action["github_event"])
+        self.assertNotIn("github_action", action)
 
     def test_github_message_marks_delivery_and_suppresses_mention(self):
         store = FakeTaskStore()

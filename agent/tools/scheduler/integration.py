@@ -441,7 +441,14 @@ def enqueue_wechat_group_message(
         "suppress_mention": True,
         "no_need_at": True,
     }
-    for key in ("source", "external_delivery_id", "repository", "ref"):
+    for key in (
+        "source",
+        "external_delivery_id",
+        "repository",
+        "ref",
+        "github_event",
+        "github_action",
+    ):
         if metadata.get(key):
             action[key] = str(metadata[key])
 

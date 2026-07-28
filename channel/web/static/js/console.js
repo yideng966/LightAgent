@@ -426,10 +426,10 @@ const I18N = {
         groups_alias_sync_cooldown_minutes_hint: '群昵称缺失时，当前群最多多久补同步一次成员信息。',
         groups_basic_proxy: '代理地址',
         groups_basic_proxy_hint: '供需要代理的能力复用，例如 http://127.0.0.1:7890；留空则直连。',
-        groups_github_notify_title: 'GitHub 提交通知',
-        groups_github_notify_desc: '接收指定仓库的 push Webhook，并将 commit 聚合发送到一个已选择的微信群。',
-        groups_github_notify_enabled: '启用提交通知',
-        groups_github_notify_enabled_hint: '仅处理验签通过且命中仓库、分支和目标群的 push 事件。',
+        groups_github_notify_title: 'GitHub Webhook 通知',
+        groups_github_notify_desc: '接收指定仓库的 Webhook，并按事件规则发送到一个已选择的微信群。',
+        groups_github_notify_enabled: '启用 Webhook 通知',
+        groups_github_notify_enabled_hint: '仅处理验签通过且命中仓库、事件规则和目标群的消息。',
         groups_github_repository: '仓库全名',
         groups_github_repository_hint: '填写 owner/repository，例如 yideng966/LightAgent。',
         groups_github_branches: '通知分支',
@@ -455,6 +455,40 @@ const I18N = {
         groups_github_secret_not_configured: '尚未配置 Secret，启用前必须填写。',
         groups_github_secret_show: '显示 Secret',
         groups_github_secret_hide: '隐藏 Secret',
+        groups_github_event_mode: '群通知范围',
+        groups_github_event_mode_hint: 'GitHub 端可选择 Send me everything，群内范围由这里控制。',
+        groups_github_event_mode_selected: '选定事件',
+        groups_github_event_mode_selected_hint: '只发送已选择的事件和 action。',
+        groups_github_event_mode_all: '全部事件',
+        groups_github_event_mode_all_hint: '发送当前和未来新增的仓库级事件。',
+        groups_github_events: '事件规则',
+        groups_github_events_hint: '按类别选择事件，并可进一步限制 action。',
+        groups_github_events_configure: '配置事件',
+        groups_github_events_summary_selected: '已选择 {count} 个事件',
+        groups_github_events_summary_all: '全部仓库事件',
+        groups_github_events_action_filters: '{count} 个 action 过滤器',
+        groups_github_push_options: 'Push 选项',
+        groups_github_advanced: '高级设置',
+        groups_github_event_modal_title: '配置 GitHub 事件',
+        groups_github_event_modal_desc: '选择允许进入微信群的仓库事件和 action。',
+        groups_github_event_search: '搜索事件',
+        groups_github_event_search_placeholder: '搜索中文名、英文名或事件名',
+        groups_github_event_category_all: '全部类别',
+        groups_github_event_select_common: '选择常用事件',
+        groups_github_event_select_all: '全选',
+        groups_github_event_clear: '清空',
+        groups_github_event_actions: '动作过滤',
+        groups_github_event_actions_hint: '全部勾选表示接收所有当前及未来 action。',
+        groups_github_event_high_volume: '高频',
+        groups_github_event_legacy: '兼容事件',
+        groups_github_event_no_results: '没有匹配的事件，请调整搜索或类别。',
+        groups_github_event_selected_count: '已选择 {count} 个事件',
+        groups_github_event_apply: '应用',
+        groups_github_event_cancel: '取消',
+        groups_github_event_at_least_one_action: '每个已配置事件至少保留一个 action。',
+        groups_github_error_repository: '启用 GitHub 通知时，请填写合法的 owner/repository。',
+        groups_github_error_target_room: '启用 GitHub 通知时，请选择目标稳定群。',
+        groups_github_error_events: '选定事件模式至少需要一个事件。',
         groups_rooms_title: '群与管理员',
         groups_rooms_desc: '选择机器人允许响应的微信群，并为每个群配置可触发持久化/写入类能力的管理员。',
         groups_rooms_select_label: '目标群',
@@ -1414,10 +1448,10 @@ const I18N = {
         groups_alias_sync_cooldown_minutes_hint: 'When a room alias is missing, limit how often member info is resynced per group.',
         groups_basic_proxy: 'Proxy URL',
         groups_basic_proxy_hint: 'Shared by features that opt into proxying, e.g. http://127.0.0.1:7890. Leave empty for direct access.',
-        groups_github_notify_title: 'GitHub commit notifications',
-        groups_github_notify_desc: 'Receive push webhooks from one repository and send aggregated commits to a selected WeChat group.',
-        groups_github_notify_enabled: 'Enable commit notifications',
-        groups_github_notify_enabled_hint: 'Only signed push events matching the repository, branch, and target group are processed.',
+        groups_github_notify_title: 'GitHub webhook notifications',
+        groups_github_notify_desc: 'Receive repository webhooks and send matching events to a selected WeChat group.',
+        groups_github_notify_enabled: 'Enable webhook notifications',
+        groups_github_notify_enabled_hint: 'Only signed messages matching the repository, event rules, and target group are processed.',
         groups_github_repository: 'Repository full name',
         groups_github_repository_hint: 'Use owner/repository, for example yideng966/LightAgent.',
         groups_github_branches: 'Notification branches',
@@ -1443,6 +1477,40 @@ const I18N = {
         groups_github_secret_not_configured: 'No secret is configured. Enter one before enabling notifications.',
         groups_github_secret_show: 'Show secret',
         groups_github_secret_hide: 'Hide secret',
+        groups_github_event_mode: 'Group notification scope',
+        groups_github_event_mode_hint: 'GitHub may send everything; these rules control what reaches the group.',
+        groups_github_event_mode_selected: 'Selected events',
+        groups_github_event_mode_selected_hint: 'Only send selected events and actions.',
+        groups_github_event_mode_all: 'All events',
+        groups_github_event_mode_all_hint: 'Send current and future repository events.',
+        groups_github_events: 'Event rules',
+        groups_github_events_hint: 'Select events by category and optionally restrict actions.',
+        groups_github_events_configure: 'Configure events',
+        groups_github_events_summary_selected: '{count} event(s) selected',
+        groups_github_events_summary_all: 'All repository events',
+        groups_github_events_action_filters: '{count} action filter(s)',
+        groups_github_push_options: 'Push options',
+        groups_github_advanced: 'Advanced settings',
+        groups_github_event_modal_title: 'Configure GitHub events',
+        groups_github_event_modal_desc: 'Choose repository events and actions allowed into the WeChat group.',
+        groups_github_event_search: 'Search events',
+        groups_github_event_search_placeholder: 'Search labels or event names',
+        groups_github_event_category_all: 'All categories',
+        groups_github_event_select_common: 'Select common events',
+        groups_github_event_select_all: 'Select all',
+        groups_github_event_clear: 'Clear',
+        groups_github_event_actions: 'Action filter',
+        groups_github_event_actions_hint: 'All checked means all current and future actions are accepted.',
+        groups_github_event_high_volume: 'High volume',
+        groups_github_event_legacy: 'Compatibility',
+        groups_github_event_no_results: 'No events match. Adjust the search or category.',
+        groups_github_event_selected_count: '{count} event(s) selected',
+        groups_github_event_apply: 'Apply',
+        groups_github_event_cancel: 'Cancel',
+        groups_github_event_at_least_one_action: 'Keep at least one action for each configured event.',
+        groups_github_error_repository: 'Enter a valid owner/repository before enabling GitHub notifications.',
+        groups_github_error_target_room: 'Select a stable target group before enabling GitHub notifications.',
+        groups_github_error_events: 'Selected-event mode requires at least one event.',
         groups_rooms_title: 'Groups & admins',
         groups_rooms_desc: 'Choose WeChat groups the bot may answer in and configure admins for persistent/write actions.',
         groups_rooms_select_label: 'Target groups',
@@ -9717,6 +9785,20 @@ let groupsBlacklistState = {
     loading: false,
     requestId: 0,
 };
+let groupsGithubEventState = {
+    events: [],
+    actions: {},
+    catalog: [],
+    categories: [],
+};
+let groupsGithubEventModalState = {
+    events: new Set(),
+    actions: {},
+    query: '',
+    category: '',
+    mode: 'selected',
+    returnFocus: null,
+};
 let wechatGroupRoomsAutoRefreshTriggered = false;
 
 function loadGroupsView() {
@@ -10566,11 +10648,27 @@ function readGroupsMembershipConfig(extra = {}, selectedRoomIds = []) {
     return result;
 }
 
+function resetGroupsGithubEventState(saved = {}) {
+    const catalogNames = new Set((saved.event_catalog || []).map(item => String(item.name || '')));
+    const events = Array.isArray(saved.events) ? saved.events.map(String).filter(name => catalogNames.has(name)) : ['push'];
+    groupsGithubEventState = {
+        events: [...new Set(events.length ? events : ['push'])],
+        actions: saved.event_actions && typeof saved.event_actions === 'object'
+            ? JSON.parse(JSON.stringify(saved.event_actions))
+            : {},
+        catalog: Array.isArray(saved.event_catalog) ? saved.event_catalog : [],
+        categories: Array.isArray(saved.event_categories) ? saved.event_categories : [],
+    };
+}
+
 function buildGroupsGithubCommitNotifyPanel(extra) {
     const saved = extra.github_commit_notify || {};
+    resetGroupsGithubEventState(saved);
     const branches = Array.isArray(saved.branches) ? saved.branches.join(', ') : '';
     const selectedTarget = String(saved.stable_room_id || '').trim();
     const targetRoomOptions = buildGroupsGithubTargetRoomOptions(extra, selectedTarget);
+    const eventMode = saved.event_mode === 'all' ? 'all' : 'selected';
+    const pushEnabled = eventMode === 'all' || groupsGithubEventState.events.includes('push');
     const environmentManaged = saved.secret_source === 'environment';
     const secretStatusKey = environmentManaged
         ? 'groups_github_secret_from_environment'
@@ -10585,6 +10683,7 @@ function buildGroupsGithubCommitNotifyPanel(extra) {
     } catch (_) {
         webhookUrl = webhookPath;
     }
+    const eventSummary = buildGroupsGithubEventSummary(eventMode);
     return `<section class="mt-8 pt-6 border-t border-slate-200 dark:border-white/10" aria-labelledby="groups-github-notify-title">
         <div class="flex items-start gap-3 mb-5">
             <span class="w-9 h-9 rounded-lg bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-200 flex items-center justify-center flex-shrink-0" aria-hidden="true">
@@ -10598,45 +10697,103 @@ function buildGroupsGithubCommitNotifyPanel(extra) {
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
             ${buildGroupsHumanizationToggle('groups-github-notify-enabled', 'groups_github_notify_enabled', 'groups_github_notify_enabled_hint', saved.enabled === true)}
             ${buildGroupsTextField('groups-github-repository', 'groups_github_repository', 'groups_github_repository_hint', saved.repository || '', 'owner/repository')}
-            ${buildGroupsTextField('groups-github-branches', 'groups_github_branches', 'groups_github_branches_hint', branches, 'main, develop')}
-            <label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
+            <label class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
                 <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_target_room')}</span>
                 <span id="groups-github-target-room-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_target_room_hint')}</span>
                 <select id="groups-github-target-room" aria-describedby="groups-github-target-room-hint" ${targetRoomOptions.disabled ? 'disabled' : ''}
-                    class="mt-3 w-full min-h-10 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                    class="mt-3 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                     ${targetRoomOptions.html}
                 </select>
             </label>
+            <fieldset class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+                <legend class="text-sm font-medium text-slate-800 dark:text-slate-100 px-1">${t('groups_github_event_mode')}</legend>
+                <p id="groups-github-event-mode-hint" class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_event_mode_hint')}</p>
+                <div class="grid grid-cols-2 gap-2 mt-3" aria-describedby="groups-github-event-mode-hint">
+                    ${buildGroupsGithubEventModeOption('selected', eventMode === 'selected')}
+                    ${buildGroupsGithubEventModeOption('all', eventMode === 'all')}
+                </div>
+            </fieldset>
+            <div class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 flex flex-col justify-between">
+                <div>
+                    <h5 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_events')}</h5>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_events_hint')}</p>
+                    <p id="groups-github-events-summary" class="text-xs font-medium text-primary-600 dark:text-primary-300 mt-2">${escapeHtml(eventSummary)}</p>
+                </div>
+                <button id="groups-github-events-configure" type="button" onclick="openGroupsGithubEventModal()"
+                    class="mt-3 min-h-11 inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 cursor-pointer transition-colors">
+                    <i class="fas fa-filter" aria-hidden="true"></i>${t('groups_github_events_configure')}
+                </button>
+            </div>
         </div>
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
-            ${buildGroupsNumberField('groups-github-max-commits', 'groups_github_max_commits', 'groups_github_max_commits_hint', saved.max_commits ?? 8, 1, 20)}
-            ${buildGroupsNumberField('groups-github-retry-hours', 'groups_github_retry_hours', 'groups_github_retry_hours_hint', saved.retry_hours ?? 72, 1, 720)}
-            ${buildGroupsNumberField('groups-github-retention-days', 'groups_github_retention_days', 'groups_github_retention_days_hint', saved.delivery_retention_days ?? 30, 1, 365)}
+        <div id="groups-github-push-options" class="mt-4 ${pushEnabled ? '' : 'hidden'}">
+            <h5 class="text-xs font-semibold uppercase text-slate-500 dark:text-slate-400 mb-2">${t('groups_github_push_options')}</h5>
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                ${buildGroupsTextField('groups-github-branches', 'groups_github_branches', 'groups_github_branches_hint', branches, 'main, develop')}
+                ${buildGroupsNumberField('groups-github-max-commits', 'groups_github_max_commits', 'groups_github_max_commits_hint', saved.max_commits ?? 8, 1, 20)}
+            </div>
         </div>
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
-            <label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
-                <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_webhook_url')}</span>
-                <span id="groups-github-webhook-url-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_webhook_url_hint')}</span>
-                <input id="groups-github-webhook-url" type="url" readonly aria-readonly="true" aria-describedby="groups-github-webhook-url-hint"
-                    value="${escapeHtml(webhookUrl)}" class="mt-3 w-full min-h-10 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-white/5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 break-all">
-            </label>
-            <label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
-                <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_secret')}</span>
-                <span id="groups-github-secret-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_secret_hint')}</span>
-                <span class="relative mt-3 block">
-                    <input id="groups-github-webhook-secret" type="password" value="" placeholder="${escapeHtml(secretPlaceholder)}"
-                        autocomplete="new-password" spellcheck="false" aria-describedby="groups-github-secret-hint groups-github-secret-status" ${environmentManaged ? 'disabled' : ''}
-                        class="w-full min-h-10 pl-3 pr-12 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    <button id="groups-github-secret-toggle" type="button" onclick="toggleGroupsGithubSecretVisibility()" ${environmentManaged ? 'disabled' : ''}
-                        class="absolute inset-y-0 right-0 w-11 inline-flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 rounded-r-lg disabled:opacity-40 disabled:cursor-not-allowed"
-                        title="${escapeHtml(t('groups_github_secret_show'))}" aria-label="${escapeHtml(t('groups_github_secret_show'))}">
-                        <i class="fas fa-eye" aria-hidden="true"></i>
-                    </button>
-                </span>
-                <span id="groups-github-secret-status" class="block text-xs ${saved.secret_configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'} mt-2">${t(secretStatusKey)}</span>
-            </label>
-        </div>
+        <details class="mt-4 rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5">
+            <summary class="min-h-11 px-4 py-3 flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 rounded-lg">
+                <i class="fas fa-gear text-xs" aria-hidden="true"></i>${t('groups_github_advanced')}
+            </summary>
+            <div class="p-4 pt-1">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    ${buildGroupsNumberField('groups-github-retry-hours', 'groups_github_retry_hours', 'groups_github_retry_hours_hint', saved.retry_hours ?? 72, 1, 720)}
+                    ${buildGroupsNumberField('groups-github-retention-days', 'groups_github_retention_days', 'groups_github_retention_days_hint', saved.delivery_retention_days ?? 30, 1, 365)}
+                    <label class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] p-4 block">
+                        <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_webhook_url')}</span>
+                        <span id="groups-github-webhook-url-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_webhook_url_hint')}</span>
+                        <input id="groups-github-webhook-url" type="url" readonly aria-readonly="true" aria-describedby="groups-github-webhook-url-hint"
+                            value="${escapeHtml(webhookUrl)}" class="mt-3 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-white/5 text-sm font-mono text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary-500/20 break-all">
+                    </label>
+                    <label class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] p-4 block">
+                        <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_github_secret')}</span>
+                        <span id="groups-github-secret-hint" class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_secret_hint')}</span>
+                        <span class="relative mt-3 block">
+                            <input id="groups-github-webhook-secret" type="password" value="" placeholder="${escapeHtml(secretPlaceholder)}"
+                                autocomplete="new-password" spellcheck="false" aria-describedby="groups-github-secret-hint groups-github-secret-status" ${environmentManaged ? 'disabled' : ''}
+                                class="w-full min-h-11 pl-3 pr-12 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <button id="groups-github-secret-toggle" type="button" onclick="toggleGroupsGithubSecretVisibility()" ${environmentManaged ? 'disabled' : ''}
+                                class="absolute inset-y-0 right-0 w-11 inline-flex items-center justify-center text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 rounded-r-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                                title="${escapeHtml(t('groups_github_secret_show'))}" aria-label="${escapeHtml(t('groups_github_secret_show'))}">
+                                <i class="fas fa-eye" aria-hidden="true"></i>
+                            </button>
+                        </span>
+                        <span id="groups-github-secret-status" class="block text-xs ${saved.secret_configured ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'} mt-2">${t(secretStatusKey)}</span>
+                    </label>
+                </div>
+            </div>
+        </details>
     </section>`;
+}
+
+function buildGroupsGithubEventModeOption(mode, checked) {
+    const suffix = mode === 'all' ? 'all' : 'selected';
+    return `<label class="relative cursor-pointer">
+        <input type="radio" name="groups-github-event-mode" value="${mode}" class="sr-only peer" ${checked ? 'checked' : ''} onchange="syncGroupsGithubEventPanel()">
+        <span class="min-h-11 h-full flex flex-col justify-center rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 peer-checked:border-primary-500 peer-checked:ring-2 peer-checked:ring-primary-500/20">
+            <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(`groups_github_event_mode_${suffix}`)}</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">${t(`groups_github_event_mode_${suffix}_hint`)}</span>
+        </span>
+    </label>`;
+}
+
+function buildGroupsGithubEventSummary(mode) {
+    const actionFilterCount = Object.keys(groupsGithubEventState.actions || {}).length;
+    const base = mode === 'all'
+        ? t('groups_github_events_summary_all')
+        : t('groups_github_events_summary_selected').replace('{count}', String(groupsGithubEventState.events.length));
+    return actionFilterCount
+        ? `${base} · ${t('groups_github_events_action_filters').replace('{count}', String(actionFilterCount))}`
+        : base;
+}
+
+function syncGroupsGithubEventPanel() {
+    const mode = document.querySelector('input[name="groups-github-event-mode"]:checked')?.value === 'all' ? 'all' : 'selected';
+    const summary = document.getElementById('groups-github-events-summary');
+    if (summary) summary.textContent = buildGroupsGithubEventSummary(mode);
+    const pushOptions = document.getElementById('groups-github-push-options');
+    if (pushOptions) pushOptions.classList.toggle('hidden', mode !== 'all' && !groupsGithubEventState.events.includes('push'));
 }
 
 function buildGroupsGithubTargetRoomOptions(extra, selectedTarget) {
@@ -10677,6 +10834,271 @@ function buildGroupsGithubTargetRoomOptions(extra, selectedTarget) {
     return { disabled: false, html: placeholder + options };
 }
 
+function ensureGroupsGithubEventModal() {
+    let modal = document.getElementById('groups-github-event-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'groups-github-event-modal';
+        document.body.appendChild(modal);
+    }
+    const categoryOptions = groupsGithubEventState.categories.map(category => (
+        `<option value="${escapeHtml(String(category.id || ''))}">${escapeHtml(localizedLabel(category.label))}</option>`
+    )).join('');
+    modal.className = 'hidden fixed inset-0 z-[120] bg-slate-950/60 p-3 sm:p-6 flex items-center justify-center';
+    modal.onclick = handleGroupsGithubEventBackdrop;
+    modal.innerHTML = `<div role="dialog" aria-modal="true" aria-labelledby="groups-github-event-modal-title" aria-describedby="groups-github-event-modal-desc"
+            class="w-full max-w-5xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] bg-white dark:bg-[#1A1A1A] rounded-lg shadow-2xl border border-slate-200 dark:border-white/10 flex flex-col overflow-hidden">
+        <header class="flex items-start justify-between gap-4 px-4 sm:px-5 py-4 border-b border-slate-200 dark:border-white/10">
+            <div class="min-w-0">
+                <h3 id="groups-github-event-modal-title" class="text-base font-semibold text-slate-900 dark:text-slate-100">${t('groups_github_event_modal_title')}</h3>
+                <p id="groups-github-event-modal-desc" class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_github_event_modal_desc')}</p>
+            </div>
+            <button type="button" onclick="closeGroupsGithubEventModal(false)" class="w-11 h-11 -m-2 inline-flex items-center justify-center rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 cursor-pointer" aria-label="${escapeHtml(t('groups_github_event_cancel'))}">
+                <i class="fas fa-xmark" aria-hidden="true"></i>
+            </button>
+        </header>
+        <div class="px-4 sm:px-5 py-3 border-b border-slate-200 dark:border-white/10 space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_14rem] gap-3">
+                <label class="block">
+                    <span class="sr-only">${t('groups_github_event_search')}</span>
+                    <span class="relative block">
+                        <i class="fas fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs" aria-hidden="true"></i>
+                        <input id="groups-github-event-search" type="search" value="${escapeHtml(groupsGithubEventModalState.query)}" oninput="filterGroupsGithubEvents(this.value)" placeholder="${escapeHtml(t('groups_github_event_search_placeholder'))}"
+                            class="w-full min-h-11 pl-9 pr-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20">
+                    </span>
+                </label>
+                <select id="groups-github-event-category" onchange="filterGroupsGithubEventCategory(this.value)" aria-label="${escapeHtml(t('groups_github_event_category_all'))}"
+                    class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20">
+                    <option value="">${t('groups_github_event_category_all')}</option>${categoryOptions}
+                </select>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                ${buildGroupsGithubEventBulkButton('common', 'fa-star', 'groups_github_event_select_common')}
+                ${buildGroupsGithubEventBulkButton('all', 'fa-check-double', 'groups_github_event_select_all')}
+                ${buildGroupsGithubEventBulkButton('clear', 'fa-eraser', 'groups_github_event_clear')}
+            </div>
+        </div>
+        <div id="groups-github-event-list" tabindex="-1" class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-5 py-4 space-y-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500"></div>
+        <p id="groups-github-event-modal-error" role="alert" class="hidden px-4 sm:px-5 py-2 text-sm text-red-600 dark:text-red-400 border-t border-red-200 dark:border-red-900/50"></p>
+        <footer class="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 px-4 sm:px-5 py-3 border-t border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#151515]">
+            <span id="groups-github-event-modal-count" class="text-xs text-slate-500 dark:text-slate-400"></span>
+            <div class="grid grid-cols-2 sm:flex gap-2">
+                <button type="button" onclick="closeGroupsGithubEventModal(false)" class="min-h-11 px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 cursor-pointer">${t('groups_github_event_cancel')}</button>
+                <button type="button" onclick="applyGroupsGithubEventModal()" class="min-h-11 px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#151515] cursor-pointer">${t('groups_github_event_apply')}</button>
+            </div>
+        </footer>
+    </div>`;
+    const category = document.getElementById('groups-github-event-category');
+    if (category) category.value = groupsGithubEventModalState.category;
+    return modal;
+}
+
+function buildGroupsGithubEventBulkButton(action, icon, labelKey) {
+    const disabled = groupsGithubEventModalState.mode === 'all';
+    return `<button type="button" onclick="updateGroupsGithubEventSelection('${action}')" ${disabled ? 'disabled' : ''}
+        class="min-h-11 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 hover:border-primary-400 hover:text-primary-600 dark:hover:text-primary-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 cursor-pointer transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+        <i class="fas ${icon}" aria-hidden="true"></i>${t(labelKey)}
+    </button>`;
+}
+
+function openGroupsGithubEventModal() {
+    groupsGithubEventModalState = {
+        events: new Set(groupsGithubEventState.events),
+        actions: JSON.parse(JSON.stringify(groupsGithubEventState.actions || {})),
+        query: '',
+        category: '',
+        mode: document.querySelector('input[name="groups-github-event-mode"]:checked')?.value === 'all' ? 'all' : 'selected',
+        returnFocus: document.activeElement,
+    };
+    const modal = ensureGroupsGithubEventModal();
+    modal.classList.remove('hidden');
+    document.body.classList.add('overflow-hidden');
+    renderGroupsGithubEventList();
+    document.getElementById('groups-github-event-search')?.focus();
+}
+
+function closeGroupsGithubEventModal(applied) {
+    const modal = document.getElementById('groups-github-event-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    modal.classList.add('hidden');
+    document.body.classList.remove('overflow-hidden');
+    const returnFocus = groupsGithubEventModalState.returnFocus;
+    groupsGithubEventModalState.returnFocus = null;
+    if (returnFocus && returnFocus.isConnected) returnFocus.focus();
+    else if (!applied) document.getElementById('groups-github-events-configure')?.focus();
+}
+
+function handleGroupsGithubEventBackdrop(event) {
+    if (event.target?.id === 'groups-github-event-modal') closeGroupsGithubEventModal(false);
+}
+
+function filterGroupsGithubEvents(value) {
+    groupsGithubEventModalState.query = String(value || '');
+    renderGroupsGithubEventList();
+}
+
+function filterGroupsGithubEventCategory(value) {
+    groupsGithubEventModalState.category = String(value || '');
+    renderGroupsGithubEventList();
+}
+
+function renderGroupsGithubEventList() {
+    const list = document.getElementById('groups-github-event-list');
+    if (!list) return;
+    const query = groupsGithubEventModalState.query.trim().toLocaleLowerCase();
+    const category = groupsGithubEventModalState.category;
+    const items = groupsGithubEventState.catalog.filter(item => {
+        if (category && item.category !== category) return false;
+        if (!query) return true;
+        const haystack = `${localizedLabel(item.label)} ${item.label?.zh || ''} ${item.label?.en || ''} ${item.name || ''}`.toLocaleLowerCase();
+        return haystack.includes(query);
+    });
+    list.innerHTML = items.length
+        ? items.map(buildGroupsGithubEventCard).join('')
+        : `<div class="min-h-32 flex items-center justify-center text-sm text-slate-500 dark:text-slate-400 text-center px-4">${t('groups_github_event_no_results')}</div>`;
+    updateGroupsGithubEventModalCount();
+}
+
+function buildGroupsGithubEventCard(item) {
+    const name = String(item.name || '');
+    const selected = groupsGithubEventModalState.mode === 'all' || groupsGithubEventModalState.events.has(name);
+    const actions = Array.isArray(item.actions) ? item.actions : [];
+    const filteredActions = Array.isArray(groupsGithubEventModalState.actions[name])
+        ? groupsGithubEventModalState.actions[name]
+        : [];
+    const hasFilter = filteredActions.length > 0;
+    const actionHtml = selected && actions.length
+        ? `<details class="mt-3 border-t border-slate-200 dark:border-white/10 pt-3" ${hasFilter ? 'open' : ''}>
+            <summary class="min-h-11 flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-600 dark:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 rounded-lg px-2">
+                <i class="fas fa-code-branch" aria-hidden="true"></i>${t('groups_github_event_actions')}
+                <span class="font-normal text-slate-400 dark:text-slate-500">${t('groups_github_event_actions_hint')}</span>
+            </summary>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 pt-2">
+                ${actions.map(action => {
+                    const checked = !hasFilter || filteredActions.includes(action);
+                    return `<label class="min-h-11 flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#111111] px-3 py-2 cursor-pointer hover:border-primary-300 dark:hover:border-primary-600">
+                        <input type="checkbox" data-github-action-event="${escapeHtml(name)}" value="${escapeHtml(action)}" ${checked ? 'checked' : ''} onchange="toggleGroupsGithubEventAction('${escapeJs(name)}', this)" class="h-4 w-4 accent-primary-500 flex-shrink-0">
+                        <span class="font-mono text-xs text-slate-700 dark:text-slate-200 break-all">${escapeHtml(action)}</span>
+                    </label>`;
+                }).join('')}
+            </div>
+        </details>`
+        : '';
+    return `<article class="rounded-lg border ${selected ? 'border-primary-300 dark:border-primary-700' : 'border-slate-200 dark:border-white/10'} bg-slate-50 dark:bg-white/5 p-3 sm:p-4">
+        <div class="flex items-start gap-3">
+            <label class="min-w-0 flex-1 flex items-start gap-3 ${groupsGithubEventModalState.mode === 'all' ? 'cursor-default' : 'cursor-pointer'}">
+                <input type="checkbox" value="${escapeHtml(name)}" ${selected ? 'checked' : ''} ${groupsGithubEventModalState.mode === 'all' ? 'disabled' : ''} onchange="toggleGroupsGithubEvent('${escapeJs(name)}', this.checked)" class="mt-1 h-4 w-4 accent-primary-500 flex-shrink-0 disabled:opacity-60">
+                <span class="min-w-0">
+                    <span class="flex flex-wrap items-center gap-2">
+                        <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${escapeHtml(localizedLabel(item.label))}</span>
+                        ${item.high_volume ? `<span class="rounded-full bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">${t('groups_github_event_high_volume')}</span>` : ''}
+                        ${item.legacy ? `<span class="rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5 text-[11px] text-slate-600 dark:text-slate-300">${t('groups_github_event_legacy')}</span>` : ''}
+                    </span>
+                    <span class="block mt-1 font-mono text-xs text-slate-500 dark:text-slate-400 break-all">${escapeHtml(name)}</span>
+                </span>
+            </label>
+        </div>
+        ${actionHtml}
+    </article>`;
+}
+
+function toggleGroupsGithubEvent(name, checked) {
+    if (checked) groupsGithubEventModalState.events.add(name);
+    else {
+        groupsGithubEventModalState.events.delete(name);
+        delete groupsGithubEventModalState.actions[name];
+    }
+    renderGroupsGithubEventList();
+}
+
+function toggleGroupsGithubEventAction(eventName, input) {
+    const checkboxes = Array.from(document.querySelectorAll(`[data-github-action-event="${eventName}"]`));
+    let selected = checkboxes.filter(item => item.checked).map(item => item.value);
+    if (!selected.length) {
+        input.checked = true;
+        selected = checkboxes.filter(item => item.checked).map(item => item.value);
+        const error = document.getElementById('groups-github-event-modal-error');
+        if (error) {
+            error.textContent = t('groups_github_event_at_least_one_action');
+            error.classList.remove('hidden');
+        }
+    } else {
+        document.getElementById('groups-github-event-modal-error')?.classList.add('hidden');
+    }
+    if (selected.length === checkboxes.length) delete groupsGithubEventModalState.actions[eventName];
+    else groupsGithubEventModalState.actions[eventName] = selected;
+    updateGroupsGithubEventModalCount();
+}
+
+function updateGroupsGithubEventSelection(action) {
+    if (groupsGithubEventModalState.mode === 'all') return;
+    const allNames = groupsGithubEventState.catalog.map(item => String(item.name || '')).filter(Boolean);
+    if (action === 'all') groupsGithubEventModalState.events = new Set(allNames);
+    else if (action === 'clear') groupsGithubEventModalState.events = new Set();
+    else groupsGithubEventModalState.events = new Set(['push', 'pull_request', 'issues', 'issue_comment', 'workflow_run', 'release']);
+    Object.keys(groupsGithubEventModalState.actions).forEach(name => {
+        if (!groupsGithubEventModalState.events.has(name)) delete groupsGithubEventModalState.actions[name];
+    });
+    renderGroupsGithubEventList();
+}
+
+function updateGroupsGithubEventModalCount() {
+    const count = document.getElementById('groups-github-event-modal-count');
+    if (!count) return;
+    const selectedCount = groupsGithubEventModalState.mode === 'all'
+        ? groupsGithubEventState.catalog.length
+        : groupsGithubEventModalState.events.size;
+    count.textContent = t('groups_github_event_selected_count').replace('{count}', String(selectedCount));
+}
+
+function applyGroupsGithubEventModal() {
+    const error = document.getElementById('groups-github-event-modal-error');
+    if (groupsGithubEventModalState.mode === 'selected' && !groupsGithubEventModalState.events.size) {
+        if (error) {
+            error.textContent = t('groups_github_error_events');
+            error.classList.remove('hidden');
+        }
+        document.getElementById('groups-github-event-list')?.focus();
+        return;
+    }
+    const catalogOrder = new Map(groupsGithubEventState.catalog.map((item, index) => [item.name, index]));
+    groupsGithubEventState.events = Array.from(groupsGithubEventModalState.events)
+        .sort((left, right) => (catalogOrder.get(left) ?? 999) - (catalogOrder.get(right) ?? 999));
+    groupsGithubEventState.actions = {};
+    Object.entries(groupsGithubEventModalState.actions || {}).forEach(([name, actions]) => {
+        if (groupsGithubEventModalState.mode === 'all' || groupsGithubEventModalState.events.has(name)) {
+            groupsGithubEventState.actions[name] = Array.isArray(actions) ? [...actions] : [];
+        }
+    });
+    closeGroupsGithubEventModal(true);
+    syncGroupsGithubEventPanel();
+}
+
+function handleGroupsGithubEventModalKeydown(event) {
+    const modal = document.getElementById('groups-github-event-modal');
+    if (!modal || modal.classList.contains('hidden')) return;
+    if (event.key === 'Escape') {
+        event.preventDefault();
+        closeGroupsGithubEventModal(false);
+        return;
+    }
+    if (event.key !== 'Tab') return;
+    const focusable = Array.from(modal.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'))
+        .filter(item => item.offsetParent !== null);
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+    }
+}
+
+document.addEventListener('keydown', handleGroupsGithubEventModalKeydown);
+
 function toggleGroupsGithubSecretVisibility() {
     const input = document.getElementById('groups-github-webhook-secret');
     const button = document.getElementById('groups-github-secret-toggle');
@@ -10704,6 +11126,15 @@ function readGroupsGithubCommitNotifySettings(saved = {}) {
             ? String(document.getElementById('groups-github-repository').value || '').trim()
             : String(saved.repository || '').trim(),
         branches,
+        event_mode: document.querySelector('input[name="groups-github-event-mode"]:checked')?.value === 'all'
+            ? 'all'
+            : (document.querySelector('input[name="groups-github-event-mode"]:checked') ? 'selected' : (saved.event_mode === 'all' ? 'all' : 'selected')),
+        events: document.getElementById('groups-github-events-summary')
+            ? [...groupsGithubEventState.events]
+            : (Array.isArray(saved.events) ? saved.events : ['push']),
+        event_actions: document.getElementById('groups-github-events-summary')
+            ? JSON.parse(JSON.stringify(groupsGithubEventState.actions || {}))
+            : (saved.event_actions && typeof saved.event_actions === 'object' ? saved.event_actions : {}),
         stable_room_id: document.getElementById('groups-github-target-room')
             ? String(document.getElementById('groups-github-target-room').value || '').trim()
             : String(saved.stable_room_id || '').trim(),
@@ -10716,6 +11147,27 @@ function readGroupsGithubCommitNotifySettings(saved = {}) {
         settings.webhook_secret = secretInput.value;
     }
     return settings;
+}
+
+function validateGroupsGithubCommitNotifySettings(settings) {
+    if (!document.getElementById('groups-github-notify-enabled')) return true;
+    if (!settings.enabled) return true;
+    if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(settings.repository)) {
+        showGroupsStatus('groups_github_error_repository', true);
+        document.getElementById('groups-github-repository')?.focus();
+        return false;
+    }
+    if (!settings.stable_room_id) {
+        showGroupsStatus('groups_github_error_target_room', true);
+        document.getElementById('groups-github-target-room')?.focus();
+        return false;
+    }
+    if (settings.event_mode === 'selected' && !settings.events.length) {
+        showGroupsStatus('groups_github_error_events', true);
+        document.getElementById('groups-github-events-configure')?.focus();
+        return false;
+    }
+    return true;
 }
 
 function buildGroupsVoiceInteractionPanel(extra) {
@@ -10855,7 +11307,7 @@ function buildGroupsNumberField(id, labelKey, hintKey, value, min = 1, max = nul
         <span class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t(hintKey)}</span>
         <span class="mt-auto pt-3">
             <input id="${id}" type="number" min="${Number(min)}" ${maxAttribute} value="${Number(value ?? min)}"
-                class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors">
+                class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors">
         </span>
     </label>`;
 }
@@ -10865,7 +11317,7 @@ function buildGroupsTextField(id, labelKey, hintKey, value, placeholder) {
         <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(labelKey)}</span>
         <span class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t(hintKey)}</span>
         <input id="${id}" type="text" value="${escapeHtml(String(value || ''))}" placeholder="${escapeHtml(String(placeholder || ''))}"
-            class="mt-3 w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors">
+            class="mt-3 w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors">
     </label>`;
 }
 
@@ -15324,10 +15776,14 @@ function saveWechatGroupSettings() {
         ? String(document.getElementById('groups-basic-proxy').value || '').trim()
         : String(basic.proxy || '').trim();
     const githubCommitNotify = readGroupsGithubCommitNotifySettings(extra.github_commit_notify || {});
+    if (!validateGroupsGithubCommitNotifySettings(githubCommitNotify)) return;
     const githubCommitNotifyConfig = {
         github_commit_notify_enabled: githubCommitNotify.enabled,
         github_commit_notify_repository: githubCommitNotify.repository,
         github_commit_notify_branches: githubCommitNotify.branches,
+        github_commit_notify_event_mode: githubCommitNotify.event_mode,
+        github_commit_notify_events: githubCommitNotify.events,
+        github_commit_notify_event_actions: githubCommitNotify.event_actions,
         github_commit_notify_stable_room_id: githubCommitNotify.stable_room_id,
         github_commit_notify_max_commits: githubCommitNotify.max_commits,
         github_commit_notify_retry_hours: githubCommitNotify.retry_hours,

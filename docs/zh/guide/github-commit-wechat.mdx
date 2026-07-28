@@ -1,9 +1,9 @@
 ---
-title: GitHub 提交通知到微信群
-description: 通过 GitHub push Webhook 将 commit 聚合通知发送到指定个人微信群
+title: GitHub Webhook 通知到微信群
+description: 接收 GitHub 仓库事件，并按事件和 action 规则发送到指定个人微信群
 ---
 
-LightAgent 可以接收指定 GitHub 仓库的 `push` Webhook，并把一次 push 中的 commit 聚合为一条固定文本消息发送到指定个人微信群。通知链路不调用 LLM，也不会把 GitHub payload 写入 Agent 会话。
+LightAgent 可以接收指定 GitHub 仓库的 Webhook，在本地按事件和 `action` 筛选后，把安全、确定性的摘要发送到指定个人微信群。通知链路不调用 LLM，不进入 Agent，也不会保存或转发原始 payload。
 
 ## 前置条件
 
@@ -15,14 +15,20 @@ LightAgent 可以接收指定 GitHub 仓库的 `push` Webhook，并把一次 pus
 
 ## 在 Web 控制台配置
 
-打开「群聊 -> 基础设置」，在「GitHub 提交通知」区域完成配置：
+打开「群聊 -> 基础设置」，在「GitHub Webhook 通知」区域完成配置：
 
-1. 开启「启用提交通知」。
+1. 开启「启用 Webhook 通知」。
 2. 填写仓库全名，例如 `owner/repository`。
-3. 填写需要通知的分支，多个分支使用逗号或换行分隔；留空表示允许所有分支。
-4. 从「目标群」下拉框选择一个接收通知的群。下拉框只列出已在「群与管理员」中选择的稳定群。
-5. 按需调整单条最大 commit 数、最长重试时间和去重保留天数。
-6. 填写 Webhook Secret 并保存。页面不会回显真实 Secret，再次打开时留空保存不会覆盖原值。
+3. 从「目标群」选择一个已配置的稳定群。
+4. 选择群通知范围：
+   - 「选定事件」：只推送事件弹窗中勾选的事件。
+   - 「全部事件」：推送 GitHub 当前和未来新增的仓库级事件；未知事件只生成最小安全摘要。
+5. 点击「配置事件」，可按类别或搜索选择事件；有 `action` 的事件可以进一步限制动作。
+6. 如果允许 `push`，按需填写通知分支和单条最大 commit 数。
+7. 在「高级设置」中填写 Webhook Secret，并按需调整最长重试时间和去重保留天数。
+8. 保存群聊设置。
+
+默认配置仍是「选定事件 + `push` + `main`」，升级后不会自动扩大群通知范围。事件弹窗中的“常用事件”快捷项包括 `push`、`pull_request`、`issues`、`issue_comment`、`workflow_run` 和 `release`，但不会自动启用。
 
 页面会显示当前 Webhook 地址，通常为：
 
@@ -30,11 +36,25 @@ LightAgent 可以接收指定 GitHub 仓库的 `push` Webhook，并把一次 pus
 https://你的域名/api/github/webhook
 ```
 
-如果进程环境中设置了 `LIGHTAGENT_GITHUB_WEBHOOK_SECRET`，该环境变量优先于 Web 控制台保存的 Secret，页面输入框会被禁用并显示「由环境变量接管」。
+如果进程环境中设置了 `LIGHTAGENT_GITHUB_WEBHOOK_SECRET`，该环境变量优先于 Web 控制台保存的 Secret，页面输入框会被禁用并显示「由环境变量接管」。页面和配置 API 都不会回显真实 Secret。
+
+## 事件与 action 规则
+
+LightAgent 内置 GitHub 当前 53 个仓库级事件，分为代码与引用、协作与评审、CI/CD 与部署、发行与包、仓库治理、安全、项目与关注七类。`ping` 只用于连通性检查，不是可推送事件。
+
+action 过滤遵循以下规则：
+
+- 未给事件配置 action，表示接收该事件的全部当前及未来 action。
+- 取消部分 action 后，只发送仍勾选的 action。
+- 每个已配置事件至少保留一个 action；若不需要该事件，应取消事件本身。
+- 选定事件模式下，未勾选的事件返回 `202 ignored`，不会创建群消息。
+- 全部事件模式下，未来未知仓库事件使用只包含事件名、action、仓库、操作者和 GitHub 链接的安全摘要。
+
+`github_commit_notify_branches` 和 `github_commit_notify_max_commits` 只作用于 `push`。PR、Issue、workflow 等事件不会被 push 分支列表隐式过滤。
 
 ## 手动配置
 
-也可以直接在数据目录的 `config.json` 中加入以下配置。`github_commit_notify_stable_room_id` 必须同时存在于 `wechat_group_stable_room_ids` 中：
+也可以直接在数据目录的 `config.json` 中配置。`github_commit_notify_stable_room_id` 必须同时存在于 `wechat_group_stable_room_ids` 中：
 
 ```json
 {
@@ -42,6 +62,12 @@ https://你的域名/api/github/webhook
   "wechat_group_stable_room_ids": ["wgr_xxx"],
   "github_commit_notify_enabled": true,
   "github_commit_notify_repository": "owner/repository",
+  "github_commit_notify_event_mode": "selected",
+  "github_commit_notify_events": ["push", "pull_request", "workflow_run"],
+  "github_commit_notify_event_actions": {
+    "pull_request": ["opened", "closed", "reopened"],
+    "workflow_run": ["completed"]
+  },
   "github_commit_notify_branches": ["main"],
   "github_commit_notify_stable_room_id": "wgr_xxx",
   "github_commit_notify_max_commits": 8,
@@ -53,11 +79,14 @@ https://你的域名/api/github/webhook
 
 | 配置 | 说明 | 默认值 |
 | --- | --- | --- |
-| `github_commit_notify_enabled` | 是否启用 GitHub 提交通知 | `false` |
+| `github_commit_notify_enabled` | 是否启用 GitHub Webhook 通知 | `false` |
 | `github_commit_notify_repository` | 允许通知的仓库全名，格式为 `owner/repository` | `""` |
-| `github_commit_notify_branches` | 允许通知的分支；空数组表示允许所有分支 | `["main"]` |
+| `github_commit_notify_event_mode` | `selected` 仅允许所选事件；`all` 允许全部仓库事件 | `"selected"` |
+| `github_commit_notify_events` | selected 模式允许推送的事件 | `["push"]` |
+| `github_commit_notify_event_actions` | 按事件限制 action；缺少事件 key 表示全部 action | `{}` |
+| `github_commit_notify_branches` | 允许通知的 push 分支；空数组表示允许所有分支 | `["main"]` |
 | `github_commit_notify_stable_room_id` | 接收通知的稳定微信群 ID | `""` |
-| `github_commit_notify_max_commits` | 单条消息最多展开的 commit 数，范围 1-20 | `8` |
+| `github_commit_notify_max_commits` | 单条 push 消息最多展开的 commit 数，范围 1-20 | `8` |
 | `github_commit_notify_retry_hours` | 群未登录或身份未恢复时的最长重试时间，范围 1-720 小时 | `72` |
 | `github_commit_notify_delivery_retention_days` | GitHub delivery 去重记录保留天数，范围 1-365 天 | `30` |
 | `github_commit_notify_webhook_secret` | 本地 Webhook Secret；环境变量存在时不生效 | `""` |
@@ -98,38 +127,40 @@ location = /api/github/webhook {
 
 1. `Payload URL` 填写公网 Webhook 地址。
 2. `Content type` 选择 `application/json`。
-3. `Secret` 填写与 `LIGHTAGENT_GITHUB_WEBHOOK_SECRET` 相同的值。
-4. 事件选择 `Just the push event`。
+3. `Secret` 填写与 LightAgent 相同的值。
+4. 事件选择 `Send me everything`。
 5. 保持 `Active` 开启并保存。
 
-GitHub 的首次 `ping` 请求应得到 `202 Accepted`。后续目标分支 push 会创建持久化 scheduler 任务，并发送类似消息：
+GitHub 的首次 `ping` 请求应得到 `202 Accepted`，但不会产生群消息。随后由 LightAgent 的本地事件规则决定哪些 delivery 进入群。例如 PR 通知：
 
 ```text
-[GitHub 提交] owner/repository
-分支：main
-推送者：alice
-提交：2 个
-
-1234567 修复登录超时
-abcdef1 补充回归测试
-
-查看变更：https://github.com/owner/repository/compare/...
+[GitHub Pull Request] owner/repository
+动作：opened
+操作者：alice
+内容：PR #42 修复登录超时
+查看详情：https://github.com/owner/repository/pull/42
 ```
+
+已有 push 通知格式保持不变，仍聚合目标分支中的 commit。
 
 ## 安全与重试
 
 - 服务端使用原始请求体和 `X-Hub-Signature-256` 做 HMAC-SHA256 恒定时间比较。
 - `X-GitHub-Delivery` 用于持久化去重；在配置的去重保留期内，GitHub 手动重投递不会重复发群消息。
-- 只接受配置中的仓库、分支和已选择稳定群；标签 push、删除分支和其他事件会被忽略。
+- 只接受配置中的仓库和已选择稳定群；组织、企业和 GitHub App 专属事件不会进入群。
+- 通知只读取代码内白名单字段，不递归展开或保存原始 payload。
+- Issue、PR、讨论和评论正文不会进入通知；Secret scanning 的 secret、位置和匹配内容不会进入通知。
 - Webhook 验签和入队完成后立即返回 `202`，微信群发送由 scheduler 异步完成。
 - 群未登录、sidecar 未就绪或 stable/runtime 身份暂未恢复时，任务会在配置有效期内继续重试。
 
-GitHub 官方参考：[验证 Webhook 投递](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[Webhook 最佳实践](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)。
+GitHub 官方参考：[Webhook 事件和 payload](https://docs.github.com/en/webhooks/webhook-events-and-payloads)、[验证 Webhook 投递](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)、[Webhook 最佳实践](https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)。
 
 ## 排障
 
 - `404 webhook_disabled`：确认 `github_commit_notify_enabled` 已开启并重启进程。
+- `400 invalid_event`：确认请求包含合法的 `X-GitHub-Event`。
 - `403 invalid_signature`：确认 GitHub Webhook Secret 与 Web 控制台或进程环境变量完全一致；环境变量存在时以环境变量为准。
-- `503 notification_config_incomplete`：补齐仓库全名和目标稳定群 ID。
+- `503 notification_config_incomplete`：补齐仓库全名或目标稳定群 ID。
 - `503 target_room_not_selected`：将目标稳定群 ID 同时加入 `wechat_group_stable_room_ids`。
-- GitHub 显示 `202` 但群内暂未收到：检查个人微信群登录状态、scheduler 任务列表和 LightAgent 日志。
+- GitHub 显示 `202 ignored`：检查仓库、事件模式、事件选择和 action 过滤。
+- GitHub 显示 `202 accepted` 但群内暂未收到：检查个人微信群登录状态、scheduler 任务列表和 LightAgent 日志。

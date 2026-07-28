@@ -12,6 +12,13 @@ from typing import Callable, Dict, Optional
 from common.log import logger
 from common.utils import expand_path
 from config import conf
+from channel.web.github_webhook_events import (
+    GITHUB_EVENT_NAME_PATTERN,
+    extract_github_event_ref,
+    format_github_event_message,
+    github_event_display_name,
+    github_event_is_enabled,
+)
 
 
 MAX_GITHUB_WEBHOOK_PAYLOAD_BYTES = 25 * 1024 * 1024
@@ -221,22 +228,63 @@ class GitHubCommitWebhookService:
             raise GitHubWebhookRequestError(400, "invalid_payload", "Webhook payload must be an object")
 
         event = normalized_headers.get("x-github-event", "").strip().lower()
+        if not GITHUB_EVENT_NAME_PATTERN.fullmatch(event):
+            raise GitHubWebhookRequestError(
+                400,
+                "invalid_event",
+                "X-GitHub-Event is missing or invalid",
+            )
         if event == "ping":
             return {"status": "accepted", "event": "ping"}
-        if event != "push":
-            return {"status": "ignored", "reason": "unsupported_event", "event": event}
 
         delivery_id = normalized_headers.get("x-github-delivery", "").strip()
         if not _DELIVERY_ID_PATTERN.fullmatch(delivery_id):
             raise GitHubWebhookRequestError(400, "invalid_delivery_id", "X-GitHub-Delivery is missing or invalid")
 
-        expected_repository = str(config.get("github_commit_notify_repository") or "").strip()
-        stable_room_id = str(config.get("github_commit_notify_stable_room_id") or "").strip()
-        if not expected_repository or not stable_room_id:
+        expected_repository = _clean_text(
+            config.get("github_commit_notify_repository"),
+            255,
+        )
+        if not expected_repository:
             raise GitHubWebhookRequestError(
                 503,
                 "notification_config_incomplete",
-                "GitHub repository or target stable room is not configured",
+                "GitHub repository is not configured",
+            )
+
+        repository_payload = payload.get("repository")
+        if not isinstance(repository_payload, dict):
+            repository_payload = {}
+        repository = _clean_text(repository_payload.get("full_name"), 255)
+        if not repository:
+            return {
+                "status": "ignored",
+                "reason": "repository_missing",
+                "event": event,
+            }
+        if repository.lower() != expected_repository.lower():
+            return {
+                "status": "ignored",
+                "reason": "repository_not_allowed",
+                "event": event,
+            }
+
+        action = _clean_text(payload.get("action"), 80).lower()
+        event_enabled, ignored_reason = github_event_is_enabled(config, event, action)
+        if not event_enabled:
+            return {
+                "status": "ignored",
+                "reason": ignored_reason,
+                "event": event,
+                "action": action,
+            }
+
+        stable_room_id = str(config.get("github_commit_notify_stable_room_id") or "").strip()
+        if not stable_room_id:
+            raise GitHubWebhookRequestError(
+                503,
+                "notification_config_incomplete",
+                "GitHub notification target stable room is not configured",
             )
         selected_stable_rooms = _normalize_string_list(
             config.get("wechat_group_stable_room_ids", [])
@@ -248,45 +296,66 @@ class GitHubCommitWebhookService:
                 "GitHub notification target must be a selected stable WeChat group",
             )
 
-        repository = str((payload.get("repository") or {}).get("full_name") or "").strip()
-        if repository.lower() != expected_repository.lower():
-            return {"status": "ignored", "reason": "repository_not_allowed"}
-
-        ref = str(payload.get("ref") or "").strip()
-        if not ref.startswith("refs/heads/"):
-            return {"status": "ignored", "reason": "non_branch_push"}
-        if payload.get("deleted") is True:
-            return {"status": "ignored", "reason": "branch_deleted"}
-
-        branch = ref[len("refs/heads/"):]
-        allowed_branches = _normalize_string_list(
-            config.get("github_commit_notify_branches", ["main"])
-        )
-        if allowed_branches and branch not in allowed_branches:
-            return {"status": "ignored", "reason": "branch_not_allowed", "branch": branch}
-
-        commits = [item for item in (payload.get("commits") or []) if isinstance(item, dict)]
-        if not commits and isinstance(payload.get("head_commit"), dict):
-            commits = [payload["head_commit"]]
-            payload = dict(payload)
-            payload["commits"] = commits
-        if not commits:
-            return {"status": "ignored", "reason": "no_commits", "branch": branch}
-
-        max_commits = _bounded_int(config.get("github_commit_notify_max_commits", 8), 1, 20, 8)
         max_chars = _bounded_int(
             config.get("wechat_group_response_cleanup_max_chars", 800),
             200,
             4000,
             800,
         )
-        content = format_github_push_message(
-            payload,
-            repository=repository,
-            branch=branch,
-            max_commits=max_commits,
-            max_chars=max_chars,
-        )
+        event_ref = extract_github_event_ref(event, payload)
+        branch = ""
+        if event == "push":
+            ref = _clean_text(payload.get("ref"), 512)
+            if not ref.startswith("refs/heads/"):
+                return {"status": "ignored", "reason": "non_branch_push", "event": event}
+            if payload.get("deleted") is True:
+                return {"status": "ignored", "reason": "branch_deleted", "event": event}
+
+            branch = ref[len("refs/heads/"):]
+            allowed_branches = _normalize_string_list(
+                config.get("github_commit_notify_branches", ["main"])
+            )
+            if allowed_branches and branch not in allowed_branches:
+                return {
+                    "status": "ignored",
+                    "reason": "branch_not_allowed",
+                    "branch": branch,
+                    "event": event,
+                }
+
+            raw_commits = payload.get("commits")
+            commits = [
+                item for item in (raw_commits if isinstance(raw_commits, list) else [])
+                if isinstance(item, dict)
+            ]
+            if not commits and isinstance(payload.get("head_commit"), dict):
+                commits = [payload["head_commit"]]
+                payload = dict(payload)
+                payload["commits"] = commits
+            if not commits:
+                return {
+                    "status": "ignored",
+                    "reason": "no_commits",
+                    "branch": branch,
+                    "event": event,
+                }
+
+            max_commits = _bounded_int(config.get("github_commit_notify_max_commits", 8), 1, 20, 8)
+            content = format_github_push_message(
+                payload,
+                repository=repository,
+                branch=branch,
+                max_commits=max_commits,
+                max_chars=max_chars,
+            )
+            event_ref = ref
+        else:
+            content = format_github_event_message(
+                event,
+                payload,
+                repository=repository,
+                max_chars=max_chars,
+            )
         retry_hours = _bounded_int(
             config.get("github_commit_notify_retry_hours", 72),
             1,
@@ -314,7 +383,14 @@ class GitHubCommitWebhookService:
 
             enqueue_status = enqueue_func(
                 task_id=task_id,
-                name="GitHub {} {} 提交通知".format(repository, branch),
+                name=(
+                    "GitHub {} {} 提交通知".format(repository, branch)
+                    if event == "push"
+                    else "GitHub {} {} 通知".format(
+                        repository,
+                        github_event_display_name(event, "zh"),
+                    )
+                ),
                 content=content,
                 stable_receiver=stable_room_id,
                 max_lateness_seconds=retry_hours * 3600,
@@ -322,14 +398,16 @@ class GitHubCommitWebhookService:
                     "source": "github_webhook",
                     "external_delivery_id": delivery_id,
                     "repository": repository,
-                    "ref": ref,
+                    "ref": event_ref,
+                    "github_event": event,
+                    "github_action": action,
                 },
             )
             self.delivery_store.record_queued(
                 delivery_id,
                 task_id,
                 repository,
-                ref,
+                event_ref,
                 now=self._now_func(),
             )
             try:
@@ -340,14 +418,16 @@ class GitHubCommitWebhookService:
         if enqueue_status == "existing":
             return {"status": "duplicate", "delivery_id": delivery_id}
         logger.info(
-            "[GitHubWebhook] Queued delivery %s for %s %s",
+            "[GitHubWebhook] Queued delivery %s for %s event=%s action=%s",
             delivery_id,
             repository,
-            branch,
+            event,
+            action or "-",
         )
         return {
             "status": "accepted",
-            "event": "push",
+            "event": event,
+            "action": action,
             "delivery_id": delivery_id,
             "task_id": task_id,
         }
@@ -360,14 +440,23 @@ def format_github_push_message(
     max_commits: int = 8,
     max_chars: int = 800,
 ) -> str:
-    commits = [item for item in (payload.get("commits") or []) if isinstance(item, dict)]
+    raw_commits = payload.get("commits")
+    commits = [
+        item for item in (raw_commits if isinstance(raw_commits, list) else [])
+        if isinstance(item, dict)
+    ]
     total = _bounded_int(payload.get("size", len(commits)), 0, 1000000, len(commits))
     total = max(total, len(commits))
-    pusher = _clean_text(
-        (payload.get("pusher") or {}).get("name")
-        or (payload.get("sender") or {}).get("login")
-        or "unknown",
-        80,
+    pusher_payload = payload.get("pusher")
+    if not isinstance(pusher_payload, dict):
+        pusher_payload = {}
+    sender_payload = payload.get("sender")
+    if not isinstance(sender_payload, dict):
+        sender_payload = {}
+    pusher = (
+        _clean_text(pusher_payload.get("name"), 80)
+        or _clean_text(sender_payload.get("login"), 80)
+        or "unknown"
     )
     header_lines = [
         "[GitHub 提交] {}".format(_clean_text(repository, 200)),
@@ -380,7 +469,7 @@ def format_github_push_message(
     commit_lines = []
     for commit in commits[:max(int(max_commits), 1)]:
         commit_id = _clean_text(commit.get("id") or "", 40)[:7] or "unknown"
-        message = _clean_text(commit.get("message") or "(无提交说明)", 160)
+        message = _clean_text(commit.get("message"), 160) or "(无提交说明)"
         commit_lines.append("{} {}".format(commit_id, message))
 
     compare_url = _clean_url(payload.get("compare"))
@@ -444,6 +533,8 @@ def _bounded_int(value, minimum: int, maximum: int, default: int) -> int:
 
 
 def _clean_text(value, max_length: int) -> str:
+    if value is None or isinstance(value, (dict, list, tuple, set, bytes, bytearray)):
+        return ""
     text = str(value or "")
     text = re.sub(r"[\x00-\x1f\x7f]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()

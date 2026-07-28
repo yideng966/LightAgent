@@ -22,6 +22,14 @@ from bridge.context import *
 from bridge.reply import Reply, ReplyType
 from channel.chat_channel import ChatChannel, check_prefix
 from channel.chat_message import ChatMessage
+from channel.web.github_webhook_events import (
+    get_github_event_catalog,
+    get_github_event_categories,
+    normalize_github_event_actions,
+    normalize_github_event_mode,
+    normalize_github_events,
+    validate_github_event_config,
+)
 from channel.wechat_group.wechat_group_persona import (
     get_wechat_group_persona_config,
     normalize_wechat_group_persona_prompt,
@@ -4495,6 +4503,17 @@ class ChannelsHandler:
                 "enabled": conf().get("github_commit_notify_enabled", False),
                 "repository": conf().get("github_commit_notify_repository", "") or "",
                 "branches": conf().get("github_commit_notify_branches", ["main"]) or [],
+                "event_mode": normalize_github_event_mode(
+                    conf().get("github_commit_notify_event_mode", "selected")
+                ),
+                "events": normalize_github_events(
+                    conf().get("github_commit_notify_events", ["push"])
+                ),
+                "event_actions": normalize_github_event_actions(
+                    conf().get("github_commit_notify_event_actions", {})
+                ),
+                "event_categories": get_github_event_categories(),
+                "event_catalog": get_github_event_catalog(),
                 "stable_room_id": conf().get("github_commit_notify_stable_room_id", "") or "",
                 "max_commits": conf().get("github_commit_notify_max_commits", 8),
                 "retry_hours": conf().get("github_commit_notify_retry_hours", 72),
@@ -4844,6 +4863,9 @@ class ChannelsHandler:
             "github_commit_notify_enabled",
             "github_commit_notify_repository",
             "github_commit_notify_branches",
+            "github_commit_notify_event_mode",
+            "github_commit_notify_events",
+            "github_commit_notify_event_actions",
             "github_commit_notify_stable_room_id",
             "github_commit_notify_max_commits",
             "github_commit_notify_retry_hours",
@@ -4852,6 +4874,27 @@ class ChannelsHandler:
         }
         local_config = conf()
         applied = {}
+        github_event_keys = {
+            "github_commit_notify_event_mode",
+            "github_commit_notify_events",
+            "github_commit_notify_event_actions",
+        }
+        normalized_github_event_config = None
+        if github_event_keys.intersection(updates):
+            normalized_github_event_config = validate_github_event_config(
+                updates.get(
+                    "github_commit_notify_event_mode",
+                    local_config.get("github_commit_notify_event_mode", "selected"),
+                ),
+                updates.get(
+                    "github_commit_notify_events",
+                    local_config.get("github_commit_notify_events", ["push"]),
+                ),
+                updates.get(
+                    "github_commit_notify_event_actions",
+                    local_config.get("github_commit_notify_event_actions", {}),
+                ),
+            )
         normalize_membership = bool(membership_keys.intersection(updates)) or (
             "wechat_group_stable_room_ids" in updates
         )
@@ -4891,8 +4934,11 @@ class ChannelsHandler:
                 "wechat_group_free_reply_force_keywords",
                 "wechat_group_sticker_online_allowed_domains",
                 "github_commit_notify_branches",
+                "github_commit_notify_events",
             ):
-                if key in (
+                if key == "github_commit_notify_events":
+                    value = normalized_github_event_config[1]
+                elif key in (
                     "wechat_group_stable_room_ids",
                     "wechat_group_free_reply_stable_room_ids",
                 ):
@@ -4906,6 +4952,10 @@ class ChannelsHandler:
                 value = normalized_rooms[0] if normalized_rooms else ""
             elif key == "github_commit_notify_repository":
                 value = str(value or "").strip()[:255]
+            elif key == "github_commit_notify_event_mode":
+                value = normalized_github_event_config[0]
+            elif key == "github_commit_notify_event_actions":
+                value = normalized_github_event_config[2]
             elif key == "github_commit_notify_webhook_secret":
                 value = str(value or "")
             elif key == "wechat_group_admin_members":

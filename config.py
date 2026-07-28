@@ -99,11 +99,14 @@ available_setting = {
     "wechat_group_report_default_image_template_source": "skill",
     "wechat_group_report_default_skill_image_template_name": "wechat-group-report-cyber-intelligence",
     "wechat_group_report_asset_retention_days": 90,
-    # GitHub push webhook notifications delivered through the WeChat group channel.
+    # GitHub repository webhook notifications delivered through the WeChat group channel.
     # LIGHTAGENT_GITHUB_WEBHOOK_SECRET overrides the local secret when present.
     "github_commit_notify_enabled": False,
     "github_commit_notify_repository": "",
     "github_commit_notify_branches": ["main"],
+    "github_commit_notify_event_mode": "selected",
+    "github_commit_notify_events": ["push"],
+    "github_commit_notify_event_actions": {},
     "github_commit_notify_stable_room_id": "",
     "github_commit_notify_max_commits": 8,
     "github_commit_notify_retry_hours": 72,
