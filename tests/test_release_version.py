@@ -115,6 +115,21 @@ version = "keep-me"
         self.assertIn("--fetch-retry-mintimeout=10000", desktop_workflow)
         self.assertIn("--fetch-retry-maxtimeout=60000", desktop_workflow)
 
+    def test_desktop_source_build_and_packaging_are_separate_strict_steps(self):
+        workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        source_step = workflow.index("- name: Build desktop sources")
+        package_step = workflow.index("- name: Package desktop installer")
+        upload_step = workflow.index("- name: Upload artifacts")
+
+        self.assertLess(source_step, package_step)
+        self.assertLess(package_step, upload_step)
+        self.assertIn("npm run build", workflow[source_step:package_step])
+        self.assertNotIn("electron-builder", workflow[source_step:package_step])
+        self.assertIn("npx electron-builder", workflow[package_step:upload_step])
+        self.assertIn("if-no-files-found: error", workflow[upload_step:])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -106,7 +106,11 @@ jobs:
         shell: bash
         run: npm version "${{ steps.ver.outputs.version }}" --no-git-tag-version --allow-same-version
 
-      - name: Build & publish (electron-builder)
+      - name: Build desktop sources
+        working-directory: desktop
+        run: npm run build
+
+      - name: Package desktop installer (electron-builder)
         working-directory: desktop
         shell: bash
         env:
@@ -123,8 +127,6 @@ jobs:
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: |
-          npm run build
-
           # Only export signing vars when provided. Empty strings are NOT the
           # same as unset to electron-builder: an empty CSC_LINK is treated as
           # a (broken) certificate path and aborts the build. Leaving them
@@ -155,7 +157,7 @@ jobs:
             desktop/release/*.exe
             desktop/release/*.yml
             desktop/release/*.blockmap
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
 
   publish-github-release:

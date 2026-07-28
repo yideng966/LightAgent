@@ -2,13 +2,15 @@
 
 ## 2026-07-28
 
-### v2.1.7 发布打包失败修复
+### 发布打包失败与产物完整性修复
 
 - 修复 Windows GitHub Actions 在版本同步脚本成功写入文件后，因 `cp1252` 无法编码中文状态文本而退出的问题；脚本成功输出改为 ASCII，避免非 UTF-8 Runner 把已完成的版本写入误判为失败。
 - Dockerfile 的 Node 侧车构建阶段和 Python 运行阶段统一配置 3 次 APT 获取重试；Playwright 间接调用的 APT 也会继承该配置，瞬时连接重置不再直接终止多架构 `skills-full` 构建。
 - `v2.1.8` 首次桌面构建的 macOS x64 Job 在 `npm ci` 下载阶段耗尽默认重试后遇到 `ECONNRESET`；桌面发布工作流现将 npm 获取重试提高到 5 次，并保持明确的退避上限。
+- 修复 Windows 桌面 Job 在同一 Bash step 执行 `npm run build` 后未继续运行 electron-builder 的问题：源码编译与安装包打包拆成独立步骤，确保 Windows 实际执行 NSIS 打包。
+- 将桌面 Actions artifact 的 `if-no-files-found` 从 `ignore` 收紧为 `error`；任何平台缺少安装包都会阻断发布，不再出现 Job 显示成功但 GitHub Release 缺少 `.exe` 的情况。
 - 补充强制 `PYTHONIOENCODING=cp1252` 的脚本子进程回归，以及逐 Docker stage 检查 APT 重试配置的静态合同测试。
-- `v2.1.7` 基础镜像已经推送，未移动或覆盖原标签；修复通过新补丁版本 `v2.1.8` 发布，避免同版本对应不同源码和镜像内容。
+- `v2.1.7` 和 `v2.1.8` 均已有远端产物，未移动或覆盖原标签；完整桌面产物修复通过新补丁版本 `v2.1.9` 发布，避免同版本对应不同源码和资产内容。
 
 关键文件：
 
@@ -18,13 +20,16 @@
 - `tests/test_release_version.py`
 - `tests/test_docker_deployment.py`
 - `docs/releases/v2.1.8.md`
+- `docs/releases/v2.1.9.md`
 - `plans/20260728_修复发布打包失败.md`
 
 验证记录：
 
 - GitHub Actions 原始日志已确认 Windows `UnicodeEncodeError`、ARM64 APT 下载连接重置和 macOS x64 npm `ECONNRESET` 三个独立根因。
+- `v2.1.8` Docker 基础版与 `skills-full` 多架构构建成功；桌面重跑后两个 macOS 架构成功，但 Windows Job 未生成 artifact，GitHub Release 复核仅有两个 `.dmg`，从而发现空产物假成功问题。
 - 发布版本、Docker 部署和发行说明定向回归 16 项通过；`v2.1.8` 发行说明校验通过。
-- `PYTHONUTF8=1 python -m unittest discover -s tests`：1111 项通过，1 项按条件跳过。
+- Windows 产物完整性修复后，发布版本、Docker 部署和发行说明定向回归 17 项通过；`v2.1.9` 发行说明校验通过。
+- `PYTHONUTF8=1 python -m unittest discover -s tests`：1112 项通过，1 项按条件跳过。
 - Python 编译、GitHub Actions YAML 解析、JavaScript 语法、配置模板 JSON 和 `git diff --check` 通过。
 - 本机 Docker Desktop Linux Engine 未运行，`docker build --check` 无法连接 daemon；Dockerfile 语法与多架构行为留待标签触发的远端 Buildx 构建完成最终验证。
 
