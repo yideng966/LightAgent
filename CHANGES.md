@@ -2,6 +2,25 @@
 
 ## 2026-07-28
 
+### 在线技能库公开社区仓库入口
+
+- 在线技能库新增公开维护栏，直接展示 `xiaoguiwucan/LightAgent-SkillHub` 仓库地址，并提供投稿规范和 Pull Request 列表入口，方便社区上传和共同维护技能。
+- 桌面端与移动端使用同一响应式布局，长仓库地址和三个入口可自动换行；同步补充中英文文案和前端合同测试。
+
+关键文件：
+
+- `channel/web/chat.html`
+- `channel/web/static/js/console.js`
+- `tests/test_skill_hub_integration.py`
+- `plans/20260728_合并PR23社区维护入口.md`
+- `AGENTS.md`
+
+验证记录：
+
+- `python -m unittest tests.test_skill_hub_integration`：12 项通过。
+- `node --check channel/web/static/js/console.js` 与 `git diff --check`：通过。
+- 本地隔离实例在 1440×900 与 390×844 视口完成在线技能库弹窗验收，三条 GitHub 入口均可见且地址正确，页面无横向溢出。
+
 ### 修复 latest 镜像版本回退
 
 - 修复标签发布后手动运行 Docker 工作流会读取仓库旧 `cli/VERSION`，并把 `latest`、`skills-full` 覆盖为错误版本的问题；正式镜像发布现仅接受 `v*` 标签推送，镜像版本只从当前标签派生。

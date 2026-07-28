@@ -281,6 +281,7 @@ docker push yideng966/lightagent:latest
 - 原技能广场在 Web 和 CLI 中仅作为只读目录与介绍页跳转来源，不得提供一键安装、在线更新或批量管理入口；历史已安装技能只保留彻底卸载能力。
 - 技能隔离依赖只能根据 `skills.lock.json` 中已安装的安全技能名称注入子进程环境；Python/npm 依赖保持按技能目录隔离，npm 安装不得默认执行第三方生命周期脚本。
 - 官方 Skill Hub 的仓库与 Pages 地址以 `xiaoguiwucan/LightAgent-SkillHub` 为准；修改 Registry 默认地址时必须同步检查配置模板、CLI、Web 入口、文档和签名索引构建配置。
+- Web 在线技能库必须公开展示官方 Skill Hub 源码仓库、贡献指南和 Pull Request 入口，方便社区投稿与共同维护；这些链接必须使用公开 GitHub 地址，不得指向本地预览服务。
 - Schema v2 脚本技能必须声明结构化 `lightagent.entrypoints` 并通过 `skill_run` 执行；不得让 Agent 通过 Bash/Python/Node 命令字符串绕过 Runner。
 - Skill Runner 第一阶段只是受控子进程边界，并非完整文件系统或网络沙箱；文档和页面必须显示“Runner 兼容隔离”，不得夸大安全边界。
 - 技能系统能力只能使用 `requirements.capabilities` 稳定名称声明，系统包只在 Docker 构建或管理员部署阶段准备；技能安装和运行时不得执行 `sudo`、`apt` 或 `brew`。
