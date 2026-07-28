@@ -115,6 +115,16 @@ class _ModelFailoverState:
                 or state.get("probe_in_flight")
             ))
 
+    def record_unusable_probe(self, route_key, cooldown_seconds):
+        """释放半开探测并重新冷却，不改变临时故障计数。"""
+        with self._lock:
+            state = self._routes.get(route_key)
+            if not state or not state.get("probe_in_flight"):
+                return False
+            state["open_until"] = self._clock() + cooldown_seconds
+            state["probe_in_flight"] = False
+            return True
+
 
 _MODEL_FAILOVER_STATE_INIT_LOCK = threading.Lock()
 
@@ -249,6 +259,14 @@ class TextModelRouter(LLMModel):
         "gateway timeout",
     )
     _TRANSIENT_MODEL_STATUS_PATTERN = re.compile(r"(?<!\d)(?:408|429|500|502|503|504)(?!\d)")
+    _NON_FALLBACK_EMPTY_FINISH_REASONS = {
+        "blocked",
+        "content-filter",
+        "content_filter",
+        "moderation",
+        "prohibited",
+        "safety",
+    }
 
     def __init__(self, bridge: Bridge, bot_type: str = "chat", failover_state=None):
         super().__init__(model=conf().get("model", const.GPT_41))
@@ -606,6 +624,49 @@ class TextModelRouter(LLMModel):
             return self._is_transient_model_error_text(" ".join(str(p or "") for p in parts))
         return self._is_transient_model_error_text(payload)
 
+    @staticmethod
+    def _bounded_diagnostic_value(value, limit=80):
+        if not isinstance(value, (str, int, float)):
+            return ""
+        return " ".join(str(value).split())[:limit]
+
+    @classmethod
+    def _unusable_sync_text_reason(cls, request, response):
+        """识别请求成功但没有可消费最终正文的同步响应。"""
+        if getattr(request, "tools", None):
+            return ""
+        if isinstance(response, dict) and response.get("error"):
+            return ""
+        _, success = cls._extract_text_response(response)
+        if success:
+            return ""
+
+        details = []
+        if isinstance(response, dict):
+            choices = response.get("choices") or []
+            first = choices[0] if choices and isinstance(choices[0], dict) else {}
+            finish_reason = cls._bounded_diagnostic_value(first.get("finish_reason"))
+            if finish_reason.lower() in cls._NON_FALLBACK_EMPTY_FINISH_REASONS:
+                return ""
+            if finish_reason:
+                details.append(f"finish_reason={finish_reason}")
+
+            usage = response.get("usage") if isinstance(response.get("usage"), dict) else {}
+            completion_tokens = cls._bounded_diagnostic_value(usage.get("completion_tokens"))
+            if completion_tokens:
+                details.append(f"completion_tokens={completion_tokens}")
+            token_details = (
+                usage.get("completion_tokens_details")
+                if isinstance(usage.get("completion_tokens_details"), dict)
+                else {}
+            )
+            reasoning_tokens = cls._bounded_diagnostic_value(token_details.get("reasoning_tokens"))
+            if reasoning_tokens:
+                details.append(f"reasoning_tokens={reasoning_tokens}")
+
+        suffix = f" ({', '.join(details)})" if details else ""
+        return f"unusable empty text response{suffix}"
+
     def _log_model_fallback(self, candidate, next_candidate, reason):
         logger.warning(
             "[AgentLLMModel] transient model error, switching candidate: "
@@ -646,6 +707,35 @@ class TextModelRouter(LLMModel):
                 f"primary={candidate.get('bot_type')}/{candidate.get('model')}"
             )
 
+    def _record_primary_unusable_probe(self, candidate, candidates):
+        if candidate.get("source") != "primary":
+            return
+        if not any(item.get("source") == "fallback" for item in candidates):
+            return
+        _, cooldown_seconds = self._failover_policy()
+        if self._failover_state.record_unusable_probe(
+            self._route_key(candidate),
+            cooldown_seconds,
+        ):
+            logger.warning(
+                "[AgentLLMModel] primary half-open probe returned unusable text; "
+                f"reopening circuit: primary={candidate.get('bot_type')}/{candidate.get('model')} "
+                f"cooldown_seconds={cooldown_seconds}"
+            )
+
+    @staticmethod
+    def _log_unusable_model_fallback(candidate, next_candidate, reason):
+        logger.warning(
+            "[AgentLLMModel] unusable text response, switching candidate: "
+            "from={}/{} to={}/{} reason={}".format(
+                candidate.get("bot_type"),
+                candidate.get("model"),
+                next_candidate.get("bot_type"),
+                next_candidate.get("model"),
+                str(reason)[:240],
+            )
+        )
+
     @staticmethod
     def _mark_fallback_exhausted(payload):
         if not isinstance(payload, dict):
@@ -669,8 +759,15 @@ class TextModelRouter(LLMModel):
                     response = self._call_candidate(request, candidate, stream=False)
                     response = self._format_response(response)
                     is_transient = self._is_transient_model_error_payload(response)
+                    unusable_reason = (
+                        ""
+                        if is_transient
+                        else self._unusable_sync_text_reason(request, response)
+                    )
                     if is_transient:
                         self._record_primary_transient_failure(candidate, candidates)
+                    elif unusable_reason:
+                        self._record_primary_unusable_probe(candidate, candidates)
                     else:
                         self._record_primary_healthy(candidate)
                     if (
@@ -679,6 +776,15 @@ class TextModelRouter(LLMModel):
                     ):
                         next_candidate = candidates[index + 1]
                         self._log_model_fallback(candidate, next_candidate, response)
+                        last_response = response
+                        continue
+                    if unusable_reason and index + 1 < len(candidates):
+                        next_candidate = candidates[index + 1]
+                        self._log_unusable_model_fallback(
+                            candidate,
+                            next_candidate,
+                            unusable_reason,
+                        )
                         last_response = response
                         continue
                     if is_transient and candidate.get("source") == "fallback":
@@ -795,7 +901,8 @@ class TextModelRouter(LLMModel):
     def _extract_text_response(response):
         """Return (text, success) from OpenAI/Claude-compatible payloads."""
         if not isinstance(response, dict):
-            return str(response or ""), bool(response)
+            text = str(response or "")
+            return text, bool(text.strip())
         if response.get("error"):
             error = response.get("error")
             if isinstance(error, dict):
@@ -813,14 +920,16 @@ class TextModelRouter(LLMModel):
                     str(block.get("text", "")) if isinstance(block, dict) else str(block)
                     for block in content
                 )
-            return str(content or ""), content is not None
+            text = str(content or "")
+            return text, bool(text.strip())
         content = response.get("content")
         if isinstance(content, list):
             content = "".join(
                 str(block.get("text", "")) if isinstance(block, dict) else str(block)
                 for block in content
             )
-        return str(content or response.get("message") or ""), content is not None
+        text = str(content or response.get("message") or "")
+        return text, bool(text.strip())
 
     def complete(
         self,

@@ -10,6 +10,7 @@ from common.log import logger
 from config import conf
 
 from channel.wechat_group.wechat_group_archive import WechatGroupArchive
+from channel.wechat_group.wechat_group_context import sanitize_wechat_group_prompt_text
 from channel.wechat_group.wechat_group_knowledge_store import WechatGroupKnowledgeStore
 from channel.wechat_group.wechat_group_memory_dream import WechatGroupMemoryDreamService
 from channel.wechat_group.wechat_group_memory_material import WechatGroupMemoryMaterialBuilder
@@ -98,10 +99,17 @@ class WechatGroupMemoryDreamTrigger:
                     backoff = max(idle_seconds, 60)
                     self._backoff_until[room_id] = now_ts + backoff
                     logger.warning(
-                        "[wechat_group] group memory Dream deferred for room=%s status=%s http=%s",
+                        "[wechat_group] group memory Dream deferred for "
+                        "room=%s run=%s status=%s summary=%s dream=%s "
+                        "transient=%s http=%s reason=%s",
                         room_id,
-                        (result or {}).get("status"),
-                        (result or {}).get("llm_status_code") or 0,
+                        _bounded_log_value((result or {}).get("run_id")),
+                        _bounded_log_value((result or {}).get("status")),
+                        _bounded_log_value((result or {}).get("summary_status")),
+                        _bounded_log_value((result or {}).get("dream_status")),
+                        bool((result or {}).get("transient", False)),
+                        (result or {}).get("llm_status_code") or "-",
+                        _bounded_log_value((result or {}).get("message"), limit=300),
                     )
             except Exception as exc:
                 self._backoff_until[room_id] = now_ts + max(idle_seconds, 60)
@@ -194,6 +202,11 @@ class WechatGroupMemoryDreamTrigger:
         if isinstance(value, bool):
             return value
         return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _bounded_log_value(value: Any, limit: int = 120) -> str:
+    text = sanitize_wechat_group_prompt_text(value, max_length=limit)
+    return text or "-"
 
 
 _default_trigger: Optional[WechatGroupMemoryDreamTrigger] = None

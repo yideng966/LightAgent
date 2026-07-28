@@ -108,6 +108,45 @@ class WechatGroupMemoryDreamTriggerTest(unittest.TestCase):
         self.assertGreater(trigger.get_status("wgr_a")["backoff_until"], 120)
         self.assertEqual(0, self.store.get_cursor("wgr_a")["last_archive_row_id"])
 
+    def test_failure_warning_includes_safe_run_and_phase_diagnostics(self):
+        service = FakeDreamService([{
+            "status": "failed",
+            "run_id": "run-empty-1",
+            "summary_status": "failed",
+            "dream_status": "not_run",
+            "transient": False,
+            "llm_status_code": 0,
+            "message": (
+                "text model completion returned empty content "
+                "api_key=super-secret\nforged-line"
+            ),
+        }])
+        trigger = self._trigger(service)
+        self.store.update_cursor("wgr_a", 0)
+        for index in range(2):
+            row = self._record(f"diagnostic-{index}", 10 + index)
+            trigger.note_message("wgr_a", row, now=10 + index)
+
+        with self.assertLogs("log", level="WARNING") as captured:
+            trigger.scan_once(now=100)
+
+        output = "\n".join(captured.output)
+        self.assertIn("room=wgr_a", output)
+        self.assertIn("run=run-empty-1", output)
+        self.assertIn("status=failed", output)
+        self.assertIn("summary=failed", output)
+        self.assertIn("dream=not_run", output)
+        self.assertIn("transient=False", output)
+        self.assertIn("http=-", output)
+        self.assertIn(
+            "reason=text model completion returned empty content "
+            "api_key=[redacted] forged-line",
+            output,
+        )
+        self.assertNotIn("\nforged-line", output)
+        self.assertNotIn("super-secret", output)
+        self.assertEqual(0, self.store.get_cursor("wgr_a")["last_archive_row_id"])
+
     def test_fully_filtered_batch_runs_once_to_advance_the_cursor(self):
         service = FakeDreamService()
         trigger = self._trigger(service)

@@ -53,6 +53,73 @@ class MemoryDreamEngineTest(unittest.TestCase):
         self.assertEqual(503, captured.exception.status_code)
         self.assertIn("HTTP 503", str(captured.exception))
 
+    def test_empty_completion_reports_bounded_metadata_without_reasoning_text(self):
+        from agent.memory.dream_engine import MemoryDreamEngine, MemoryDreamError
+
+        router = FakeRouter([{
+            "success": False,
+            "content": "",
+            "raw": {
+                "model": "reasoning-model",
+                "choices": [{
+                    "message": {
+                        "content": "",
+                        "reasoning_content": "PRIVATE REASONING MUST NOT LEAK",
+                    },
+                    "finish_reason": "length",
+                }],
+                "usage": {
+                    "completion_tokens": 800,
+                    "completion_tokens_details": {"reasoning_tokens": 800},
+                },
+            },
+        }])
+
+        with self.assertRaises(MemoryDreamError) as captured:
+            MemoryDreamEngine(router).complete(
+                system_prompt="system",
+                user_prompt="material",
+                purpose="wechat_group_memory_daily_summary",
+            )
+
+        message = str(captured.exception)
+        self.assertIn("empty content", message)
+        self.assertIn("model=reasoning-model", message)
+        self.assertIn("finish_reason=length", message)
+        self.assertIn("completion_tokens=800", message)
+        self.assertIn("reasoning_tokens=800", message)
+        self.assertNotIn("PRIVATE REASONING MUST NOT LEAK", message)
+        self.assertEqual(0, captured.exception.status_code)
+        self.assertFalse(captured.exception.transient)
+
+    def test_empty_completion_diagnostics_tolerate_malformed_metadata(self):
+        from agent.memory.dream_engine import MemoryDreamEngine, MemoryDreamError
+
+        router = FakeRouter([{
+            "success": False,
+            "content": "",
+            "raw": {
+                "model": {"unexpected": "mapping"},
+                "choices": "not-a-list",
+                "usage": {
+                    "completion_tokens": [800],
+                    "completion_tokens_details": "not-a-mapping",
+                },
+            },
+        }])
+
+        with self.assertRaises(MemoryDreamError) as captured:
+            MemoryDreamEngine(router).complete(
+                system_prompt="system",
+                user_prompt="material",
+                purpose="wechat_group_memory_daily_summary",
+            )
+
+        self.assertEqual(
+            "text model completion returned empty content",
+            str(captured.exception),
+        )
+
     def test_timeout_exception_without_status_is_transient(self):
         from agent.memory.dream_engine import MemoryDreamEngine, MemoryDreamError
 

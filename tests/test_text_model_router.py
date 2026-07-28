@@ -115,6 +115,230 @@ class TestTextModelRouter(unittest.TestCase):
         self.assertEqual(0.2, primary.calls[0]["temperature"])
         self.assertEqual({}, router.sessions._sessions)
 
+    def test_complete_falls_back_after_reasoning_only_empty_response(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        primary = FakeBot([{
+            "model": "primary-model",
+            "choices": [{
+                "message": {
+                    "content": "",
+                    "reasoning_content": "PRIVATE REASONING MUST NOT LEAK",
+                },
+                "finish_reason": "length",
+            }],
+            "usage": {
+                "completion_tokens": 800,
+                "completion_tokens_details": {"reasoning_tokens": 800},
+            },
+        }])
+        backup_response = {
+            "model": "backup-model",
+            "choices": [{
+                "message": {"content": "backup answer"},
+                "finish_reason": "stop",
+            }],
+        }
+        backup = FakeBot([backup_response])
+
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+            router = TextModelRouter(FakeBridge())
+            route_key = ("openai", "primary-model")
+            router._failover_state.record_transient_failure(route_key, 3, 300)
+            with self.assertLogs("log", level="WARNING") as captured:
+                result = router.complete(
+                    [{"role": "user", "content": "summarize"}],
+                    purpose="memory_daily_summary",
+                    max_tokens=800,
+                )
+
+        self.assertTrue(result["success"])
+        self.assertEqual("backup answer", result["content"])
+        self.assertIs(backup_response, result["raw"])
+        self.assertEqual(1, len(primary.calls))
+        self.assertEqual(1, len(backup.calls))
+        self.assertEqual(1, router._failover_state._routes[route_key]["failures"])
+        output = "\n".join(captured.output)
+        self.assertIn("unusable empty text response", output)
+        self.assertIn("finish_reason=length", output)
+        self.assertNotIn("PRIVATE REASONING MUST NOT LEAK", output)
+
+    def test_complete_marks_whitespace_only_final_response_failed(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        primary_response = {
+            "choices": [{
+                "message": {"content": [{"type": "text", "text": "   "}]},
+                "finish_reason": "stop",
+            }],
+        }
+        primary = FakeBot([primary_response])
+        config = self._config()
+        config["model_fallbacks"] = []
+
+        with patch("bridge.agent_bridge.conf", return_value=config), \
+                patch("models.bot_factory.create_bot", return_value=primary):
+            result = TextModelRouter(FakeBridge()).complete(
+                [{"role": "user", "content": "summarize"}],
+            )
+
+        self.assertFalse(result["success"])
+        self.assertEqual("   ", result["content"])
+        self.assertIs(primary_response, result["raw"])
+        self.assertEqual(1, len(primary.calls))
+
+    def test_complete_does_not_fallback_after_content_filter(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        filtered_response = {
+            "choices": [{
+                "message": {"content": ""},
+                "finish_reason": "content_filter",
+            }],
+        }
+        primary = FakeBot([filtered_response])
+        backup = FakeBot([{
+            "choices": [{"message": {"content": "must not bypass filtering"}}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", side_effect=[primary, backup]) as create_bot:
+            result = TextModelRouter(FakeBridge()).complete(
+                [{"role": "user", "content": "filtered request"}],
+            )
+
+        self.assertFalse(result["success"])
+        self.assertIs(filtered_response, result["raw"])
+        self.assertEqual(1, len(primary.calls))
+        self.assertEqual(0, len(backup.calls))
+        self.assertEqual(1, create_bot.call_count)
+
+    def test_empty_half_open_probe_reopens_without_incrementing_failures(self):
+        from bridge.agent_bridge import TextModelRouter, _ModelFailoverState
+
+        class MutableClock:
+            value = 0
+
+            def __call__(self):
+                return self.value
+
+        clock = MutableClock()
+        state = _ModelFailoverState(clock=clock)
+        route_key = ("openai", "primary-model")
+        state.record_transient_failure(route_key, threshold=1, cooldown_seconds=10)
+        clock.value = 11
+
+        primary = FakeBot([{
+            "choices": [{
+                "message": {"content": ""},
+                "finish_reason": "length",
+            }],
+        }])
+        backup = FakeBot([{
+            "choices": [{"message": {"content": "backup answer"}}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+            router = TextModelRouter(FakeBridge(), failover_state=state)
+            result = router.complete([{"role": "user", "content": "summarize"}])
+
+        route = state._routes[route_key]
+        self.assertTrue(result["success"])
+        self.assertEqual("backup answer", result["content"])
+        self.assertEqual(1, route["failures"])
+        self.assertFalse(route["probe_in_flight"])
+        self.assertEqual(311, route["open_until"])
+
+    def test_complete_empty_override_does_not_use_global_fallbacks(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        override_response = {
+            "choices": [{
+                "message": {"content": ""},
+                "finish_reason": "length",
+            }],
+        }
+        override = FakeBot([override_response])
+
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", return_value=override) as create_bot:
+            result = TextModelRouter(FakeBridge()).complete(
+                [{"role": "user", "content": "score"}],
+                provider="openai",
+                model="scorer-model",
+            )
+
+        self.assertFalse(result["success"])
+        self.assertIs(override_response, result["raw"])
+        self.assertEqual(1, len(override.calls))
+        create_bot.assert_called_once_with("chatGPT")
+
+    def test_complete_returns_failure_when_all_candidates_are_empty(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        primary_response = {
+            "choices": [{
+                "message": {"content": ""},
+                "finish_reason": "length",
+            }],
+        }
+        backup_response = {
+            "choices": [{
+                "message": {"content": ""},
+                "finish_reason": "stop",
+            }],
+        }
+        primary = FakeBot([primary_response])
+        backup = FakeBot([backup_response])
+
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+            result = TextModelRouter(FakeBridge()).complete(
+                [{"role": "user", "content": "summarize"}],
+            )
+
+        self.assertFalse(result["success"])
+        self.assertIs(backup_response, result["raw"])
+        self.assertEqual(1, len(primary.calls))
+        self.assertEqual(1, len(backup.calls))
+
+    def test_sync_tool_call_without_text_is_not_treated_as_unusable(self):
+        from agent.protocol.models import LLMRequest
+        from bridge.agent_bridge import TextModelRouter
+
+        tool_response = {
+            "choices": [{
+                "message": {
+                    "content": None,
+                    "tool_calls": [{
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": "lookup", "arguments": "{}"},
+                    }],
+                },
+                "finish_reason": "tool_calls",
+            }],
+        }
+        primary = FakeBot([tool_response])
+        backup = FakeBot([{
+            "choices": [{"message": {"content": "must not be used"}}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", side_effect=[primary, backup]) as create_bot:
+            router = TextModelRouter(FakeBridge())
+            response = router.call(LLMRequest(
+                messages=[{"role": "user", "content": "lookup"}],
+                tools=[{"name": "lookup", "input_schema": {"type": "object"}}],
+            ))
+
+        self.assertIs(tool_response, response)
+        self.assertEqual(1, len(primary.calls))
+        self.assertEqual(0, len(backup.calls))
+        self.assertEqual(1, create_bot.call_count)
+
     def test_complete_model_override_uses_only_selected_candidate(self):
         from bridge.agent_bridge import TextModelRouter
 

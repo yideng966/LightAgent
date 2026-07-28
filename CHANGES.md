@@ -37,6 +37,31 @@
 - 本地 `python app.py` 隔离为 Web 通道后，在 1440x900 暗色与 375x812 亮色视口完成 Playwright 验收；事件搜索/分类、action 过滤、selected/all 切换、Escape、焦点恢复、保存回读和 44px 触控区均正常，页面与弹窗无横向溢出，浏览器无脚本错误。
 - 真实 GitHub 测试仓库与真实微信群的 `ping`、push、PR、Issue、workflow、release 和 redelivery 矩阵仍需在具备测试凭据及在线群后人工验收。
 
+### 修复群记忆空响应未触发备用模型
+
+- 共享 `TextModelRouter` 现在会识别同步无工具请求中“HTTP 成功但最终正文为空”的不可用候选，并在当前请求内按既有 `model_fallbacks` 顺序继续尝试；空正文不再被标记为成功或健康，也不增加全局临时故障计数。
+- 半开探测返回空正文时会释放探测并重新进入冷却，避免熔断状态永久停留在 `probe_in_flight`；`content_filter`、`safety` 等安全拒绝保持最终失败，不通过备用模型绕过。
+- Memory Dream 的空正文失败记录增加模型、结束原因和 token 数量等白名单诊断元数据；群记忆 trigger 告警增加 run、摘要/蒸馏阶段、transient 和脱敏失败原因，继续保证失败不推进游标、不写群记忆。
+
+关键文件：
+
+- `bridge/agent_bridge.py`
+- `agent/memory/dream_engine.py`
+- `channel/wechat_group/wechat_group_memory_dream_trigger.py`
+- `tests/test_text_model_router.py`
+- `tests/test_memory_dream_engine.py`
+- `tests/test_wechat_group_memory_dream_trigger.py`
+- `plans/20260728_群记忆空响应故障转移修复开发计划.md`
+- `AGENTS.md`
+
+验证记录：
+
+- RED 阶段新增合同测试在旧实现上出现 5 个预期失败；GREEN 后共享路由、Dream Engine 与 trigger 核心测试 33 项通过。
+- 合并最新 `master` 后，共享路由、Agent fallback、群 Dream、记忆路由与跨群隔离定向组合 60 项通过；变基前微信群消息、渠道、Web、自由回复 Judge/Scorer 组合 288 项通过。
+- 开发分支变基前执行 `python -X utf8 -m unittest discover -s tests`：1153 项通过，1 项按条件跳过；按交付要求合并后不重复执行全量回归。
+- Python 编译与 `git diff --check` 通过；隔离数据目录下的 `python app.py` 在 `127.0.0.1:9903` 启动成功，`/` 与 `/chat` 均返回 HTTP 200。
+- 本次未部署或重启远端 Docker，生产环境验收等待单独授权。
+
 ### 缩小 Docker 后续增量拉取并保持构建缓存
 
 - 调整最终镜像层顺序，将 Node.js、npm 与微信群 sidecar 生产依赖放到应用源码之前；普通源码或版本号更新现在可直接复用系统、Python、Chromium 和 Node 重层，且不再重复执行 sidecar 运行时导入校验。

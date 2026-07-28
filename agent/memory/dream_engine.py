@@ -61,6 +61,7 @@ class MemoryDreamEngine:
                 transient=transient,
             ) from exc
 
+        raw = {}
         if isinstance(response, dict):
             raw = response.get("raw") if isinstance(response.get("raw"), dict) else {}
             status_code = _first_status_code(response, raw)
@@ -73,7 +74,12 @@ class MemoryDreamEngine:
                 or raw.get("message")
                 or ""
             ).strip()
-            if not success:
+            if not success and (
+                content
+                or response.get("error")
+                or raw.get("error")
+                or status_code
+            ):
                 transient = status_code in _TRANSIENT_STATUS_CODES or bool(
                     _TRANSIENT_TEXT_PATTERN.search(content)
                 )
@@ -86,7 +92,7 @@ class MemoryDreamEngine:
             content = str(response or "").strip()
 
         if not content:
-            raise MemoryDreamError("text model completion returned empty content")
+            raise MemoryDreamError(_empty_completion_reason(raw))
         return content
 
 
@@ -116,3 +122,40 @@ def _status_code_from_value(value: Any) -> int:
 def _format_error(message: str, status_code: int) -> str:
     text = str(message or "text model completion failed").strip()
     return f"memory dream model error (HTTP {status_code}): {text}" if status_code else f"memory dream model error: {text}"
+
+
+def _empty_completion_reason(raw: Any) -> str:
+    base = "text model completion returned empty content"
+    if not isinstance(raw, dict):
+        return base
+
+    def safe_value(value: Any, limit: int = 80) -> str:
+        if not isinstance(value, (str, int, float)):
+            return ""
+        return " ".join(str(value).split())[:limit]
+
+    details = []
+    model = safe_value(raw.get("model"))
+    if model:
+        details.append(f"model={model}")
+
+    choices = raw.get("choices") or []
+    first = choices[0] if choices and isinstance(choices[0], dict) else {}
+    finish_reason = safe_value(first.get("finish_reason"))
+    if finish_reason:
+        details.append(f"finish_reason={finish_reason}")
+
+    usage = raw.get("usage") if isinstance(raw.get("usage"), dict) else {}
+    completion_tokens = safe_value(usage.get("completion_tokens"))
+    if completion_tokens:
+        details.append(f"completion_tokens={completion_tokens}")
+    token_details = (
+        usage.get("completion_tokens_details")
+        if isinstance(usage.get("completion_tokens_details"), dict)
+        else {}
+    )
+    reasoning_tokens = safe_value(token_details.get("reasoning_tokens"))
+    if reasoning_tokens:
+        details.append(f"reasoning_tokens={reasoning_tokens}")
+
+    return f"{base} ({', '.join(details)})" if details else base
