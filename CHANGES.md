@@ -114,6 +114,7 @@
 ### 微信群入群欢迎与离群通知
 
 - 接入 Wechaty `room-join` / `room-leave` 事件，在 sidecar、JSON Lines 协议和 Python 微信群通道之间形成成员事件闭环；事件经过稳定账号、稳定群、目标群、去重和自身进出过滤后直接非阻塞投递，不进入 Agent、归档、记忆或画像链路。
+- 修复 wechat4u 已识别扫码入群、但成员或邀请人 ID 查找失败时高层事件被 Wechaty 丢弃的问题：sidecar 改为直接消费结构化 puppet 成员事件并最佳努力补齐联系人；入群成员 ID 全缺失时仍发送不带 mention 的配置欢迎内容，离群成员未知时继续拒绝发送。
 - 入群欢迎和离群通知分别支持全局默认及按稳定群“跟随全局 / 自定义 / 关闭”，文本与图片二选一；入群文本真实 mention 新成员，离群通知只使用可读名称。
 - 文本模板支持按事件区分的白名单占位符和实时预览；图片上传限制在持久化工作区专用目录，校验 5 MiB 上限、路径边界、扩展名、Pillow 解码格式与尺寸。
 - Web“群聊”新增“进退群消息”设置，支持入群/离群、全局/按群、文本/图片切换，变量菜单、独立草稿、图片上传、就地错误和中英文移动端布局；同时明确 wechat4u 离群检测覆盖有限。
@@ -122,6 +123,8 @@
 
 - `channel/wechat_group/sidecar/wechaty-sidecar.mjs`
 - `channel/wechat_group/sidecar/wechaty-sidecar-core.mjs`
+- `channel/wechat_group/sidecar/wechaty-sidecar-core.test.mjs`
+- `channel/wechat_group/sidecar/wechaty-sidecar-lifecycle.test.mjs`
 - `channel/wechat_group/protocol.py`
 - `channel/wechat_group/wechat_group_membership_notice.py`
 - `channel/wechat_group/wechat_group_channel.py`
@@ -138,6 +141,7 @@
 
 验证记录：
 
+- 本次缺失 ID 兼容修复：sidecar Node 单元测试 57 项通过；微信群成员消息纯逻辑与通道 Python 定向回归 154 项、客户端与消息协议回归 25 项通过；Python/JavaScript 语法和 `git diff --check` 通过。
 - sidecar Node 单元测试 53 项通过；微信群成员消息纯逻辑、客户端、消息、通道与 Web Python 定向回归 288 项通过。
 - Python 语法、JSON 配置、JavaScript 语法和 `git diff --check` 通过。
 - 本地 `python app.py` 隔离为 Web 渠道后，在 1440×900 与 375×812 视口完成 Playwright 验证；入群/离群变量菜单隔离正确，文本预览、按群图片编辑和主保存入口可用，无控制台错误或横向溢出。

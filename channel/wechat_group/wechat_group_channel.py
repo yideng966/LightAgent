@@ -519,7 +519,12 @@ class WechatGroupChannel(ChatChannel):
         try:
             runtime_room_id = str(event.get("room_id") or "").strip()
             members = self._normalize_room_members(event.get("members", []))
-            if not runtime_room_id or not members:
+            memberless_join = (
+                event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN
+                and event.get("member_info_missing") is True
+                and not members
+            )
+            if not runtime_room_id or (not members and not memberless_join):
                 logger.warning("[wechat_group] membership event skipped: missing room or members")
                 return False
 
@@ -528,7 +533,7 @@ class WechatGroupChannel(ChatChannel):
             if event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_LEAVE and self_id in member_ids:
                 logger.info("[wechat_group] self leave observed; notification skipped")
                 return True
-            if event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN and self_id:
+            if event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN and self_id and members:
                 members = [member for member in members if member.get("sender_id") != self_id]
                 if not members:
                     logger.info("[wechat_group] self join observed; welcome skipped")
@@ -572,6 +577,12 @@ class WechatGroupChannel(ChatChannel):
             if not notice:
                 return True
 
+            if memberless_join:
+                logger.warning(
+                    "[wechat_group] join member info missing; sending welcome without mention: "
+                    "stable_room_id={}".format(stable_room_id)
+                )
+
             if notice["content_type"] == WECHAT_GROUP_MEMBERSHIP_CONTENT_IMAGE:
                 image_path = resolve_membership_notice_image_path(
                     conf().get("agent_workspace", "~/lightagent") or "~/lightagent",
@@ -593,11 +604,12 @@ class WechatGroupChannel(ChatChannel):
                 self.client.send_text(runtime_room_id, text, mention_ids=mention_ids)
             logger.info(
                 "[wechat_group] membership notice queued: event={} stable_room_id={} "
-                "member_count={} scope={}".format(
+                "member_count={} scope={} degraded={}".format(
                     event_type,
                     stable_room_id,
                     len(members),
                     notice.get("source") or "global",
+                    memberless_join,
                 )
             )
             return True

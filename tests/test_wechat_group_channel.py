@@ -539,6 +539,64 @@ class WechatGroupChannelTest(unittest.TestCase):
         )])
         self.assertEqual(archive.method_calls, [])
 
+    def test_room_join_without_member_info_sends_generic_welcome_without_mention(self):
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_join_welcome_enabled"] = True
+        conf()["wechat_group_join_welcome_content_type"] = "text"
+        conf()["wechat_group_join_welcome_text"] = (
+            "欢迎 {member_names} 加入 {room_name}（{member_count}人）"
+        )
+        conf()["wechat_group_join_welcome_room_overrides"] = []
+        client = FakeClient()
+        identity_service = self._membership_identity_service()
+        channel = WechatGroupChannel(client=client, identity_service=identity_service)
+        event = parse_sidecar_event({
+            "type": SidecarEventType.ROOM_JOIN,
+            "timestamp": 1785217200,
+            "room_id": "room@@abc",
+            "room_name": "测试群",
+            "self_id": "wxid_bot",
+            "self_name": "LightBot",
+            "members": [],
+            "inviter": {},
+            "member_info_missing": True,
+        })
+
+        self.assertTrue(channel.consume_sidecar_event(event))
+        self.assertFalse(channel.consume_sidecar_event(event))
+        self.assertEqual(client.commands, [(
+            "send_text",
+            "room@@abc",
+            "欢迎 新成员 加入 测试群（1人）",
+            [],
+        )])
+        identity_service.resolve_member.assert_not_called()
+
+    def test_memberless_events_without_join_fallback_are_rejected(self):
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_join_welcome_enabled"] = True
+        conf()["wechat_group_leave_notice_enabled"] = True
+        client = FakeClient()
+        identity_service = self._membership_identity_service()
+        channel = WechatGroupChannel(client=client, identity_service=identity_service)
+
+        for event_type, missing_marker in (
+            (SidecarEventType.ROOM_JOIN, False),
+            (SidecarEventType.ROOM_LEAVE, True),
+        ):
+            with self.subTest(event_type=event_type):
+                self.assertFalse(channel.consume_sidecar_event(parse_sidecar_event({
+                    "type": event_type,
+                    "timestamp": 1785217200,
+                    "room_id": "room@@abc",
+                    "self_id": "wxid_bot",
+                    "members": [],
+                    "member_info_missing": missing_marker,
+                })))
+
+        self.assertEqual(client.commands, [])
+        identity_service.resolve_account.assert_not_called()
+
     def test_room_leave_does_not_mention_leavers_and_duplicate_is_skipped(self):
         conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
         conf()["wechat_group_leave_notice_enabled"] = True

@@ -525,7 +525,7 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
 - 入群专用：`{inviter_name}`。
 - 离群专用：`{remover_name}`。
 
-入群文本会把本次事件中的新成员作为真实 `mention_ids` 一次性发送；离群成员已不在群内，因此离群通知只渲染可读名称，不执行 mention。图片模式只发送图片，上传文件限制为 5 MiB 以内的 JPEG、PNG、GIF 或 WEBP，并持久化到 `agent_workspace/images/wechat_group_membership/`。
+入群文本会把本次事件中的新成员作为真实 `mention_ids` 一次性发送；如果 wechat4u 已识别入群事件但未解析出成员 ID，仍发送当前配置的欢迎内容，成员名称回退为“新成员”、人数按 1 处理且不执行 mention。离群成员已不在群内，因此离群通知只渲染可读名称，不执行 mention；离群成员 ID 缺失时不发送通知。图片模式只发送图片，上传文件限制为 5 MiB 以内的 JPEG、PNG、GIF 或 WEBP，并持久化到 `agent_workspace/images/wechat_group_membership/`。
 
 当前 `wechaty-puppet-wechat4u 1.14.14` 的离群解析主要覆盖“当前登录账号移除其他成员”和“当前登录账号被别人移出”。其他成员主动退群、其他管理员移除其他成员可能没有事件，不能作为可靠能力承诺。机器人自身进出群只刷新群列表，不发送欢迎或离群通知；sidecar 离线期间的事件不会补发。
 

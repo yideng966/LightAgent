@@ -158,3 +158,15 @@ test('sidecar wires stop and signals without an in-process logout path', async (
   assert.doesNotMatch(source, /state\.bot\.stop\s*\(/)
   assert.doesNotMatch(source, /case\s+['"]relogin['"]\s*:/)
 })
+
+test('sidecar listens to raw puppet membership events before high-level contact conversion', async () => {
+  const source = await readFile(
+    new URL('./wechaty-sidecar.mjs', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /\.on\(['"]puppet['"],\s*registerPuppetMembershipHandlers\)/)
+  assert.match(source, /puppet\.on\(['"]room-join['"],\s*handlePuppetRoomJoin\)/)
+  assert.match(source, /puppet\.on\(['"]room-leave['"],\s*handlePuppetRoomLeave\)/)
+  assert.match(source, /if\s*\(state\.usesPuppetMembershipEvents\)\s*return/)
+})

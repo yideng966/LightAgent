@@ -17,7 +17,9 @@ import {
   resolveContactWechatId,
   buildRoomMemberPayload,
   buildRoomJoinPayload,
+  buildRoomJoinPayloadFromPuppetEvent,
   buildRoomLeavePayload,
+  buildRoomLeavePayloadFromPuppetEvent,
   memberPayloadMatchesQuery,
 } from './wechaty-sidecar-core.mjs'
 
@@ -488,6 +490,79 @@ test('buildRoomLeavePayload tolerates missing contacts and uses the supplied fal
   assert.equal(payload.room_name, '')
   assert.equal(payload.self_id, '')
   assert.deepEqual(payload.members.map(member => member.sender_id), ['wxid_alice'])
+  assert.deepEqual(payload.remover, {})
+})
+
+test('buildRoomJoinPayloadFromPuppetEvent preserves valid ids and readable contacts', async () => {
+  const room = {
+    id: 'room@@runtime',
+    syncCalls: 0,
+    async sync() { this.syncCalls += 1 },
+    topic: async () => '测试群',
+    alias: async contact => contact.id === 'wxid_alice' ? '小爱' : '',
+  }
+  const contacts = new Map([
+    ['wxid_alice', { id: 'wxid_alice', name: () => 'Alice', payload: {} }],
+    ['wxid_inviter', { id: 'wxid_inviter', name: () => 'Inviter', payload: {} }],
+  ])
+
+  const payload = await buildRoomJoinPayloadFromPuppetEvent({
+    roomId: room.id,
+    inviteeIdList: ['wxid_alice'],
+    inviterId: 'wxid_inviter',
+    timestamp: 1785217200,
+  }, {
+    self: { id: 'wxid_bot', name: () => 'LightBot', payload: {} },
+    findRoom: async () => room,
+    findContact: async id => contacts.get(id),
+  })
+
+  assert.equal(room.syncCalls, 1)
+  assert.equal(payload.member_info_missing, false)
+  assert.equal(payload.members[0].sender_id, 'wxid_alice')
+  assert.equal(payload.members[0].room_alias, '小爱')
+  assert.equal(payload.inviter.sender_id, 'wxid_inviter')
+  assert.equal(payload.self_id, 'wxid_bot')
+})
+
+test('buildRoomJoinPayloadFromPuppetEvent keeps the room when member ids are missing', async () => {
+  const contactQueries = []
+  const payload = await buildRoomJoinPayloadFromPuppetEvent({
+    roomId: 'room@@runtime',
+    inviteeIdList: [undefined, ''],
+    inviterId: undefined,
+    timestamp: 1785217200,
+  }, {
+    findRoom: async roomId => ({ id: roomId, topic: async () => '测试群' }),
+    findContact: async id => {
+      contactQueries.push(id)
+      return null
+    },
+  })
+
+  assert.equal(payload.room_id, 'room@@runtime')
+  assert.equal(payload.room_name, '测试群')
+  assert.equal(payload.member_info_missing, true)
+  assert.deepEqual(payload.members, [])
+  assert.deepEqual(payload.inviter, {})
+  assert.deepEqual(contactQueries, [])
+})
+
+test('buildRoomLeavePayloadFromPuppetEvent keeps a known leaver when remover id is missing', async () => {
+  const payload = await buildRoomLeavePayloadFromPuppetEvent({
+    roomId: 'room@@runtime',
+    removeeIdList: ['wxid_alice'],
+    removerId: undefined,
+    timestamp: 1785217200,
+  }, {
+    findRoom: async roomId => ({ id: roomId, topic: async () => '测试群' }),
+    findContact: async id => id === 'wxid_alice'
+      ? { id, name: () => 'Alice', payload: {} }
+      : null,
+  })
+
+  assert.equal(payload.member_info_missing, false)
+  assert.equal(payload.members[0].sender_nickname, 'Alice')
   assert.deepEqual(payload.remover, {})
 })
 
