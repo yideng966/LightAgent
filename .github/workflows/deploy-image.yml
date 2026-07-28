@@ -83,6 +83,8 @@ jobs:
           images: |
             ${{ env.DOCKERHUB_IMAGE }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
           tags: |
             type=raw,value=${{ matrix.latest_tag }},enable=true
             type=ref,event=tag,suffix=${{ matrix.version_suffix }}

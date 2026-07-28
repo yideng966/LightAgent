@@ -249,7 +249,7 @@ docker push yideng966/lightagent:latest
 - 正文不得包含内部计划、测试通过数量、文件清单、提交哈希、实现过程、未确认路线图、密钥或部署标识；贡献者致谢、关联 PR/Issue 仅在真实且有用户价值时补充。
 - 末尾必须依次保留“安装”和“文档”章节。安装命令必须使用当前完整版本标签，至少给出 Docker Hub 与 GHCR 镜像；如发布 `skills-full`，应明确变体。文档链接必须指向 `yideng966/LightAgent` 的当前有效页面。
 - 创建标签前必须先运行 `python scripts/validate_release_notes.py --tag <完整标签> docs/releases/<完整标签>.md`，并人工预览 Markdown；校验通过且说明文件已进入待打标签的提交后，才能推送标签。不得先打标签、后在默认分支补说明。
-- `deploy-image.yml` 只能由 `v*` 标签推送触发，不得开放 `workflow_dispatch` 或从仓库内旧版本文件推导正式镜像版本；Docker 发布构建必须在安装 Python 后端前调用 `scripts/stamp_release_version.py`，使用当前发布标签同时更新 `cli/VERSION` 与 `pyproject.toml`，避免 CLI/Web 版本与 `pip show lightagent` 不一致。
+- `deploy-image.yml` 只能由 `v*` 标签推送触发，不得开放 `workflow_dispatch` 或从仓库内旧版本文件推导正式镜像版本；`docker/metadata-action` 必须关闭隐式 `latest`，基础版与 `skills-full` 只能通过矩阵中显式的浮动标签发布，避免完整技能版覆盖基础版 `latest`；Docker 发布构建必须在安装 Python 后端前调用 `scripts/stamp_release_version.py`，使用当前发布标签同时更新 `cli/VERSION` 与 `pyproject.toml`，避免 CLI/Web 版本与 `pip show lightagent` 不一致。
 - 发布脚本的成功路径必须兼容非 UTF-8 标准输出编码，不得因中文状态文本导致构建失败；Docker 多架构构建中的 APT 获取必须配置有限重试，但不得用 `--fix-missing` 或无限重试掩盖真实依赖错误。
 - `release.yml` 只校验版本化发行说明并创建或更新同标签 GitHub Release，不得安装桌面依赖、编译 Electron、运行 PyInstaller 或上传桌面资产；Docker 镜像由独立的 `deploy-image.yml` 发布。
 - 工作流重跑必须更新原 Release，不得创建重复版本；发布后通过 GitHub API 或页面核对标题、标签、正文和预发布状态。

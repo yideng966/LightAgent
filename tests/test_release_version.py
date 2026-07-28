@@ -112,6 +112,8 @@ version = "keep-me"
         self.assertIn("tags: ['v*']", docker_workflow)
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", docker_workflow)
         self.assertIn('version="${GITHUB_REF_NAME#v}"', docker_workflow)
+        self.assertIn("latest=false", docker_workflow)
+        self.assertIn("type=raw,value=${{ matrix.latest_tag }}", docker_workflow)
         self.assertNotIn("workflow_dispatch", docker_workflow)
         self.assertNotIn("cli/VERSION", docker_workflow)
 
