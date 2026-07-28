@@ -2,6 +2,24 @@
 
 ## 2026-07-28
 
+### 在线技能库公开社区仓库入口
+
+- 在线技能库新增公开维护栏，直接展示 `xiaoguiwucan/LightAgent-SkillHub` 仓库地址，并提供投稿规范和 Pull Request 列表入口，方便社区上传和共同维护技能。
+- 桌面端与移动端使用同一响应式布局，长仓库地址和三个入口可自动换行；同步补充中英文文案和前端合同测试。
+
+关键文件：
+
+- `channel/web/chat.html`
+- `channel/web/static/js/console.js`
+- `tests/test_skill_hub_integration.py`
+- `AGENTS.md`
+
+验证记录：
+
+- `python -m unittest tests.test_skill_hub_integration`：12 项通过。
+- `node --check channel/web/static/js/console.js` 与 `git diff --check`：通过。
+- 本地隔离实例在 1440×900 与 390×844 视口完成在线技能库弹窗验收，三条 GitHub 入口均可见且地址正确，页面无横向溢出。
+
 ### 直接艾特启用拟人化群聊上下文
 
 - 修复微信群成员直接 `@` 机器人时被默认当作独立问题、跳过最近群聊上下文的问题；`direct_reply` 现在进入拟人化历史链路，能够理解群内正在讨论的月卡、自然月等承接话题。
