@@ -345,6 +345,8 @@ docker push yideng966/lightagent:latest
 - `wechat_group_voice_interaction_mode = ignore` 表示群语音在 sidecar 下载并由 Python 写入群归档后立即短路；`voice` / `audio` 都不得进入音频转换、ASR、自由回复、Agent、LLM、TTS 或发送链路。该模式不改变 sidecar 媒体下载和归档生命周期；如需做到侧车零下载，必须先单独规划配置同步与 JSON Lines 协议变更。
 - 群画像自主进化调用 LLM 时必须先识别模型错误 envelope（如 `{"error": true, "status_code": 503}`），HTTP 408/429/5xx 等临时供应商故障不得继续当作画像 JSON 正文解析；失败记录应保留可读 HTTP 状态且不推进归档游标。
 - GitHub 提交通知属于 Webhook 到微信群的固定消息投递适配：配置 UI 放在「群聊 -> 基础设置」，目标群只能使用已选择的 `wechat_group_stable_room_ids`；Webhook 必须先做 HMAC-SHA256 验签和 delivery 去重，配置 API 不得回显真实 Secret，`LIGHTAGENT_GITHUB_WEBHOOK_SECRET` 存在时优先于本地配置。
+- 微信群成员进出事件必须通过 sidecar `room_join` / `room_leave` JSON Lines 事件接入，只对已选择且身份确认的 `wechat_group_stable_room_ids` 生效；机器人自身加入不欢迎自身，自身离群不尝试向原群发送，离群成员不得 mention。成员事件直接使用非阻塞渠道发送，不得构造聊天 `Context` 或进入 Bridge、Agent、插件、归档、记忆、画像和报告链路。
+- 进退群文本模板只允许代码内白名单占位符做字面替换，不得执行表达式或暴露 runtime/stable ID、微信号、加入方式和离群原因；配置图片必须位于 `agent_workspace/images/wechat_group_membership`，上传、预览、保存和发送都要校验目录边界、大小、扩展名与 Pillow 实际格式。
 - 群聊报告的统计、报告 revision、预览、投递、定时任务和日报记忆必须按 `stable_room_id` 隔离；legacy runtime 群只在身份服务明确确认的历史别名范围内兼容，禁止无条件按 `stable_room_id OR room_id` 扩大范围。
 - 群聊报告仅复用现有归档、`TextModelRouter`、scheduler 和 Wechaty sidecar；群内手动生成必须经过通道、Tool 和 Prompt 三层管理员门禁，Web 预览和发送必须经过 Web 登录鉴权。
 - 报告图片默认输出到 `agent_workspace/images/wechat_group_reports`，Docker 对应 `/home/agent/lightagent/images`；`image_preferred` 仅在图片尚未被确认发送且失败可判定时回退文字，`delivery_unknown` 或已有图片分片成功时不得补发全文。

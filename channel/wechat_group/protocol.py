@@ -9,6 +9,8 @@ class SidecarEventType:
     QR = "qr"
     ROOMS = "rooms"
     ROOM_MEMBERS = "room_members"
+    ROOM_JOIN = "room_join"
+    ROOM_LEAVE = "room_leave"
     MESSAGE = "message"
     SEND_RESULT = "send_result"
     ERROR = "error"

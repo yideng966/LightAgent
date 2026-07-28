@@ -268,6 +268,50 @@ const I18N = {
         groups_nav_humanization_hint: '上下文与语气',
         groups_nav_rooms: '群与管理员',
         groups_nav_rooms_hint: '目标群与管理员',
+        groups_nav_membership: '进退群消息',
+        groups_nav_membership_hint: '欢迎语与离群通知',
+        groups_membership_title: '进退群消息',
+        groups_membership_desc: '分别配置入群欢迎与离群通知，可使用全局默认或按稳定群覆盖。',
+        groups_membership_join: '入群欢迎',
+        groups_membership_leave: '离群通知',
+        groups_membership_leave_limit: '当前 wechat4u 主要支持当前账号移除成员，或当前账号被移出群聊。',
+        groups_membership_scope: '配置范围',
+        groups_membership_scope_global: '全局默认',
+        groups_membership_scope_room: '按群配置',
+        groups_membership_enabled: '启用全局默认',
+        groups_membership_enabled_hint: '仅作用于已选择且稳定身份已确认的目标群；按群自定义可独立生效。',
+        groups_membership_room: '目标群',
+        groups_membership_no_rooms: '请先在“群与管理员”中选择至少一个稳定群。',
+        groups_membership_policy: '当前群策略',
+        groups_membership_policy_inherit: '跟随全局',
+        groups_membership_policy_custom: '自定义',
+        groups_membership_policy_disabled: '关闭',
+        groups_membership_content_type: '消息类型',
+        groups_membership_text: '文本',
+        groups_membership_image: '图片',
+        groups_membership_text_label: '消息文本',
+        groups_membership_text_placeholder: '输入发送到群里的消息',
+        groups_membership_insert_variable: '插入变量',
+        groups_membership_preview: '发送预览',
+        groups_membership_preview_room: '示例群',
+        groups_membership_preview_member_a: '新成员甲',
+        groups_membership_preview_member_b: '新成员乙',
+        groups_membership_preview_leaver_a: '群成员甲',
+        groups_membership_preview_leaver_b: '群成员乙',
+        groups_membership_preview_inviter: '邀请人小王',
+        groups_membership_preview_remover: '群管理员小王',
+        groups_membership_preview_bot: '机器人',
+        groups_membership_image_select: '选择图片',
+        groups_membership_image_replace: '替换图片',
+        groups_membership_image_remove: '移除图片',
+        groups_membership_image_hint: '支持 JPEG、PNG、GIF、WEBP，最大 5 MiB。图片模式只发送图片。',
+        groups_membership_uploading: '图片上传中...',
+        groups_membership_upload_failed: '图片上传失败',
+        groups_membership_error_text_required: '文本内容不能为空。',
+        groups_membership_error_text_length: '文本内容不能超过 500 个字符。',
+        groups_membership_error_placeholder: '文本中包含当前事件不支持的占位符。',
+        groups_membership_error_image_required: '请先上传图片。',
+        groups_membership_error_image_size: '图片不能超过 5 MiB。',
         groups_nav_report: '群聊报告',
         groups_nav_report_hint: '统计、模板与定时发送',
         groups_report_title: '群聊报告',
@@ -1212,6 +1256,50 @@ const I18N = {
         groups_nav_humanization_hint: 'Context and tone',
         groups_nav_rooms: 'Groups & admins',
         groups_nav_rooms_hint: 'Target groups and admins',
+        groups_nav_membership: 'Join & leave',
+        groups_nav_membership_hint: 'Welcome and leave notices',
+        groups_membership_title: 'Join and leave messages',
+        groups_membership_desc: 'Configure join welcomes and leave notices with global defaults or stable-group overrides.',
+        groups_membership_join: 'Join welcome',
+        groups_membership_leave: 'Leave notice',
+        groups_membership_leave_limit: 'The current wechat4u version mainly detects members removed by this account, or this account being removed.',
+        groups_membership_scope: 'Scope',
+        groups_membership_scope_global: 'Global default',
+        groups_membership_scope_room: 'Per group',
+        groups_membership_enabled: 'Enable global default',
+        groups_membership_enabled_hint: 'Only applies to selected groups with confirmed stable identity. Per-group custom settings can work independently.',
+        groups_membership_room: 'Target group',
+        groups_membership_no_rooms: 'Select at least one stable group in Groups & admins first.',
+        groups_membership_policy: 'Group policy',
+        groups_membership_policy_inherit: 'Follow global',
+        groups_membership_policy_custom: 'Custom',
+        groups_membership_policy_disabled: 'Off',
+        groups_membership_content_type: 'Message type',
+        groups_membership_text: 'Text',
+        groups_membership_image: 'Image',
+        groups_membership_text_label: 'Message text',
+        groups_membership_text_placeholder: 'Enter the message sent to the group',
+        groups_membership_insert_variable: 'Insert variable',
+        groups_membership_preview: 'Delivery preview',
+        groups_membership_preview_room: 'Example group',
+        groups_membership_preview_member_a: 'New member A',
+        groups_membership_preview_member_b: 'New member B',
+        groups_membership_preview_leaver_a: 'Member A',
+        groups_membership_preview_leaver_b: 'Member B',
+        groups_membership_preview_inviter: 'Inviter Alex',
+        groups_membership_preview_remover: 'Admin Alex',
+        groups_membership_preview_bot: 'Bot',
+        groups_membership_image_select: 'Choose image',
+        groups_membership_image_replace: 'Replace image',
+        groups_membership_image_remove: 'Remove image',
+        groups_membership_image_hint: 'JPEG, PNG, GIF, or WEBP up to 5 MiB. Image mode sends only the image.',
+        groups_membership_uploading: 'Uploading image...',
+        groups_membership_upload_failed: 'Image upload failed',
+        groups_membership_error_text_required: 'Message text is required.',
+        groups_membership_error_text_length: 'Message text must be 500 characters or fewer.',
+        groups_membership_error_placeholder: 'The text contains a placeholder unavailable for this event.',
+        groups_membership_error_image_required: 'Upload an image first.',
+        groups_membership_error_image_size: 'The image must be 5 MiB or smaller.',
         groups_nav_report: 'Group reports',
         groups_nav_report_hint: 'Statistics, templates, and schedules',
         groups_report_title: 'Group reports',
@@ -9507,6 +9595,15 @@ function loadChannelsView() {
 }
 
 let groupsActiveSection = 'basic';
+let groupsMembershipState = {
+    eventType: 'join',
+    scope: 'global',
+    roomId: '',
+    draft: null,
+    customDrafts: { join: {}, leave: {} },
+    uploading: false,
+    error: '',
+};
 let groupsMemoryState = {
     selectedRoomId: '',
     loadedRoomId: '',
@@ -9634,6 +9731,7 @@ function loadGroupsView() {
             return;
         }
         channelsData = data.channels || [];
+        resetGroupsMembershipDraft(getWechatGroupChannel()?.extra || {});
         renderGroupsView();
         maybeAutoRefreshWechatGroupRooms();
     }).catch(() => showGroupsStatus('groups_load_failed', true));
@@ -9734,6 +9832,7 @@ function buildGroupsMobileSectionSelect() {
     const sections = [
         ['basic', 'groups_nav_basic'],
         ['rooms', 'groups_nav_rooms'],
+        ['membership', 'groups_nav_membership'],
         ['report', 'groups_nav_report'],
         ['humanization', 'groups_nav_humanization'],
         ['free_reply', 'groups_nav_free_reply'],
@@ -9771,6 +9870,7 @@ function renderGroupsView(options = {}) {
         <aside class="hidden md:block w-56 flex-shrink-0 border-r border-slate-200 dark:border-white/10 p-3 space-y-1 overflow-y-auto">
             ${buildGroupsSectionButton('basic', 'fa-sliders', 'groups_nav_basic', 'groups_nav_basic_hint')}
             ${buildGroupsSectionButton('rooms', 'fa-comments', 'groups_nav_rooms', 'groups_nav_rooms_hint')}
+            ${buildGroupsSectionButton('membership', 'fa-door-open', 'groups_nav_membership', 'groups_nav_membership_hint')}
             ${buildGroupsSectionButton('report', 'fa-chart-column', 'groups_nav_report', 'groups_nav_report_hint')}
             ${buildGroupsSectionButton('humanization', 'fa-user-check', 'groups_nav_humanization', 'groups_nav_humanization_hint')}
             ${buildGroupsSectionButton('free_reply', 'fa-comment-dots', 'groups_nav_free_reply', 'groups_nav_free_reply_hint')}
@@ -9796,6 +9896,7 @@ function renderGroupsView(options = {}) {
         <main class="flex-1 min-w-0 min-h-0 overflow-y-auto p-3 md:p-5">
             ${groupsActiveSection === 'basic' ? buildGroupsBasicPanel(extra) : ''}
             ${groupsActiveSection === 'rooms' ? buildGroupsRoomsPanel(extra) : ''}
+            ${groupsActiveSection === 'membership' ? buildGroupsMembershipPanel(extra) : ''}
             ${groupsActiveSection === 'report' ? buildGroupsReportPanel(extra) : ''}
             ${groupsActiveSection === 'humanization' ? buildGroupsHumanizationPanel(extra) : ''}
             ${groupsActiveSection === 'free_reply' ? renderWechatGroupFreeReplySettings(extra) : ''}
@@ -9864,6 +9965,7 @@ function buildGroupsSectionButton(section, icon, labelKey, hintKey) {
 
 function switchGroupsSection(section) {
     if (groupsActiveSection === 'report' && section !== 'report') captureGroupsReportDraft();
+    if (groupsActiveSection === 'membership' && section !== 'membership') captureGroupsMembershipPanel();
     if (section !== 'sticker') {
         groupsStickerState.configDraft = null;
     }
@@ -9895,6 +9997,573 @@ function buildGroupsBasicPanel(extra) {
         </div>
         ${buildGroupsGithubCommitNotifyPanel(extra)}
     </div>`;
+}
+
+function normalizeGroupsMembershipEntry(raw, eventType) {
+    const source = raw || {};
+    const fallbackText = eventType === 'join' ? '欢迎加入群聊！' : '{member_names} 已离开群聊。';
+    const roomOverrides = Array.isArray(source.room_overrides) ? source.room_overrides : [];
+    const fallbackPlaceholders = eventType === 'join'
+        ? ['{room_name}', '{member_name}', '{member_names}', '{member_count}', '{event_time}', '{bot_name}', '{inviter_name}']
+        : ['{room_name}', '{member_name}', '{member_names}', '{member_count}', '{event_time}', '{bot_name}', '{remover_name}'];
+    return {
+        enabled: source.enabled === true,
+        content_type: source.content_type === 'image' ? 'image' : 'text',
+        text: String(source.text ?? fallbackText),
+        image_path: String(source.image_path || ''),
+        image_url: String(source.image_url || ''),
+        placeholders: Array.isArray(source.placeholders) && source.placeholders.length
+            ? source.placeholders.map(String)
+            : fallbackPlaceholders,
+        room_overrides: roomOverrides
+            .filter(item => item && String(item.stable_room_id || '').startsWith('wgr_'))
+            .map(item => ({
+                stable_room_id: String(item.stable_room_id || ''),
+                policy: item.policy === 'custom' ? 'custom' : 'disabled',
+                content_type: item.content_type === 'image' ? 'image' : 'text',
+                text: String(item.text || ''),
+                image_path: String(item.image_path || ''),
+                image_url: String(item.image_url || ''),
+            })),
+    };
+}
+
+function resetGroupsMembershipDraft(extra = {}) {
+    const saved = extra.membership_notices || {};
+    const join = normalizeGroupsMembershipEntry(saved.join, 'join');
+    const leave = normalizeGroupsMembershipEntry(saved.leave, 'leave');
+    const customDrafts = { join: {}, leave: {} };
+    for (const eventType of ['join', 'leave']) {
+        const event = eventType === 'join' ? join : leave;
+        event.room_overrides.forEach(item => {
+            if (item.policy === 'custom') customDrafts[eventType][item.stable_room_id] = { ...item };
+        });
+    }
+    groupsMembershipState.draft = { join, leave };
+    groupsMembershipState.customDrafts = customDrafts;
+    groupsMembershipState.uploading = false;
+    groupsMembershipState.error = '';
+    groupsMembershipState.dirty = false;
+    const rooms = getGroupsMembershipSelectedRooms(extra);
+    if (!rooms.some(room => room.id === groupsMembershipState.roomId)) {
+        groupsMembershipState.roomId = rooms[0]?.id || '';
+    }
+}
+
+function ensureGroupsMembershipDraft(extra = {}) {
+    if (!groupsMembershipState.draft) resetGroupsMembershipDraft(extra);
+    return groupsMembershipState.draft;
+}
+
+function getGroupsMembershipSelectedRooms(extra = {}) {
+    const stableIds = Array.isArray(extra.stable_selected_room_ids) && extra.stable_selected_room_ids.length
+        ? extra.stable_selected_room_ids
+        : (Array.isArray(extra.selected_room_ids) ? extra.selected_room_ids : []);
+    const ids = [...new Set(stableIds.map(value => String(value || '').trim()).filter(value => value.startsWith('wgr_')))];
+    const names = new Map();
+    (extra.rooms || []).forEach(room => {
+        const name = String(room.name || room.topic || '').trim();
+        const stableId = String(room.stable_room_id || '').trim();
+        if (stableId && name) names.set(stableId, name);
+    });
+    ids.forEach((id, index) => {
+        const savedName = String(extra.selected_room_names?.[index] || '').trim();
+        if (savedName && !names.has(id)) names.set(id, savedName);
+    });
+    return ids.map(id => ({ id, name: names.get(id) || id }));
+}
+
+function getGroupsMembershipOverride(eventType, roomId) {
+    const draft = groupsMembershipState.draft?.[eventType];
+    return draft?.room_overrides?.find(item => item.stable_room_id === roomId) || null;
+}
+
+function upsertGroupsMembershipOverride(eventType, override) {
+    const draft = groupsMembershipState.draft[eventType];
+    const index = draft.room_overrides.findIndex(item => item.stable_room_id === override.stable_room_id);
+    if (index >= 0) draft.room_overrides[index] = override;
+    else draft.room_overrides.push(override);
+}
+
+function removeGroupsMembershipOverride(eventType, roomId) {
+    const draft = groupsMembershipState.draft[eventType];
+    draft.room_overrides = draft.room_overrides.filter(item => item.stable_room_id !== roomId);
+}
+
+function ensureGroupsMembershipCustomOverride(eventType, roomId) {
+    let override = getGroupsMembershipOverride(eventType, roomId);
+    if (override?.policy === 'custom') return override;
+    const globalDraft = groupsMembershipState.draft[eventType];
+    const cached = groupsMembershipState.customDrafts[eventType]?.[roomId];
+    override = cached ? { ...cached } : {
+        stable_room_id: roomId,
+        policy: 'custom',
+        content_type: globalDraft.content_type,
+        text: globalDraft.text,
+        image_path: globalDraft.image_path,
+        image_url: globalDraft.image_url,
+    };
+    override.stable_room_id = roomId;
+    override.policy = 'custom';
+    upsertGroupsMembershipOverride(eventType, override);
+    groupsMembershipState.customDrafts[eventType][roomId] = { ...override };
+    return override;
+}
+
+function getGroupsMembershipEditTarget(context = {}) {
+    const eventType = context.eventType || groupsMembershipState.eventType;
+    const scope = context.scope || groupsMembershipState.scope;
+    const roomId = context.roomId ?? groupsMembershipState.roomId;
+    if (scope === 'global') return groupsMembershipState.draft[eventType];
+    return ensureGroupsMembershipCustomOverride(eventType, roomId);
+}
+
+function buildGroupsMembershipSegment(options, current, handler, label) {
+    return `<div class="inline-flex w-full sm:w-auto rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-100 dark:bg-[#111111] p-1" role="group" aria-label="${escapeHtml(label)}">
+        ${options.map(option => `<button type="button" onclick="${handler}('${option.value}')"
+            class="min-h-11 flex-1 sm:flex-none px-4 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 ${current === option.value ? 'bg-white dark:bg-white/10 text-primary-600 dark:text-primary-300 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100'}">
+            ${option.icon ? `<i class="fas ${option.icon} mr-1.5" aria-hidden="true"></i>` : ''}${t(option.label)}
+        </button>`).join('')}
+    </div>`;
+}
+
+function buildGroupsMembershipPanel(extra) {
+    const draft = ensureGroupsMembershipDraft(extra);
+    const eventType = groupsMembershipState.eventType;
+    const eventDraft = draft[eventType];
+    const rooms = getGroupsMembershipSelectedRooms(extra);
+    if (!rooms.some(room => room.id === groupsMembershipState.roomId)) {
+        groupsMembershipState.roomId = rooms[0]?.id || '';
+    }
+    const roomId = groupsMembershipState.roomId;
+    const override = roomId ? getGroupsMembershipOverride(eventType, roomId) : null;
+    const policy = override?.policy || 'inherit';
+    const isRoomScope = groupsMembershipState.scope === 'room';
+    const editable = !isRoomScope || policy === 'custom';
+    const target = isRoomScope && policy === 'custom'
+        ? ensureGroupsMembershipCustomOverride(eventType, roomId)
+        : eventDraft;
+    const eventOptions = [
+        { value: 'join', label: 'groups_membership_join', icon: 'fa-user-plus' },
+        { value: 'leave', label: 'groups_membership_leave', icon: 'fa-user-minus' },
+    ];
+    const scopeOptions = [
+        { value: 'global', label: 'groups_membership_scope_global' },
+        { value: 'room', label: 'groups_membership_scope_room' },
+    ];
+    const roomOptions = rooms.map(room => `<option value="${escapeHtml(room.id)}" ${room.id === roomId ? 'selected' : ''}>${escapeHtml(room.name)}</option>`).join('');
+    return `<div class="h-full w-full space-y-5">
+        ${buildGroupsPanelTitle('fa-door-open', 'groups_membership_title', 'groups_membership_desc')}
+        <div class="flex items-center gap-2">
+            <div class="min-w-0 flex-1 sm:flex-none">${buildGroupsMembershipSegment(eventOptions, eventType, 'switchGroupsMembershipEvent', t('groups_membership_title'))}</div>
+            ${eventType === 'leave' ? `<button type="button" class="self-start lg:self-auto w-11 h-11 inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500" title="${escapeHtml(t('groups_membership_leave_limit'))}" aria-label="${escapeHtml(t('groups_membership_leave_limit'))}"><i class="fas fa-circle-info" aria-hidden="true"></i></button>` : ''}
+        </div>
+        <section class="pt-4 border-t border-slate-200 dark:border-white/10">
+            <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">${t('groups_membership_scope')}</label>
+            <div class="hidden sm:block">${buildGroupsMembershipSegment(scopeOptions, groupsMembershipState.scope, 'switchGroupsMembershipScope', t('groups_membership_scope'))}</div>
+            <select onchange="switchGroupsMembershipScope(this.value)" aria-label="${escapeHtml(t('groups_membership_scope'))}"
+                class="sm:hidden w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+                ${scopeOptions.map(option => `<option value="${option.value}" ${groupsMembershipState.scope === option.value ? 'selected' : ''}>${t(option.label)}</option>`).join('')}
+            </select>
+        </section>
+        ${isRoomScope ? buildGroupsMembershipRoomControls(rooms, roomOptions, policy) : buildGroupsMembershipGlobalToggle(eventDraft)}
+        ${editable ? buildGroupsMembershipEditor(target, eventType) : buildGroupsMembershipInheritedPreview(eventDraft, eventType, policy)}
+        <p id="groups-membership-error" class="min-h-5 text-xs text-red-500" aria-live="polite">${escapeHtml(groupsMembershipState.error || '')}</p>
+    </div>`;
+}
+
+function buildGroupsMembershipGlobalToggle(eventDraft) {
+    return `<section class="pt-4 border-t border-slate-200 dark:border-white/10">
+        <div class="flex items-center justify-between gap-3">
+            <div class="min-w-0">
+                <h4 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_membership_enabled')}</h4>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_membership_enabled_hint')}</p>
+            </div>
+            <label class="relative inline-flex items-center justify-center w-11 h-11 cursor-pointer flex-shrink-0">
+                <input id="groups-membership-enabled" type="checkbox" class="sr-only peer" onchange="setGroupsMembershipEnabled(this.checked)" ${eventDraft.enabled ? 'checked' : ''}>
+                <span class="relative w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-[#111111] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></span>
+            </label>
+        </div>
+    </section>`;
+}
+
+function buildGroupsMembershipRoomControls(rooms, roomOptions, policy) {
+    if (!rooms.length) {
+        return `<section class="pt-4 border-t border-slate-200 dark:border-white/10"><p class="text-sm text-slate-500 dark:text-slate-400">${t('groups_membership_no_rooms')}</p></section>`;
+    }
+    const policies = [
+        { value: 'inherit', label: 'groups_membership_policy_inherit' },
+        { value: 'custom', label: 'groups_membership_policy_custom' },
+        { value: 'disabled', label: 'groups_membership_policy_disabled' },
+    ];
+    return `<section class="pt-4 border-t border-slate-200 dark:border-white/10 grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <label class="block">
+            <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">${t('groups_membership_room')}</span>
+            <select id="groups-membership-room" onchange="switchGroupsMembershipRoom(this.value)"
+                class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+                ${roomOptions}
+            </select>
+        </label>
+        <div>
+            <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">${t('groups_membership_policy')}</span>
+            ${buildGroupsMembershipSegment(policies, policy, 'setGroupsMembershipPolicy', t('groups_membership_policy'))}
+        </div>
+    </section>`;
+}
+
+function buildGroupsMembershipEditor(target, eventType) {
+    const contentOptions = [
+        { value: 'text', label: 'groups_membership_text', icon: 'fa-align-left' },
+        { value: 'image', label: 'groups_membership_image', icon: 'fa-image' },
+    ];
+    return `<section class="pt-4 border-t border-slate-200 dark:border-white/10 space-y-5">
+        <div>
+            <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">${t('groups_membership_content_type')}</span>
+            ${buildGroupsMembershipSegment(contentOptions, target.content_type, 'setGroupsMembershipContentType', t('groups_membership_content_type'))}
+        </div>
+        ${target.content_type === 'image' ? buildGroupsMembershipImageEditor(target) : buildGroupsMembershipTextEditor(target, eventType)}
+        ${buildGroupsMembershipPreview(target, eventType, false)}
+    </section>`;
+}
+
+function buildGroupsMembershipTextEditor(target, eventType) {
+    const placeholders = groupsMembershipState.draft[eventType].placeholders || [];
+    return `<div>
+        <div class="flex items-center justify-between gap-3 mb-2">
+            <label for="groups-membership-text" class="text-xs font-medium text-slate-600 dark:text-slate-400">${t('groups_membership_text_label')}</label>
+            <details class="relative">
+                <summary class="list-none min-h-11 px-3 py-2 inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-600 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+                    <i class="fas fa-code" aria-hidden="true"></i>${t('groups_membership_insert_variable')}<i class="fas fa-chevron-down text-[10px]" aria-hidden="true"></i>
+                </summary>
+                <div class="absolute right-0 z-30 mt-1 w-56 max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#1A1A1A] shadow-lg p-1.5">
+                    ${placeholders.map(token => `<button type="button" data-placeholder="${escapeHtml(token)}" onclick="insertGroupsMembershipPlaceholder(this.dataset.placeholder)" class="w-full min-h-11 px-3 py-2 rounded-md text-left font-mono text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">${escapeHtml(token)}</button>`).join('')}
+                </div>
+            </details>
+        </div>
+        <textarea id="groups-membership-text" maxlength="500" rows="5" oninput="updateGroupsMembershipText(this.value)"
+            placeholder="${escapeHtml(t('groups_membership_text_placeholder'))}"
+            class="w-full min-h-[132px] resize-y px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">${escapeHtml(target.text || '')}</textarea>
+        <div class="mt-1 text-right text-[11px] text-slate-400"><span id="groups-membership-text-count">${String(target.text || '').length}</span>/500</div>
+    </div>`;
+}
+
+function groupsMembershipImagePreviewUrl(target) {
+    if (target.image_url) return String(target.image_url);
+    if (!target.image_path) return '';
+    return `/api/wechat-group/membership-image?path=${encodeURIComponent(target.image_path)}`;
+}
+
+function buildGroupsMembershipImageEditor(target) {
+    const imageUrl = groupsMembershipImagePreviewUrl(target);
+    return `<div>
+        <div class="w-full max-w-lg h-48 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-white/5 overflow-hidden flex items-center justify-center">
+            ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(t('groups_membership_image'))}" class="w-full h-full object-contain">` : `<i class="fas fa-image text-3xl text-slate-300 dark:text-slate-600" aria-hidden="true"></i>`}
+        </div>
+        <input id="groups-membership-image-input" type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="sr-only" onchange="uploadGroupsMembershipImage(this)">
+        <div class="flex flex-wrap items-center gap-2 mt-3">
+            <button id="groups-membership-image-button" type="button" onclick="document.getElementById('groups-membership-image-input')?.click()" ${groupsMembershipState.uploading ? 'disabled' : ''} class="min-h-11 px-3 py-2 inline-flex items-center rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#111111]">
+                <i class="fas ${groupsMembershipState.uploading ? 'fa-spinner fa-spin' : 'fa-upload'} mr-2" aria-hidden="true"></i>${groupsMembershipState.uploading ? t('groups_membership_uploading') : t(imageUrl ? 'groups_membership_image_replace' : 'groups_membership_image_select')}
+            </button>
+            ${imageUrl ? `<button type="button" onclick="removeGroupsMembershipImage()" ${groupsMembershipState.uploading ? 'disabled' : ''} class="min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"><i class="fas fa-trash-can mr-2" aria-hidden="true"></i>${t('groups_membership_image_remove')}</button>` : ''}
+        </div>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-2">${t('groups_membership_image_hint')}</p>
+    </div>`;
+}
+
+function buildGroupsMembershipInheritedPreview(eventDraft, eventType, policy) {
+    if (policy === 'disabled') {
+        return `<section class="pt-4 border-t border-slate-200 dark:border-white/10"><p class="text-sm text-slate-500 dark:text-slate-400">${t('groups_membership_policy_disabled')}</p></section>`;
+    }
+    return `<section class="pt-4 border-t border-slate-200 dark:border-white/10">${buildGroupsMembershipPreview(eventDraft, eventType, true)}</section>`;
+}
+
+function buildGroupsMembershipPreview(target, eventType, inherited) {
+    const title = inherited
+        ? `${t('groups_membership_preview')} · ${t('groups_membership_policy_inherit')}`
+        : t('groups_membership_preview');
+    const preview = renderGroupsMembershipPreviewText(target, eventType);
+    const imageUrl = target.content_type === 'image' ? groupsMembershipImagePreviewUrl(target) : '';
+    return `<div class="pt-4 border-t border-slate-200 dark:border-white/10">
+        <h4 class="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2">${title}</h4>
+        ${target.content_type === 'image'
+            ? `<div class="w-full max-w-lg h-40 rounded-lg bg-slate-50 dark:bg-white/5 overflow-hidden flex items-center justify-center">${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(title)}" class="w-full h-full object-contain">` : `<i class="fas fa-image text-2xl text-slate-300 dark:text-slate-600" aria-hidden="true"></i>`}</div>`
+            : `<p id="groups-membership-preview-text" class="min-h-16 whitespace-pre-wrap break-words rounded-lg bg-slate-50 dark:bg-white/5 px-3 py-3 text-sm text-slate-700 dark:text-slate-200">${escapeHtml(preview)}</p>`}
+    </div>`;
+}
+
+function membershipPreviewTimestamp() {
+    const date = new Date();
+    const pad = value => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function renderGroupsMembershipPreviewText(target, eventType) {
+    const extra = getWechatGroupChannel()?.extra || {};
+    const rooms = getGroupsMembershipSelectedRooms(extra);
+    const roomName = rooms.find(room => room.id === groupsMembershipState.roomId)?.name || t('groups_membership_preview_room');
+    const memberA = t(eventType === 'join' ? 'groups_membership_preview_member_a' : 'groups_membership_preview_leaver_a');
+    const memberB = t(eventType === 'join' ? 'groups_membership_preview_member_b' : 'groups_membership_preview_leaver_b');
+    const values = {
+        room_name: roomName,
+        member_name: memberA,
+        member_names: `${memberA}${currentLang === 'zh' ? '、' : ', '}${memberB}`,
+        member_count: '2',
+        event_time: membershipPreviewTimestamp(),
+        bot_name: t('groups_membership_preview_bot'),
+        inviter_name: t('groups_membership_preview_inviter'),
+        remover_name: t('groups_membership_preview_remover'),
+    };
+    let text = String(target.text || '');
+    Object.entries(values).forEach(([key, value]) => {
+        text = text.split(`{${key}}`).join(value);
+    });
+    if (eventType === 'join') text = `@${memberA} @${memberB} ${text}`.trim();
+    return text;
+}
+
+function captureGroupsMembershipPanel() {
+    if (!groupsMembershipState.draft || groupsActiveSection !== 'membership') return;
+    const enabled = document.getElementById('groups-membership-enabled');
+    if (enabled && groupsMembershipState.scope === 'global') {
+        groupsMembershipState.draft[groupsMembershipState.eventType].enabled = !!enabled.checked;
+    }
+    const textarea = document.getElementById('groups-membership-text');
+    if (textarea) getGroupsMembershipEditTarget().text = String(textarea.value || '');
+}
+
+function switchGroupsMembershipEvent(eventType) {
+    if (!['join', 'leave'].includes(eventType)) return;
+    captureGroupsMembershipPanel();
+    groupsMembershipState.eventType = eventType;
+    groupsMembershipState.error = '';
+    renderGroupsView({ preserveScroll: true });
+}
+
+function switchGroupsMembershipScope(scope) {
+    if (!['global', 'room'].includes(scope)) return;
+    captureGroupsMembershipPanel();
+    groupsMembershipState.scope = scope;
+    groupsMembershipState.error = '';
+    renderGroupsView({ preserveScroll: true });
+}
+
+function switchGroupsMembershipRoom(roomId) {
+    captureGroupsMembershipPanel();
+    groupsMembershipState.roomId = String(roomId || '');
+    groupsMembershipState.error = '';
+    renderGroupsView({ preserveScroll: true });
+}
+
+function setGroupsMembershipEnabled(enabled) {
+    groupsMembershipState.draft[groupsMembershipState.eventType].enabled = !!enabled;
+    groupsMembershipState.dirty = true;
+}
+
+function setGroupsMembershipPolicy(policy) {
+    const eventType = groupsMembershipState.eventType;
+    const roomId = groupsMembershipState.roomId;
+    if (!roomId || !['inherit', 'custom', 'disabled'].includes(policy)) return;
+    captureGroupsMembershipPanel();
+    const current = getGroupsMembershipOverride(eventType, roomId);
+    if (current?.policy === 'custom') groupsMembershipState.customDrafts[eventType][roomId] = { ...current };
+    if (policy === 'inherit') removeGroupsMembershipOverride(eventType, roomId);
+    if (policy === 'custom') ensureGroupsMembershipCustomOverride(eventType, roomId);
+    if (policy === 'disabled') {
+        upsertGroupsMembershipOverride(eventType, {
+            stable_room_id: roomId,
+            policy: 'disabled',
+            content_type: 'text',
+            text: '',
+            image_path: '',
+            image_url: '',
+        });
+    }
+    groupsMembershipState.dirty = true;
+    groupsMembershipState.error = '';
+    renderGroupsView({ preserveScroll: true });
+}
+
+function setGroupsMembershipContentType(contentType) {
+    if (!['text', 'image'].includes(contentType)) return;
+    captureGroupsMembershipPanel();
+    const target = getGroupsMembershipEditTarget();
+    target.content_type = contentType;
+    if (groupsMembershipState.scope === 'room') {
+        groupsMembershipState.customDrafts[groupsMembershipState.eventType][groupsMembershipState.roomId] = { ...target };
+    }
+    groupsMembershipState.dirty = true;
+    groupsMembershipState.error = '';
+    renderGroupsView({ preserveScroll: true });
+}
+
+function updateGroupsMembershipText(value) {
+    const target = getGroupsMembershipEditTarget();
+    target.text = String(value || '');
+    if (groupsMembershipState.scope === 'room') {
+        groupsMembershipState.customDrafts[groupsMembershipState.eventType][groupsMembershipState.roomId] = { ...target };
+    }
+    groupsMembershipState.dirty = true;
+    groupsMembershipState.error = '';
+    const count = document.getElementById('groups-membership-text-count');
+    if (count) count.textContent = String(target.text.length);
+    const preview = document.getElementById('groups-membership-preview-text');
+    if (preview) preview.textContent = renderGroupsMembershipPreviewText(target, groupsMembershipState.eventType);
+    const error = document.getElementById('groups-membership-error');
+    if (error) error.textContent = '';
+}
+
+function insertGroupsMembershipPlaceholder(placeholder) {
+    const textarea = document.getElementById('groups-membership-text');
+    if (!textarea) return;
+    const token = String(placeholder || '');
+    const start = Number.isInteger(textarea.selectionStart) ? textarea.selectionStart : textarea.value.length;
+    const end = Number.isInteger(textarea.selectionEnd) ? textarea.selectionEnd : start;
+    textarea.value = textarea.value.slice(0, start) + token + textarea.value.slice(end);
+    textarea.focus();
+    textarea.setSelectionRange(start + token.length, start + token.length);
+    updateGroupsMembershipText(textarea.value);
+}
+
+function removeGroupsMembershipImage() {
+    const target = getGroupsMembershipEditTarget();
+    target.image_path = '';
+    target.image_url = '';
+    if (groupsMembershipState.scope === 'room') {
+        groupsMembershipState.customDrafts[groupsMembershipState.eventType][groupsMembershipState.roomId] = { ...target };
+    }
+    groupsMembershipState.dirty = true;
+    groupsMembershipState.error = '';
+    renderGroupsView({ preserveScroll: true });
+}
+
+async function uploadGroupsMembershipImage(input) {
+    const file = input?.files?.[0];
+    if (!file || groupsMembershipState.uploading) return;
+    const extra = getWechatGroupChannel()?.extra || {};
+    const maxBytes = Number(extra.membership_notices?.image_max_bytes || 5 * 1024 * 1024);
+    if (file.size > maxBytes) {
+        groupsMembershipState.error = t('groups_membership_error_image_size');
+        showGroupsStatus('groups_membership_error_image_size', true);
+        renderGroupsView({ preserveScroll: true });
+        return;
+    }
+    const context = {
+        eventType: groupsMembershipState.eventType,
+        scope: groupsMembershipState.scope,
+        roomId: groupsMembershipState.roomId,
+    };
+    groupsMembershipState.uploading = true;
+    groupsMembershipState.error = '';
+    renderGroupsView({ preserveScroll: true });
+    const form = new FormData();
+    form.append('file', file);
+    try {
+        const response = await fetch(extra.membership_notices?.upload_url || '/api/wechat-group/membership-image', {
+            method: 'POST',
+            body: form,
+        });
+        const data = await response.json();
+        if (data.status !== 'success') throw new Error(data.message || t('groups_membership_upload_failed'));
+        const target = getGroupsMembershipEditTarget(context);
+        target.image_path = String(data.path || '');
+        target.image_url = String(data.preview_url || '');
+        if (context.scope === 'room') {
+            groupsMembershipState.customDrafts[context.eventType][context.roomId] = { ...target };
+        }
+        groupsMembershipState.dirty = true;
+    } catch (error) {
+        groupsMembershipState.error = error.message || t('groups_membership_upload_failed');
+    } finally {
+        groupsMembershipState.uploading = false;
+        renderGroupsView({ preserveScroll: true });
+    }
+}
+
+function validateGroupsMembershipText(text, allowed, required) {
+    const value = String(text || '').trim();
+    if (required && !value) return 'groups_membership_error_text_required';
+    if (value.length > 500) return 'groups_membership_error_text_length';
+    if (!value) return '';
+    const matches = [...value.matchAll(/\{([^{}]*)\}/g)];
+    const allowedSet = new Set((allowed || []).map(String));
+    if (matches.some(match => !allowedSet.has(`{${match[1]}}`))) return 'groups_membership_error_placeholder';
+    const remaining = value.replace(/\{([^{}]*)\}/g, '');
+    if (remaining.includes('{') || remaining.includes('}')) return 'groups_membership_error_placeholder';
+    return '';
+}
+
+function failGroupsMembershipValidation(errorKey, eventType, scope, roomId = '') {
+    groupsMembershipState.eventType = eventType;
+    groupsMembershipState.scope = scope;
+    if (roomId) groupsMembershipState.roomId = roomId;
+    groupsMembershipState.error = t(errorKey);
+    groupsActiveSection = 'membership';
+    renderGroupsView({ preserveScroll: true });
+    requestAnimationFrame(() => {
+        const field = errorKey === 'groups_membership_error_image_required'
+            ? document.getElementById('groups-membership-image-button')
+            : document.getElementById('groups-membership-text');
+        if (field) field.focus();
+    });
+    showGroupsStatus(errorKey, true);
+}
+
+function readGroupsMembershipConfig(extra = {}, selectedRoomIds = []) {
+    const draft = ensureGroupsMembershipDraft(extra);
+    captureGroupsMembershipPanel();
+    const selected = new Set((selectedRoomIds || []).map(String).filter(id => id.startsWith('wgr_')));
+    const result = {};
+    for (const eventType of ['join', 'leave']) {
+        const event = draft[eventType];
+        const prefix = eventType === 'join' ? 'wechat_group_join_welcome' : 'wechat_group_leave_notice';
+        let errorKey = validateGroupsMembershipText(
+            event.text,
+            event.placeholders,
+            event.enabled && event.content_type === 'text',
+        );
+        if (!errorKey && event.enabled && event.content_type === 'image' && !event.image_path) {
+            errorKey = 'groups_membership_error_image_required';
+        }
+        if (errorKey) {
+            failGroupsMembershipValidation(errorKey, eventType, 'global');
+            return null;
+        }
+        const overrides = [];
+        for (const raw of event.room_overrides || []) {
+            const roomId = String(raw.stable_room_id || '');
+            if (!selected.has(roomId)) continue;
+            if (raw.policy === 'disabled') {
+                overrides.push({ stable_room_id: roomId, policy: 'disabled', content_type: 'text', text: '', image_path: '' });
+                continue;
+            }
+            if (raw.policy !== 'custom') continue;
+            errorKey = validateGroupsMembershipText(
+                raw.text,
+                event.placeholders,
+                raw.content_type === 'text',
+            );
+            if (!errorKey && raw.content_type === 'image' && !raw.image_path) {
+                errorKey = 'groups_membership_error_image_required';
+            }
+            if (errorKey) {
+                failGroupsMembershipValidation(errorKey, eventType, 'room', roomId);
+                return null;
+            }
+            overrides.push({
+                stable_room_id: roomId,
+                policy: 'custom',
+                content_type: raw.content_type === 'image' ? 'image' : 'text',
+                text: String(raw.text || '').trim(),
+                image_path: String(raw.image_path || ''),
+            });
+        }
+        result[`${prefix}_enabled`] = event.enabled === true;
+        result[`${prefix}_content_type`] = event.content_type === 'image' ? 'image' : 'text';
+        result[`${prefix}_text`] = String(event.text || '').trim();
+        result[`${prefix}_image_path`] = String(event.image_path || '');
+        result[`${prefix}_room_overrides`] = overrides;
+    }
+    return result;
 }
 
 function buildGroupsGithubCommitNotifyPanel(extra) {
@@ -14612,6 +15281,7 @@ function saveWechatGroupSettings() {
     const ch = channelsData.find(item => item.name === 'wechat_group');
     if (!ch) return;
     const extra = ch.extra || {};
+    captureGroupsMembershipPanel();
     const btn = document.getElementById('groups-save-btn') || document.getElementById('ch-save-wechat-group-extra');
     const prompt = document.getElementById('groups-persona-prompt')?.value ?? extra.persona?.prompt ?? '';
     const checkedRoomIds = Array.from(document.querySelectorAll('[data-groups-room-id]:checked:not(:disabled)')).map(el => el.dataset.groupsRoomId).filter(Boolean);
@@ -14636,6 +15306,8 @@ function saveWechatGroupSettings() {
         : persistedRoomIds;
     const persistedRuntimeByStableId = new Map(stableSnapshotIds.map((id, idx) => [id, String(extra.runtime_selected_room_ids?.[idx] || '')]));
     const selectedStableRoomIds = selectedIds;
+    const membershipConfig = readGroupsMembershipConfig(extra, selectedStableRoomIds);
+    if (!membershipConfig) return;
     const selectedRuntimeRoomIds = selectedStableRoomIds
         .map(id => runtimeRoomIdByStableId.get(String(id)) || persistedRuntimeByStableId.get(String(id)) || '')
         .filter(Boolean);
@@ -14683,6 +15355,7 @@ function saveWechatGroupSettings() {
                 wechat_group_stable_room_ids: selectedStableRoomIds,
                 wechat_group_room_ids: selectedRuntimeRoomIds,
                 wechat_group_names: selectedNames,
+                ...membershipConfig,
                 wechat_group_admin_members: (admin.members || []),
                 wechat_group_blacklist_members: (admin.blacklist_members || []),
                 wechat_group_admin_required_permissions: readGroupsAdminRequiredPermissions(admin.required_permissions || {}),
@@ -14787,8 +15460,8 @@ function saveWechatGroupSettings() {
                 loadChannelsView();
             }
         } else {
-            if (currentView === 'groups') showGroupsStatus('channels_save_error', true);
-            else showChannelStatus('wechat_group', 'channels_save_error', true);
+            if (currentView === 'groups') showGroupsStatus(data.message || 'channels_save_error', true);
+            else showChannelStatus('wechat_group', data.message || 'channels_save_error', true);
         }
     })
     .catch(() => {

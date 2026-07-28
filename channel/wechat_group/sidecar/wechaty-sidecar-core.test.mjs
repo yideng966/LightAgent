@@ -16,6 +16,8 @@ import {
   resolveContactDisplayName,
   resolveContactWechatId,
   buildRoomMemberPayload,
+  buildRoomJoinPayload,
+  buildRoomLeavePayload,
   memberPayloadMatchesQuery,
 } from './wechaty-sidecar-core.mjs'
 
@@ -429,6 +431,64 @@ test('buildRoomMemberPayload includes wechat id from raw Alias fallback', async 
     room_alias: '',
     wechat_id: 'yideng0803',
   })
+})
+
+test('buildRoomJoinPayload serializes multiple invitees, inviter, self, room, and event time', async () => {
+  const alice = { id: 'wxid_alice', name: () => 'Alice', payload: { weixin: 'alice_wechat' } }
+  const bob = { id: 'wxid_bob', name: () => 'Bob', payload: {} }
+  const inviter = { id: 'wxid_inviter', name: () => 'Inviter', payload: {} }
+  const self = { id: 'wxid_bot', name: () => 'LightBot', payload: { weixin: 'light_bot' } }
+  const aliases = new Map([
+    [alice.id, '阿狸'],
+    [bob.id, '小波'],
+  ])
+  const room = {
+    id: 'room@@runtime',
+    topic: async () => '测试群',
+    alias: async contact => aliases.get(contact.id) || '',
+  }
+
+  const payload = await buildRoomJoinPayload({
+    room,
+    invitees: [alice, bob],
+    inviter,
+    self,
+    date: new Date('2026-07-28T05:30:45.000Z'),
+  })
+
+  assert.equal(payload.timestamp, 1785216645)
+  assert.equal(payload.room_id, 'room@@runtime')
+  assert.equal(payload.room_name, '测试群')
+  assert.equal(payload.self_id, 'wxid_bot')
+  assert.equal(payload.self_name, 'LightBot')
+  assert.equal(payload.self_wechat_id, 'light_bot')
+  assert.deepEqual(payload.members.map(member => member.sender_id), ['wxid_alice', 'wxid_bob'])
+  assert.equal(payload.members[0].room_alias, '阿狸')
+  assert.equal(payload.inviter.sender_nickname, 'Inviter')
+})
+
+test('buildRoomLeavePayload tolerates missing contacts and uses the supplied fallback clock', async () => {
+  const leaver = { id: 'wxid_alice', name: () => 'Alice', payload: {} }
+  const room = {
+    id: 'room@@runtime',
+    topic: async () => { throw new Error('room unavailable') },
+    alias: async () => '',
+  }
+
+  const payload = await buildRoomLeavePayload({
+    room,
+    leavers: [null, leaver],
+    remover: null,
+    self: null,
+    date: null,
+    now: () => 1785217200000,
+  })
+
+  assert.equal(payload.timestamp, 1785217200)
+  assert.equal(payload.room_name, '')
+  assert.equal(payload.self_id, '')
+  assert.deepEqual(payload.members.map(member => member.sender_id), ['wxid_alice'])
+  assert.deepEqual(payload.remover, {})
 })
 
 test('memberPayloadMatchesQuery searches id nickname and wechat id', () => {

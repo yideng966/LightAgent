@@ -493,6 +493,82 @@ export async function buildRoomMemberPayload(contact, room = null, rawPayload = 
   }
 }
 
+function normalizeMembershipEventTimestamp(date, now = Date.now) {
+  let timestampMs = NaN
+  if (date instanceof Date) {
+    timestampMs = date.getTime()
+  } else if (typeof date === 'number' && Number.isFinite(date)) {
+    timestampMs = date > 100000000000 ? date : date * 1000
+  } else if (date) {
+    timestampMs = new Date(date).getTime()
+  }
+  if (!Number.isFinite(timestampMs)) {
+    const fallback = typeof now === 'function' ? now() : now
+    timestampMs = Number(fallback)
+  }
+  return Math.floor(timestampMs / 1000)
+}
+
+async function resolveRoomTopic(room) {
+  try {
+    return String(await room?.topic?.() || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+async function buildMembershipContactPayload(contact, room) {
+  if (!contact) return null
+  const payload = await buildRoomMemberPayload(contact, room)
+  return payload.sender_id ? payload : null
+}
+
+async function buildRoomMembershipPayload({
+  room = null,
+  members = [],
+  operator = null,
+  self = null,
+  date = null,
+  now = Date.now,
+  operatorField = 'operator',
+} = {}) {
+  const memberPayloads = []
+  for (const contact of Array.isArray(members) ? members : []) {
+    const payload = await buildMembershipContactPayload(contact, room)
+    if (payload) memberPayloads.push(payload)
+  }
+  const operatorPayload = await buildMembershipContactPayload(operator, room)
+  const selfPayload = await buildMembershipContactPayload(self, room)
+  return {
+    timestamp: normalizeMembershipEventTimestamp(date, now),
+    room_id: String(room?.id || '').trim(),
+    room_name: await resolveRoomTopic(room),
+    self_id: String(selfPayload?.sender_id || '').trim(),
+    self_name: String(selfPayload?.sender_nickname || '').trim(),
+    self_wechat_id: String(selfPayload?.wechat_id || '').trim(),
+    members: memberPayloads,
+    [operatorField]: operatorPayload || {},
+  }
+}
+
+export async function buildRoomJoinPayload(options = {}) {
+  return buildRoomMembershipPayload({
+    ...options,
+    members: options.invitees,
+    operator: options.inviter,
+    operatorField: 'inviter',
+  })
+}
+
+export async function buildRoomLeavePayload(options = {}) {
+  return buildRoomMembershipPayload({
+    ...options,
+    members: options.leavers,
+    operator: options.remover,
+    operatorField: 'remover',
+  })
+}
+
 export function buildMessageIdentityPayload({
   roomId = '',
   roomName = '',

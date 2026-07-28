@@ -3,6 +3,7 @@
 import re
 import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 
 from bridge.context import ContextType
@@ -23,6 +24,16 @@ from channel.wechat_group.wechat_group_context_service import WechatGroupContext
 from channel.wechat_group.wechat_group_emotion_service import WechatGroupEmotionService
 from channel.wechat_group.wechat_group_identity_service import WechatGroupIdentityService
 from channel.wechat_group.wechat_group_message import WechatGroupMessage
+from channel.wechat_group.wechat_group_membership_notice import (
+    WECHAT_GROUP_MEMBERSHIP_CONTENT_IMAGE,
+    WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN,
+    WECHAT_GROUP_MEMBERSHIP_EVENT_LEAVE,
+    build_membership_notice_template_values,
+    render_membership_notice_template,
+    resolve_membership_notice_image_path,
+    resolve_wechat_group_membership_notice,
+    validate_membership_notice_image_file,
+)
 from channel.wechat_group.wechat_group_multimodal_context_service import (
     WechatGroupMultimodalContextService,
     _looks_like_image_reference_question,
@@ -86,6 +97,8 @@ WECHAT_GROUP_DEFAULT_IMAGE_REPLY_QUESTION = "请根据这张图片作出简短�
 WECHAT_GROUP_AGENT_HISTORY_FRESH = "fresh"
 WECHAT_GROUP_AGENT_HISTORY_INTERACTIVE = "interactive_session"
 WECHAT_GROUP_AGENT_HISTORY_OBSERVE_ONLY = "observe_only"
+WECHAT_GROUP_MEMBERSHIP_EVENT_TTL_SECONDS = 600
+WECHAT_GROUP_MEMBERSHIP_EVENT_CACHE_SIZE = 512
 WECHAT_GROUP_TRANSIENT_MODEL_ERROR_FALLBACK = "别@我了哥，没Token了。"
 _WECHAT_GROUP_TRANSIENT_MODEL_STATUS_RE = re.compile(
     r"(?:status|http)\s*[:=]?\s*(?:408|429|500|502|503|504)\b",
@@ -311,6 +324,8 @@ class WechatGroupChannel(ChatChannel):
         self._login_session_room_ids_by_name = {}
         self._login_session_room_ids_lock = threading.RLock()
         self._received_msgs = ExpiredDict(60 * 60 * 8)
+        self._membership_events = OrderedDict()
+        self._membership_events_lock = threading.Lock()
         self.free_reply_state = WechatGroupFreeReplyStateStore()
         self._free_reply_scorer = WechatGroupFreeReplyScorer()
         self.free_reply_judge = WechatGroupFreeReplyJudge(scorer=self._free_reply_scorer)
@@ -446,6 +461,10 @@ class WechatGroupChannel(ChatChannel):
     def consume_sidecar_event(self, event: SidecarEvent) -> bool:
         if event.type == SidecarEventType.MESSAGE:
             return self._consume_message(event)
+        if event.type == SidecarEventType.ROOM_JOIN:
+            return self._consume_membership_event(event, WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN)
+        if event.type == SidecarEventType.ROOM_LEAVE:
+            return self._consume_membership_event(event, WECHAT_GROUP_MEMBERSHIP_EVENT_LEAVE)
         if event.type == SidecarEventType.QR:
             self.status = self.STATUS_QR_READY
             self.last_error = ""
@@ -495,6 +514,203 @@ class WechatGroupChannel(ChatChannel):
             logger.error("[wechat_group] sidecar error: {}".format(event.payload))
             return True
         return False
+
+    def _consume_membership_event(self, event: SidecarEvent, event_type: str) -> bool:
+        try:
+            runtime_room_id = str(event.get("room_id") or "").strip()
+            members = self._normalize_room_members(event.get("members", []))
+            if not runtime_room_id or not members:
+                logger.warning("[wechat_group] membership event skipped: missing room or members")
+                return False
+
+            self_id = str(event.get("self_id") or self.user_id or "").strip()
+            member_ids = [str(member.get("sender_id") or "").strip() for member in members]
+            if event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_LEAVE and self_id in member_ids:
+                logger.info("[wechat_group] self leave observed; notification skipped")
+                return True
+            if event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN and self_id:
+                members = [member for member in members if member.get("sender_id") != self_id]
+                if not members:
+                    logger.info("[wechat_group] self join observed; welcome skipped")
+                    return True
+
+            operator_key = "inviter" if event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN else "remover"
+            operator = self._normalize_membership_operator(event.get(operator_key))
+            if self._is_duplicate_membership_event(
+                event_type,
+                runtime_room_id,
+                members,
+                operator,
+                event.get("timestamp"),
+            ):
+                logger.debug("[wechat_group] duplicate membership event skipped")
+                return False
+
+            identity = self._resolve_membership_event_identity(event, runtime_room_id)
+            if not identity:
+                return True
+            stable_room_id = identity["stable_room_id"]
+            selected_rooms = {
+                str(room_id or "").strip()
+                for room_id in (conf().get("wechat_group_stable_room_ids", []) or [])
+                if str(room_id or "").strip().startswith("wgr_")
+            }
+            if stable_room_id not in selected_rooms:
+                logger.info("[wechat_group] membership event skipped: stable room is not selected")
+                return True
+
+            members = [
+                self._enrich_membership_contact(identity["service"], stable_room_id, member)
+                for member in members
+            ]
+            operator = self._enrich_membership_contact(
+                identity["service"],
+                stable_room_id,
+                operator,
+            ) if operator else {}
+            notice = resolve_wechat_group_membership_notice(event_type, stable_room_id, conf())
+            if not notice:
+                return True
+
+            if notice["content_type"] == WECHAT_GROUP_MEMBERSHIP_CONTENT_IMAGE:
+                image_path = resolve_membership_notice_image_path(
+                    conf().get("agent_workspace", "~/lightagent") or "~/lightagent",
+                    notice.get("image_path"),
+                )
+                validate_membership_notice_image_file(image_path)
+                self.client.send_image(runtime_room_id, image_path)
+            else:
+                payload = dict(event.payload)
+                payload["members"] = members
+                payload[operator_key] = operator
+                values = build_membership_notice_template_values(event_type, payload)
+                text = render_membership_notice_template(notice.get("text"), event_type, values)
+                mention_ids = (
+                    [member["sender_id"] for member in members if member.get("sender_id")]
+                    if event_type == WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN
+                    else []
+                )
+                self.client.send_text(runtime_room_id, text, mention_ids=mention_ids)
+            logger.info(
+                "[wechat_group] membership notice queued: event={} stable_room_id={} "
+                "member_count={} scope={}".format(
+                    event_type,
+                    stable_room_id,
+                    len(members),
+                    notice.get("source") or "global",
+                )
+            )
+            return True
+        except Exception as exc:
+            logger.warning("[wechat_group] membership event failed: {}".format(exc))
+            return True
+
+    @staticmethod
+    def _normalize_membership_operator(value):
+        if not isinstance(value, dict):
+            return {}
+        normalized = WechatGroupChannel._normalize_room_members([value])
+        return normalized[0] if normalized else {}
+
+    def _is_duplicate_membership_event(
+        self,
+        event_type,
+        runtime_room_id,
+        members,
+        operator,
+        timestamp,
+    ) -> bool:
+        member_ids = tuple(sorted(
+            str(member.get("sender_id") or "").strip()
+            for member in members
+            if str(member.get("sender_id") or "").strip()
+        ))
+        operator_id = str((operator or {}).get("sender_id") or "").strip()
+        try:
+            event_timestamp = int(float(timestamp))
+        except (TypeError, ValueError):
+            event_timestamp = int(time.time())
+        cache_key = (event_type, runtime_room_id, member_ids, operator_id, event_timestamp)
+        now = time.time()
+        with self._membership_events_lock:
+            while self._membership_events:
+                _, created_at = next(iter(self._membership_events.items()))
+                if now - created_at <= WECHAT_GROUP_MEMBERSHIP_EVENT_TTL_SECONDS:
+                    break
+                self._membership_events.popitem(last=False)
+            if cache_key in self._membership_events:
+                self._membership_events.move_to_end(cache_key)
+                return True
+            self._membership_events[cache_key] = now
+            while len(self._membership_events) > WECHAT_GROUP_MEMBERSHIP_EVENT_CACHE_SIZE:
+                self._membership_events.popitem(last=False)
+        return False
+
+    def _resolve_membership_event_identity(self, event, runtime_room_id):
+        runtime_self_id = str(event.get("self_id") or self.user_id or "").strip()
+        self_name = str(event.get("self_name") or self.name or "").strip()
+        if not runtime_self_id:
+            logger.warning("[wechat_group] membership event skipped: stable account cannot be resolved")
+            return {}
+        try:
+            service = self.identity_service or WechatGroupIdentityService()
+            self.identity_service = service
+            account = service.resolve_account(
+                runtime_self_id,
+                self_name,
+                get_wechat_group_sidecar_memory_path(),
+                {"wechat_id": str(event.get("self_wechat_id") or "").strip()},
+            )
+            room = self._resolve_room_with_session_name_recovery(
+                service,
+                account.stable_id,
+                runtime_room_id,
+                str(event.get("room_name") or "").strip(),
+                runtime_self_id,
+                {},
+            )
+            if (
+                account.status != "confirmed"
+                or account.requires_confirmation
+                or room.status != "confirmed"
+                or room.requires_confirmation
+                or not str(room.stable_id or "").startswith("wgr_")
+            ):
+                logger.warning("[wechat_group] membership event skipped: stable identity is unconfirmed")
+                return {}
+            return {"service": service, "stable_room_id": str(room.stable_id)}
+        except Exception as exc:
+            logger.warning("[wechat_group] membership event identity resolution failed: {}".format(exc))
+            return {}
+
+    def _enrich_membership_contact(self, service, stable_room_id, member):
+        item = dict(member or {})
+        runtime_sender_id = str(item.get("sender_id") or "").strip()
+        if not runtime_sender_id:
+            return item
+        nickname = str(item.get("sender_nickname") or "").strip()
+        room_alias = str(item.get("room_alias") or "").strip()
+        visible_name = room_alias or nickname
+        if self._looks_like_raw_member_name(visible_name, runtime_sender_id):
+            visible_name = ""
+        try:
+            resolution = service.resolve_member(
+                stable_room_id,
+                runtime_sender_id,
+                visible_name,
+                room_alias,
+                {"wechat_id": str(item.get("wechat_id") or "").strip()},
+            )
+            resolved_name = str(resolution.display_name or "").strip()
+            item["stable_member_id"] = str(resolution.stable_id or "")
+            item["display_name"] = visible_name or (
+                "" if self._looks_like_raw_member_name(resolved_name, runtime_sender_id) else resolved_name
+            )
+        except Exception:
+            item["stable_member_id"] = ""
+            item["display_name"] = visible_name
+            logger.debug("[wechat_group] membership member identity unresolved")
+        return item
 
     def _enrich_rooms_with_stable_identity(self, rooms):
         normalized = [dict(room) for room in (rooms or []) if isinstance(room, dict)]

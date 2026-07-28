@@ -4,6 +4,7 @@ import sys
 import tempfile
 import types
 import unittest
+from io import BytesIO
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -37,6 +38,16 @@ class WechatGroupWebTest(unittest.TestCase):
             "channel_type": conf().get("channel_type"),
             "wechat_group_room_ids": conf().get("wechat_group_room_ids"),
             "wechat_group_stable_room_ids": conf().get("wechat_group_stable_room_ids"),
+            "wechat_group_join_welcome_enabled": conf().get("wechat_group_join_welcome_enabled"),
+            "wechat_group_join_welcome_content_type": conf().get("wechat_group_join_welcome_content_type"),
+            "wechat_group_join_welcome_text": conf().get("wechat_group_join_welcome_text"),
+            "wechat_group_join_welcome_image_path": conf().get("wechat_group_join_welcome_image_path"),
+            "wechat_group_join_welcome_room_overrides": conf().get("wechat_group_join_welcome_room_overrides"),
+            "wechat_group_leave_notice_enabled": conf().get("wechat_group_leave_notice_enabled"),
+            "wechat_group_leave_notice_content_type": conf().get("wechat_group_leave_notice_content_type"),
+            "wechat_group_leave_notice_text": conf().get("wechat_group_leave_notice_text"),
+            "wechat_group_leave_notice_image_path": conf().get("wechat_group_leave_notice_image_path"),
+            "wechat_group_leave_notice_room_overrides": conf().get("wechat_group_leave_notice_room_overrides"),
             "wechat_group_names": conf().get("wechat_group_names"),
             "github_commit_notify_enabled": conf().get("github_commit_notify_enabled"),
             "github_commit_notify_repository": conf().get("github_commit_notify_repository"),
@@ -171,6 +182,7 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_sticker_cooldown_seconds": conf().get("wechat_group_sticker_cooldown_seconds"),
             "tools": conf().get("tools"),
             "skills": conf().get("skills"),
+            "agent_workspace": conf().get("agent_workspace"),
         }
 
     def tearDown(self):
@@ -1014,6 +1026,192 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual(0.93, conf()["wechat_group_learning_auto_apply_threshold"])
         self.assertEqual(720, conf()["wechat_group_learning_max_interval_minutes"])
         self.assertEqual(6, conf()["wechat_group_learning_history_max_batches"])
+
+    def test_channels_api_exposes_membership_notice_config_without_absolute_paths(self):
+        from channel.web.web_channel import ChannelsHandler
+        from config import conf
+
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_join_welcome_enabled"] = True
+        conf()["wechat_group_join_welcome_image_path"] = (
+            "images/wechat_group_membership/welcome.png"
+        )
+        conf()["wechat_group_join_welcome_room_overrides"] = []
+
+        extra = ChannelsHandler._wechat_group_extra()
+        membership = extra["membership_notices"]
+
+        self.assertTrue(membership["join"]["enabled"])
+        self.assertIn("{inviter_name}", membership["join"]["placeholders"])
+        self.assertNotIn("{remover_name}", membership["join"]["placeholders"])
+        self.assertEqual(
+            membership["join"]["image_url"],
+            "/api/wechat-group/membership-image?path="
+            "images%2Fwechat_group_membership%2Fwelcome.png",
+        )
+        self.assertNotIn(str(Path.home()), json.dumps(membership, ensure_ascii=False))
+
+    def test_channels_save_membership_override_for_newly_selected_stable_room(self):
+        from channel.web.web_channel import ChannelsHandler
+        from config import conf
+
+        handler = ChannelsHandler()
+        body = {
+            "action": "save",
+            "channel": "wechat_group",
+            "config": {
+                "wechat_group_stable_room_ids": ["wgr_new"],
+                "wechat_group_join_welcome_enabled": True,
+                "wechat_group_join_welcome_content_type": "text",
+                "wechat_group_join_welcome_text": "欢迎 {member_names}",
+                "wechat_group_join_welcome_image_path": "",
+                "wechat_group_join_welcome_room_overrides": [{
+                    "stable_room_id": "wgr_new",
+                    "policy": "custom",
+                    "content_type": "text",
+                    "text": "欢迎加入 {room_name}，邀请人：{inviter_name}",
+                    "image_path": "",
+                }],
+                "wechat_group_leave_notice_enabled": True,
+                "wechat_group_leave_notice_content_type": "text",
+                "wechat_group_leave_notice_text": "{member_names} 已离开群聊。",
+                "wechat_group_leave_notice_image_path": "",
+                "wechat_group_leave_notice_room_overrides": [],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")), \
+                patch("channel.web.web_channel.get_data_root", return_value=tmpdir):
+            result = json.loads(handler.POST())
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(["wgr_new"], conf()["wechat_group_stable_room_ids"])
+        self.assertEqual(
+            "wgr_new",
+            conf()["wechat_group_join_welcome_room_overrides"][0]["stable_room_id"],
+        )
+
+    def test_channels_save_membership_rejects_cross_event_placeholder(self):
+        from channel.web.web_channel import ChannelsHandler
+        from config import conf
+
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        original_text = conf().get("wechat_group_join_welcome_text", "欢迎加入群聊！")
+        handler = ChannelsHandler()
+        body = {
+            "action": "save",
+            "channel": "wechat_group",
+            "config": {
+                "wechat_group_join_welcome_enabled": True,
+                "wechat_group_join_welcome_content_type": "text",
+                "wechat_group_join_welcome_text": "欢迎 {remover_name}",
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")), \
+                patch("channel.web.web_channel.get_data_root", return_value=tmpdir):
+            result = json.loads(handler.POST())
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("占位符", result["message"])
+        self.assertEqual(
+            original_text,
+            conf().get("wechat_group_join_welcome_text", "欢迎加入群聊！"),
+        )
+
+    def test_removing_selected_room_cleans_both_membership_overrides(self):
+        from channel.web.web_channel import ChannelsHandler
+        from config import conf
+
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_join_welcome_room_overrides"] = [{
+            "stable_room_id": "wgr_room",
+            "policy": "disabled",
+        }]
+        conf()["wechat_group_leave_notice_room_overrides"] = [{
+            "stable_room_id": "wgr_room",
+            "policy": "disabled",
+        }]
+
+        applied = ChannelsHandler._apply_wechat_group_config({
+            "wechat_group_stable_room_ids": [],
+        })
+
+        self.assertEqual([], applied["wechat_group_join_welcome_room_overrides"])
+        self.assertEqual([], applied["wechat_group_leave_notice_room_overrides"])
+        self.assertEqual([], conf()["wechat_group_join_welcome_room_overrides"])
+        self.assertEqual([], conf()["wechat_group_leave_notice_room_overrides"])
+
+    def test_membership_image_upload_hashes_content_and_preview_reads_only_scoped_asset(self):
+        from PIL import Image
+        from channel.web.web_channel import WechatGroupMembershipImageHandler
+        from config import conf
+
+        output = BytesIO()
+        Image.new("RGB", (3, 2), "white").save(output, format="PNG")
+        uploaded = types.SimpleNamespace(
+            filename="welcome.png",
+            file=BytesIO(output.getvalue()),
+        )
+        handler = WechatGroupMembershipImageHandler()
+        with tempfile.TemporaryDirectory() as workspace, \
+                patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel._raw_web_input", return_value={"file": uploaded}):
+            conf()["agent_workspace"] = workspace
+            result = json.loads(handler.POST())
+            self.assertEqual("success", result["status"])
+            self.assertTrue(result["path"].startswith("images/wechat_group_membership/"))
+            self.assertNotIn(workspace, json.dumps(result))
+            stored = os.path.join(workspace, *result["path"].split("/"))
+            self.assertTrue(os.path.isfile(stored))
+
+            with patch("channel.web.web_channel.web.input", return_value=types.SimpleNamespace(path=result["path"])), \
+                    patch("channel.web.web_channel.web.header"):
+                content = handler.GET()
+            self.assertEqual(output.getvalue(), content)
+
+    def test_membership_image_upload_rejects_svg_and_fake_extension(self):
+        from channel.web.web_channel import WechatGroupMembershipImageHandler
+        from config import conf
+
+        handler = WechatGroupMembershipImageHandler()
+        with tempfile.TemporaryDirectory() as workspace, \
+                patch("channel.web.web_channel._require_auth"):
+            conf()["agent_workspace"] = workspace
+            for filename, content in (
+                ("image.svg", b"<svg></svg>"),
+                ("image.png", b"not an image"),
+            ):
+                uploaded = types.SimpleNamespace(filename=filename, file=BytesIO(content))
+                with self.subTest(filename=filename), \
+                        patch("channel.web.web_channel._raw_web_input", return_value={"file": uploaded}):
+                    result = json.loads(handler.POST())
+                    self.assertEqual("error", result["status"])
+
+    def test_membership_image_preview_rejects_path_traversal(self):
+        from channel.web.web_channel import WechatGroupMembershipImageHandler
+
+        handler = WechatGroupMembershipImageHandler()
+        with patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.web.input", return_value=types.SimpleNamespace(path="../secret.png")), \
+                patch("channel.web.web_channel.web.notfound", return_value=RuntimeError("not found")):
+            with self.assertRaisesRegex(RuntimeError, "not found"):
+                handler.GET()
+
+    def test_membership_notice_console_exposes_complete_editor_and_save_contract(self):
+        console_js = Path("channel/web/static/js/console.js").read_text(encoding="utf-8")
+
+        self.assertIn("groups_nav_membership: '进退群消息'", console_js)
+        self.assertIn("buildGroupsMembershipPanel(extra)", console_js)
+        self.assertIn("insertGroupsMembershipPlaceholder", console_js)
+        self.assertIn("/api/wechat-group/membership-image", console_js)
+        self.assertIn("class=\"sm:hidden w-full min-h-11", console_js)
+        self.assertIn("'wechat_group_join_welcome'", console_js)
+        self.assertIn("'wechat_group_leave_notice'", console_js)
+        for suffix in ("_enabled", "_content_type", "_text", "_image_path", "_room_overrides"):
+            self.assertIn("`${prefix}" + suffix + "`", console_js)
 
     def test_channels_save_wechat_group_stable_room_config(self):
         from channel.web.web_channel import ChannelsHandler

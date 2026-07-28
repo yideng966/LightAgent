@@ -7,6 +7,8 @@ import {
   buildMessageIdentityPayload,
   buildMediaFilePath,
   buildRoomMemberPayload,
+  buildRoomJoinPayload,
+  buildRoomLeavePayload,
   detectMessageMediaType,
   downloadStickerMediaWithFallback,
   extractQuotedMessageFromRawPayload,
@@ -102,6 +104,53 @@ async function listRoomMembers(command) {
     request_id: command.request_id || '',
     members,
   })
+}
+
+async function refreshRoomsAfterSelfMembershipChange(payload) {
+  const selfId = String(payload?.self_id || '').trim()
+  const selfChanged = selfId && (payload?.members || []).some(member => (
+    String(member?.sender_id || '').trim() === selfId
+  ))
+  if (!selfChanged) return
+  try {
+    await listRooms()
+  } catch (error) {
+    emit('error', {
+      message: `failed to refresh rooms after membership change: ${error.message || String(error)}`,
+    })
+  }
+}
+
+async function handleRoomJoin(room, inviteeList, inviter, date) {
+  try {
+    const payload = await buildRoomJoinPayload({
+      room,
+      invitees: inviteeList,
+      inviter,
+      self: state.self,
+      date,
+    })
+    emit('room_join', payload)
+    await refreshRoomsAfterSelfMembershipChange(payload)
+  } catch (error) {
+    emit('error', { message: `failed to handle room-join: ${error.message || String(error)}` })
+  }
+}
+
+async function handleRoomLeave(room, leaverList, remover, date) {
+  try {
+    const payload = await buildRoomLeavePayload({
+      room,
+      leavers: leaverList,
+      remover,
+      self: state.self,
+      date,
+    })
+    emit('room_leave', payload)
+    await refreshRoomsAfterSelfMembershipChange(payload)
+  } catch (error) {
+    emit('error', { message: `failed to handle room-leave: ${error.message || String(error)}` })
+  }
 }
 
 async function downloadMessageMedia(message, roomId, mediaType, rawContent = '') {
@@ -237,6 +286,8 @@ async function start() {
     .on('logout', user => {
       emit('status', { status: 'idle', self_id: user.id, self_name: user.name() })
     })
+    .on('room-join', handleRoomJoin)
+    .on('room-leave', handleRoomLeave)
     .on('message', handleMessage)
     .on('error', error => {
       emit('error', { message: error.message || String(error) })

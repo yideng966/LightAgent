@@ -91,6 +91,16 @@ class WechatGroupChannelTest(unittest.TestCase):
         self._original_config = {
             "wechat_group_room_ids": conf().get("wechat_group_room_ids"),
             "wechat_group_stable_room_ids": conf().get("wechat_group_stable_room_ids"),
+            "wechat_group_join_welcome_enabled": conf().get("wechat_group_join_welcome_enabled"),
+            "wechat_group_join_welcome_content_type": conf().get("wechat_group_join_welcome_content_type"),
+            "wechat_group_join_welcome_text": conf().get("wechat_group_join_welcome_text"),
+            "wechat_group_join_welcome_image_path": conf().get("wechat_group_join_welcome_image_path"),
+            "wechat_group_join_welcome_room_overrides": conf().get("wechat_group_join_welcome_room_overrides"),
+            "wechat_group_leave_notice_enabled": conf().get("wechat_group_leave_notice_enabled"),
+            "wechat_group_leave_notice_content_type": conf().get("wechat_group_leave_notice_content_type"),
+            "wechat_group_leave_notice_text": conf().get("wechat_group_leave_notice_text"),
+            "wechat_group_leave_notice_image_path": conf().get("wechat_group_leave_notice_image_path"),
+            "wechat_group_leave_notice_room_overrides": conf().get("wechat_group_leave_notice_room_overrides"),
             "wechat_group_names": conf().get("wechat_group_names"),
             "wechat_group_sidecar_memory_path": conf().get("wechat_group_sidecar_memory_path"),
             "wechat_group_admin_sender_ids": conf().get("wechat_group_admin_sender_ids"),
@@ -464,6 +474,179 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual("wgr_room", channel.rooms[0]["stable_room_id"])
         self.assertEqual("legacy_imported", channel.rooms[0]["binding_status"])
         self.assertTrue(channel.rooms[0]["identity_requires_confirmation"])
+
+    @staticmethod
+    def _membership_identity_service(stable_room_id="wgr_room", confirmed=True):
+        service = Mock()
+        service.resolve_account.return_value = Mock(
+            stable_id="wga_account",
+            status="confirmed" if confirmed else "candidate",
+            requires_confirmation=not confirmed,
+        )
+        service.resolve_room.return_value = Mock(
+            stable_id=stable_room_id,
+            status="confirmed" if confirmed else "candidate",
+            requires_confirmation=not confirmed,
+        )
+
+        def resolve_member(_room_id, runtime_sender_id, display_name, _room_alias, _metadata):
+            return Mock(
+                stable_id="wgm_" + runtime_sender_id.replace("wxid_", ""),
+                display_name=display_name,
+                status="confirmed",
+                requires_confirmation=False,
+            )
+
+        service.resolve_member.side_effect = resolve_member
+        return service
+
+    def test_room_join_sends_one_rendered_text_with_all_invitee_mentions(self):
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_join_welcome_enabled"] = True
+        conf()["wechat_group_join_welcome_content_type"] = "text"
+        conf()["wechat_group_join_welcome_text"] = (
+            "欢迎 {member_names} 加入 {room_name}（{member_count}人），邀请人：{inviter_name}"
+        )
+        conf()["wechat_group_join_welcome_room_overrides"] = []
+        client = FakeClient()
+        archive = Mock()
+        channel = WechatGroupChannel(
+            client=client,
+            archive=archive,
+            identity_service=self._membership_identity_service(),
+        )
+
+        accepted = channel.consume_sidecar_event(parse_sidecar_event({
+            "type": SidecarEventType.ROOM_JOIN,
+            "timestamp": 1785217200,
+            "room_id": "room@@abc",
+            "room_name": "测试群",
+            "self_id": "wxid_bot",
+            "self_name": "LightBot",
+            "members": [
+                {"sender_id": "wxid_alice", "sender_nickname": "Alice"},
+                {"sender_id": "wxid_bob", "sender_nickname": "Bob", "room_alias": "小波"},
+            ],
+            "inviter": {"sender_id": "wxid_inviter", "sender_nickname": "邀请人小王"},
+        }))
+
+        self.assertTrue(accepted)
+        self.assertEqual(client.commands, [(
+            "send_text",
+            "room@@abc",
+            "欢迎 Alice、小波 加入 测试群（2人），邀请人：邀请人小王",
+            ["wxid_alice", "wxid_bob"],
+        )])
+        self.assertEqual(archive.method_calls, [])
+
+    def test_room_leave_does_not_mention_leavers_and_duplicate_is_skipped(self):
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_leave_notice_enabled"] = True
+        conf()["wechat_group_leave_notice_content_type"] = "text"
+        conf()["wechat_group_leave_notice_text"] = "{member_names} 已离开，由 {remover_name} 操作。"
+        conf()["wechat_group_leave_notice_room_overrides"] = []
+        client = FakeClient()
+        channel = WechatGroupChannel(
+            client=client,
+            identity_service=self._membership_identity_service(),
+        )
+        event = parse_sidecar_event({
+            "type": SidecarEventType.ROOM_LEAVE,
+            "timestamp": 1785217200,
+            "room_id": "room@@abc",
+            "room_name": "测试群",
+            "self_id": "wxid_bot",
+            "self_name": "LightBot",
+            "members": [{"sender_id": "wxid_alice", "sender_nickname": "Alice"}],
+            "remover": {"sender_id": "wxid_bot", "sender_nickname": "LightBot"},
+        })
+
+        self.assertTrue(channel.consume_sidecar_event(event))
+        self.assertFalse(channel.consume_sidecar_event(event))
+        self.assertEqual(client.commands, [(
+            "send_text",
+            "room@@abc",
+            "Alice 已离开，由 LightBot 操作。",
+            [],
+        )])
+
+    def test_self_membership_events_never_send_notifications(self):
+        conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+        conf()["wechat_group_join_welcome_enabled"] = True
+        conf()["wechat_group_leave_notice_enabled"] = True
+        client = FakeClient()
+        identity_service = self._membership_identity_service()
+        channel = WechatGroupChannel(client=client, identity_service=identity_service)
+
+        for event_type in (SidecarEventType.ROOM_JOIN, SidecarEventType.ROOM_LEAVE):
+            with self.subTest(event_type=event_type):
+                self.assertTrue(channel.consume_sidecar_event(parse_sidecar_event({
+                    "type": event_type,
+                    "timestamp": 1785217200,
+                    "room_id": "room@@abc",
+                    "room_name": "测试群",
+                    "self_id": "wxid_bot",
+                    "self_name": "LightBot",
+                    "members": [{"sender_id": "wxid_bot", "sender_nickname": "LightBot"}],
+                    "inviter": {},
+                    "remover": {},
+                })))
+
+        self.assertEqual(client.commands, [])
+        identity_service.resolve_account.assert_not_called()
+
+    def test_membership_event_for_unselected_stable_room_is_ignored(self):
+        conf()["wechat_group_stable_room_ids"] = ["wgr_selected"]
+        conf()["wechat_group_join_welcome_enabled"] = True
+        client = FakeClient()
+        channel = WechatGroupChannel(
+            client=client,
+            identity_service=self._membership_identity_service(stable_room_id="wgr_other"),
+        )
+
+        self.assertTrue(channel.consume_sidecar_event(parse_sidecar_event({
+            "type": SidecarEventType.ROOM_JOIN,
+            "timestamp": 1785217200,
+            "room_id": "room@@abc",
+            "room_name": "测试群",
+            "self_id": "wxid_bot",
+            "members": [{"sender_id": "wxid_alice", "sender_nickname": "Alice"}],
+            "inviter": {},
+        })))
+
+        self.assertEqual(client.commands, [])
+
+    def test_room_join_image_uses_validated_workspace_asset(self):
+        from PIL import Image
+
+        with tempfile.TemporaryDirectory() as workspace:
+            relative_path = "images/wechat_group_membership/welcome.png"
+            absolute_path = os.path.join(workspace, *relative_path.split("/"))
+            os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
+            Image.new("RGB", (2, 2), "white").save(absolute_path, format="PNG")
+            conf()["agent_workspace"] = workspace
+            conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
+            conf()["wechat_group_join_welcome_enabled"] = True
+            conf()["wechat_group_join_welcome_content_type"] = "image"
+            conf()["wechat_group_join_welcome_image_path"] = relative_path
+            conf()["wechat_group_join_welcome_room_overrides"] = []
+            client = FakeClient()
+            channel = WechatGroupChannel(
+                client=client,
+                identity_service=self._membership_identity_service(),
+            )
+
+            self.assertTrue(channel.consume_sidecar_event(parse_sidecar_event({
+                "type": SidecarEventType.ROOM_JOIN,
+                "timestamp": 1785217200,
+                "room_id": "room@@abc",
+                "room_name": "测试群",
+                "self_id": "wxid_bot",
+                "members": [{"sender_id": "wxid_alice", "sender_nickname": "Alice"}],
+                "inviter": {},
+            })))
+
+            self.assertEqual(client.commands, [("send_image", "room@@abc", os.path.realpath(absolute_path))])
 
     @staticmethod
     def _build_identity_message(message_id, room_id, sender_id):

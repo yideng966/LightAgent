@@ -14,6 +14,7 @@ import time
 import uuid
 from queue import Queue, Empty
 from typing import List, Tuple
+from urllib.parse import quote
 
 import web
 
@@ -25,6 +26,18 @@ from channel.wechat_group.wechat_group_persona import (
     get_wechat_group_persona_config,
     normalize_wechat_group_persona_prompt,
     resolve_wechat_group_persona_preset_id,
+)
+from channel.wechat_group.wechat_group_membership_notice import (
+    WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN,
+    WECHAT_GROUP_MEMBERSHIP_EVENT_LEAVE,
+    WECHAT_GROUP_MEMBERSHIP_IMAGE_DIR,
+    WECHAT_GROUP_MEMBERSHIP_IMAGE_EXTENSIONS,
+    WECHAT_GROUP_MEMBERSHIP_IMAGE_MAX_BYTES,
+    membership_notice_placeholders,
+    normalize_wechat_group_membership_notice_config,
+    resolve_membership_notice_image_path,
+    validate_membership_notice_image_bytes,
+    validate_membership_notice_image_file,
 )
 from channel.wechat_group.wechat_group_free_reply import (
     get_wechat_group_free_reply_config,
@@ -1316,6 +1329,7 @@ class WebChannel(ChatChannel):
             '/api/github/webhook', 'GitHubWebhookHandler',
             '/api/weixin/qrlogin', 'WeixinQrHandler',
             '/api/wechat_group/qrlogin', 'WechatGroupQrHandler',
+            '/api/wechat-group/membership-image', 'WechatGroupMembershipImageHandler',
             '/api/wechat-group/identity/(.*)', 'WechatGroupIdentityHandler',
             '/api/wechat-group/members', 'WechatGroupMembersHandler',
             '/api/wechat-group/memories/(.*)', 'WechatGroupMemoriesHandler',
@@ -4425,6 +4439,11 @@ class ChannelsHandler:
         runtime_room_ids = conf().get("wechat_group_room_ids", []) or []
         environment_secret_configured = bool(os.environ.get(GITHUB_WEBHOOK_SECRET_ENV))
         local_secret_configured = bool(conf().get("github_commit_notify_webhook_secret"))
+        membership_config = normalize_wechat_group_membership_notice_config(
+            conf(),
+            selected_room_ids=stable_room_ids,
+            strict=False,
+        )
         secret_source = (
             "environment"
             if environment_secret_configured
@@ -4437,6 +4456,7 @@ class ChannelsHandler:
             "stable_selected_room_ids": stable_room_ids,
             "runtime_selected_room_ids": runtime_room_ids,
             "selected_room_names": conf().get("wechat_group_names", []) or [],
+            "membership_notices": cls._wechat_group_membership_notice_extra(membership_config),
             "persona": {
                 "preset_id": persona["preset_id"],
                 "prompt": persona["prompt"],
@@ -4609,6 +4629,40 @@ class ChannelsHandler:
         }
 
     @staticmethod
+    def _wechat_group_membership_notice_extra(config: dict) -> dict:
+        def serialize(event_type, prefix):
+            overrides = []
+            for raw in config.get(prefix + "_room_overrides", []) or []:
+                item = dict(raw)
+                image_path = str(item.get("image_path") or "")
+                item["image_url"] = (
+                    "/api/wechat-group/membership-image?path=" + quote(image_path, safe="")
+                    if image_path else ""
+                )
+                overrides.append(item)
+            image_path = str(config.get(prefix + "_image_path") or "")
+            return {
+                "enabled": bool(config.get(prefix + "_enabled", False)),
+                "content_type": config.get(prefix + "_content_type") or "text",
+                "text": config.get(prefix + "_text") or "",
+                "image_path": image_path,
+                "image_url": (
+                    "/api/wechat-group/membership-image?path=" + quote(image_path, safe="")
+                    if image_path else ""
+                ),
+                "room_overrides": overrides,
+                "placeholders": list(membership_notice_placeholders(event_type)),
+            }
+
+        return {
+            "join": serialize(WECHAT_GROUP_MEMBERSHIP_EVENT_JOIN, "wechat_group_join_welcome"),
+            "leave": serialize(WECHAT_GROUP_MEMBERSHIP_EVENT_LEAVE, "wechat_group_leave_notice"),
+            "upload_url": "/api/wechat-group/membership-image",
+            "image_max_bytes": WECHAT_GROUP_MEMBERSHIP_IMAGE_MAX_BYTES,
+            "image_extensions": sorted(WECHAT_GROUP_MEMBERSHIP_IMAGE_EXTENSIONS),
+        }
+
+    @staticmethod
     def _wechat_group_identity_recovery(rooms) -> dict:
         pending_statuses = {"suspected", "legacy_imported", "conflict", "identity_unresolved"}
         pending_rooms = []
@@ -4646,10 +4700,23 @@ class ChannelsHandler:
 
     @classmethod
     def _apply_wechat_group_config(cls, updates: dict) -> dict:
+        membership_keys = {
+            "wechat_group_join_welcome_enabled",
+            "wechat_group_join_welcome_content_type",
+            "wechat_group_join_welcome_text",
+            "wechat_group_join_welcome_image_path",
+            "wechat_group_join_welcome_room_overrides",
+            "wechat_group_leave_notice_enabled",
+            "wechat_group_leave_notice_content_type",
+            "wechat_group_leave_notice_text",
+            "wechat_group_leave_notice_image_path",
+            "wechat_group_leave_notice_room_overrides",
+        }
         allowed_keys = {
             "wechat_group_room_ids",
             "wechat_group_stable_room_ids",
             "wechat_group_names",
+            *membership_keys,
             "wechat_group_admin_members",
             "wechat_group_blacklist_members",
             "wechat_group_admin_required_permissions",
@@ -4785,8 +4852,31 @@ class ChannelsHandler:
         }
         local_config = conf()
         applied = {}
+        normalize_membership = bool(membership_keys.intersection(updates)) or (
+            "wechat_group_stable_room_ids" in updates
+        )
+        normalized_membership = None
+        if normalize_membership:
+            selected_room_ids = cls._normalize_wechat_group_stable_room_ids(
+                updates.get(
+                    "wechat_group_stable_room_ids",
+                    local_config.get("wechat_group_stable_room_ids", []),
+                )
+            )
+            candidate_config = dict(local_config)
+            for key in membership_keys:
+                if key in updates:
+                    candidate_config[key] = updates.get(key)
+            candidate_config["wechat_group_stable_room_ids"] = selected_room_ids
+            normalized_membership = normalize_wechat_group_membership_notice_config(
+                candidate_config,
+                selected_room_ids=selected_room_ids,
+                strict=bool(membership_keys.intersection(updates)),
+            )
         for key in allowed_keys:
             if key not in updates:
+                continue
+            if key in membership_keys:
                 continue
             value = updates.get(key)
             if key in (
@@ -5059,6 +5149,11 @@ class ChannelsHandler:
                 value = normalize_wechat_group_free_reply_rule_enabled(value)
             local_config[key] = value
             applied[key] = value
+
+        if normalized_membership is not None:
+            for key, value in normalized_membership.items():
+                local_config[key] = value
+                applied[key] = value
 
         if "wechat_group_persona_prompt" in applied:
             preset_id = resolve_wechat_group_persona_preset_id(
@@ -5584,6 +5679,88 @@ class WechatGroupQrHandler:
         except Exception as e:
             logger.error(f"[WebChannel] WechatGroupQr POST error: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+
+class WechatGroupMembershipImageHandler:
+    """上传和预览受控的进退群消息图片。"""
+
+    @staticmethod
+    def _workspace() -> str:
+        from common.utils import expand_path
+
+        return expand_path(conf().get("agent_workspace", "~/lightagent") or "~/lightagent")
+
+    @staticmethod
+    def _input_value(source, key, default=None):
+        if isinstance(source, dict):
+            return source.get(key, default)
+        return getattr(source, key, default)
+
+    def GET(self):
+        _require_auth()
+        try:
+            params = web.input(path="")
+            relative_path = self._input_value(params, "path", "")
+            absolute_path = resolve_membership_notice_image_path(
+                self._workspace(),
+                relative_path,
+            )
+            validate_membership_notice_image_file(absolute_path)
+            content_type = mimetypes.guess_type(absolute_path)[0] or "application/octet-stream"
+            web.header("Content-Type", content_type)
+            web.header("X-Content-Type-Options", "nosniff")
+            web.header("Cache-Control", "private, max-age=3600")
+            with open(absolute_path, "rb") as file_obj:
+                return file_obj.read(WECHAT_GROUP_MEMBERSHIP_IMAGE_MAX_BYTES + 1)
+        except Exception:
+            raise web.notfound()
+
+    def POST(self):
+        _require_auth()
+        web.header("Content-Type", "application/json; charset=utf-8")
+        try:
+            params = _raw_web_input()
+            file_obj = self._input_value(params, "file")
+            filename = str(getattr(file_obj, "filename", "") or "").strip()
+            if file_obj is None or not filename:
+                raise ValueError("请选择图片文件")
+            extension = os.path.splitext(filename)[1].lower()
+            if extension not in WECHAT_GROUP_MEMBERSHIP_IMAGE_EXTENSIONS:
+                raise ValueError("图片格式仅支持 JPEG、PNG、GIF 或 WEBP")
+            content = _read_uploaded_file_bytes_limited(
+                file_obj,
+                WECHAT_GROUP_MEMBERSHIP_IMAGE_MAX_BYTES,
+            )
+            detected_extension = validate_membership_notice_image_bytes(content, filename)
+            digest = hashlib.sha256(content).hexdigest()
+            relative_path = "{}/{}{}".format(
+                WECHAT_GROUP_MEMBERSHIP_IMAGE_DIR,
+                digest,
+                detected_extension,
+            )
+            absolute_path = resolve_membership_notice_image_path(
+                self._workspace(),
+                relative_path,
+                require_file=False,
+            )
+            os.makedirs(os.path.dirname(absolute_path), exist_ok=True)
+            temp_path = absolute_path + ".{}.tmp".format(uuid.uuid4().hex)
+            try:
+                with open(temp_path, "wb") as file_obj_out:
+                    file_obj_out.write(content)
+                os.replace(temp_path, absolute_path)
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            preview_url = "/api/wechat-group/membership-image?path=" + quote(relative_path, safe="")
+            return json.dumps({
+                "status": "success",
+                "path": relative_path,
+                "preview_url": preview_url,
+            }, ensure_ascii=False)
+        except Exception as exc:
+            message = "图片不能超过 5 MiB" if str(exc) == "file too large" else str(exc)
+            return json.dumps({"status": "error", "message": message}, ensure_ascii=False)
 
 
 class _WechatGroupWebIdentityMixin:

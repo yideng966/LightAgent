@@ -80,6 +80,16 @@ available_setting = {
     "wechat_group_names": [],
     "wechat_group_room_ids": [],
     "wechat_group_stable_room_ids": [],
+    "wechat_group_join_welcome_enabled": False,
+    "wechat_group_join_welcome_content_type": "text",
+    "wechat_group_join_welcome_text": "欢迎加入群聊！",
+    "wechat_group_join_welcome_image_path": "",
+    "wechat_group_join_welcome_room_overrides": [],
+    "wechat_group_leave_notice_enabled": False,
+    "wechat_group_leave_notice_content_type": "text",
+    "wechat_group_leave_notice_text": "{member_names} 已离开群聊。",
+    "wechat_group_leave_notice_image_path": "",
+    "wechat_group_leave_notice_room_overrides": [],
     # Cross-room defaults for persisted group chat report settings. Per-room
     # enablement, schedules and templates are stored in the report SQLite DB.
     "wechat_group_report_default_enabled": False,
