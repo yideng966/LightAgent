@@ -20,7 +20,7 @@ env:
 jobs:
   build-and-push-image:
     if: github.repository == 'yideng966/LightAgent' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -32,10 +32,30 @@ jobs:
             latest_tag: latest
             version_suffix: ""
             capability_packs: ""
+            platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - variant: base
+            latest_tag: latest
+            version_suffix: ""
+            capability_packs: ""
+            platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
           - variant: skills-full
             latest_tag: skills-full
             version_suffix: -skills-full
             capability_packs: office,media,browser
+            platform: linux/amd64
+            arch: amd64
+            runner: ubuntu-24.04
+          - variant: skills-full
+            latest_tag: skills-full
+            version_suffix: -skills-full
+            capability_packs: office,media,browser
+            platform: linux/arm64
+            arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
@@ -56,9 +76,6 @@ jobs:
       - name: Stamp release version
         shell: bash
         run: python scripts/stamp_release_version.py "${{ steps.ver.outputs.version }}"
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -90,16 +107,130 @@ jobs:
             type=ref,event=tag,suffix=${{ matrix.version_suffix }}
 
       - name: Build and push Docker image
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
-          push: true
           file: ./docker/Dockerfile.latest
-          platforms: linux/amd64,linux/arm64
-          tags: ${{ steps.meta.outputs.tags }}
+          platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,"name=${{ env.DOCKERHUB_IMAGE }},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}",oci-artifact=true,push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }},mode=max
           build-args: |
             SKILL_CAPABILITY_PACKS=${{ matrix.capability_packs }}
+
+      - name: Export image digest
+        shell: bash
+        run: |
+          digest="${{ steps.build.outputs.digest }}"
+          digest_dir="${{ runner.temp }}/digests"
+          mkdir -p "$digest_dir"
+          touch "$digest_dir/${digest#sha256:}"
+
+      - name: Upload image digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ matrix.variant }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-manifest:
+    if: ${{ always() && github.repository == 'yideng966/LightAgent' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: build-and-push-image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: base
+            latest_tag: latest
+            version_suffix: ""
+          - variant: skills-full
+            latest_tag: skills-full
+            version_suffix: -skills-full
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ matrix.latest_tag }},enable=true
+            type=ref,event=tag,suffix=${{ matrix.version_suffix }}
+
+      - name: Download image digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.variant }}-*
+          merge-multiple: true
+
+      - name: Validate image digests
+        shell: bash
+        run: |
+          shopt -s nullglob
+          digest_files=("${{ runner.temp }}/digests"/*)
+          if [ "${#digest_files[@]}" -ne 2 ]; then
+            echo "Expected 2 platform digests for ${{ matrix.variant }}, found ${#digest_files[@]}" >&2
+            exit 1
+          fi
+
+      - name: Create and push multi-platform manifests
+        shell: bash
+        env:
+          METADATA_JSON: ${{ steps.meta.outputs.json }}
+          DIGEST_DIR: ${{ runner.temp }}/digests
+        run: |
+          set -euo pipefail
+
+          create_manifest() {
+            local image="$1"
+            local -a tags=()
+            local -a sources=()
+
+            while IFS= read -r tag; do
+              tags+=(--tag "$tag")
+            done < <(jq -r --arg image "$image" '.tags[] | select(startswith($image + ":"))' <<< "$METADATA_JSON")
+
+            for digest_path in "$DIGEST_DIR"/*; do
+              sources+=("$image@sha256:$(basename "$digest_path")")
+            done
+
+            if [ "${#tags[@]}" -eq 0 ]; then
+              echo "No manifest tags resolved for $image" >&2
+              exit 1
+            fi
+            docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+          }
+
+          create_manifest "$DOCKERHUB_IMAGE"
+          create_manifest "$REGISTRY/$IMAGE_NAME"
 
       - uses: actions/delete-package-versions@v4
         if: matrix.variant == 'base'

@@ -35,17 +35,10 @@ RUN if [ "$USE_CN_MIRROR" = "true" ]; then \
         pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple/; \
     fi
 
-ADD . ${BUILD_PREFIX}
+COPY requirements.txt /tmp/lightagent-requirements/requirements.txt
+COPY requirements-optional.txt /tmp/lightagent-requirements/requirements-optional.txt
 
-COPY --from=wechat-group-sidecar-build /usr/local/bin/node /usr/local/bin/node
-COPY --from=wechat-group-sidecar-build /usr/local/bin/npm /usr/local/bin/npm
-COPY --from=wechat-group-sidecar-build /usr/local/bin/npx /usr/local/bin/npx
-COPY --from=wechat-group-sidecar-build /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-COPY --from=wechat-group-sidecar-build \
-    /build/wechat-group-sidecar/node_modules \
-    /app/channel/wechat_group/sidecar/node_modules
-
-# All heavy installs + user creation in ONE layer to avoid chown duplication
+# Stable dependencies stay ahead of application sources so regular code changes reuse this layer.
 RUN printf '%s\n' 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries \
     && apt-get update \
     && CAPABILITY_PACKAGES="" \
@@ -60,11 +53,9 @@ RUN printf '%s\n' 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries \
         esac; \
     done \
     && apt-get install -y --no-install-recommends bash ffmpeg espeak libavcodec-extra libatomic1 libstdc++6 $CAPABILITY_PACKAGES \
-    && cd ${BUILD_PREFIX} \
     && /usr/local/bin/python -m pip install --no-cache --upgrade pip \
-    && pip install --no-cache -r requirements.txt \
-    && pip install --no-cache -r requirements-optional.txt \
-    && pip install --no-cache -e . \
+    && pip install --no-cache -r /tmp/lightagent-requirements/requirements.txt \
+    && pip install --no-cache -r /tmp/lightagent-requirements/requirements-optional.txt \
     && if [ "$ENABLE_BROWSER" = "true" ]; then \
         apt-get install -y --no-install-recommends fonts-wqy-zenhei \
         && pip install --no-cache "playwright==1.52.0" \
@@ -77,18 +68,31 @@ RUN printf '%s\n' 'Acquire::Retries "3";' > /etc/apt/apt.conf.d/80-retries \
             python -m playwright install chromium; \
         fi; \
     fi \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /home/agent/lightagent \
+    && rm -rf /var/lib/apt/lists/* /tmp/lightagent-requirements \
+    && mkdir -p /home/agent/lightagent ${BUILD_PREFIX} \
     && groupadd -r agent \
     && useradd -r -g agent -s /bin/bash -d /home/agent agent \
-    && chown -R agent:agent /home/agent ${BUILD_PREFIX} /usr/local/lib \
+    && chown -R agent:agent /home/agent ${BUILD_PREFIX} /usr/local/lib
+
+COPY --chown=agent:agent . ${BUILD_PREFIX}
+
+COPY --from=wechat-group-sidecar-build /usr/local/bin/node /usr/local/bin/node
+COPY --from=wechat-group-sidecar-build /usr/local/bin/npm /usr/local/bin/npm
+COPY --from=wechat-group-sidecar-build /usr/local/bin/npx /usr/local/bin/npx
+COPY --from=wechat-group-sidecar-build /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+COPY --from=wechat-group-sidecar-build --chown=agent:agent \
+    /build/wechat-group-sidecar/node_modules \
+    /app/channel/wechat_group/sidecar/node_modules
+
+RUN cd ${BUILD_PREFIX} \
+    && pip install --no-cache --no-deps -e . \
     && cd /app/channel/wechat_group/sidecar \
     && node --version \
     && node -e "Promise.all([import('wechaty'), import('wechaty-puppet-wechat4u'), import('file-box')]).then(() => console.log('wechat-group-sidecar imports ok'))"
 
 WORKDIR ${BUILD_PREFIX}
 
-ADD docker/entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /entrypoint.sh \
     && chown agent:agent /entrypoint.sh

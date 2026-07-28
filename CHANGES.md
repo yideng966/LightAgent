@@ -2,6 +2,31 @@
 
 ## 2026-07-28
 
+### 优化 Docker 多架构镜像发布
+
+- Docker 发布改为 AMD64 与 ARM64 分别在原生 GitHub Hosted Runner 构建，移除 QEMU 模拟；每个平台先按 digest 推送，随后分别为 Docker Hub 与 GHCR 生成基础版和完整技能版多架构 manifest，降低 ARM64 构建耗时并避免 QEMU 段错误影响发布。
+- 为每个镜像变体和架构启用隔离的 GHCR BuildKit Registry Cache，避免并行构建互相覆盖缓存，并确保不同发布标签之间可以复用；完整技能版失败时，两个基础版平台构建成功仍可独立完成基础镜像发布。
+- 重排 Dockerfile：APT、Python 依赖和 Playwright Chromium 安装现在只依赖 requirements 与构建参数，普通源码修改不会重建重依赖层；`latest` 继续默认保留 Chromium，微信群图片报告能力不降级。
+
+关键文件：
+
+- `.github/workflows/deploy-image.yml`
+- `docker/Dockerfile.latest`
+- `AGENTS.md`
+- `tests/test_docker_deployment.py`
+- `tests/test_wechat_group_web.py`
+- `docs/releases/v2.1.13.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `plans/20260728_Docker多架构构建提速.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest discover -s tests`：1143 项通过，1 项按条件跳过；同时修复进退群图片预览测试对前序 `web` stub 的隔离问题。
+- 微信群 sidecar Node 单元测试 53 项通过；最终 Docker 发布、版本、发行说明和图片路径测试 20 项通过。
+- `v2.1.13` 发行说明校验、全部 GitHub Actions YAML 解析、前端与 sidecar JavaScript 语法以及 `git diff --check` 通过。
+- 本机 Docker Desktop Linux Engine 未启动，未执行真实本地 Docker 构建；原生双架构构建与 Registry manifest 发布由后续标签触发的 GitHub Actions 验收。
+
 ### 微信群入群欢迎与离群通知
 
 - 接入 Wechaty `room-join` / `room-leave` 事件，在 sidecar、JSON Lines 协议和 Python 微信群通道之间形成成员事件闭环；事件经过稳定账号、稳定群、目标群、去重和自身进出过滤后直接非阻塞投递，不进入 Agent、归档、记忆或画像链路。

@@ -30,6 +30,22 @@ class DockerDeploymentContractTest(unittest.TestCase):
             with self.subTest(stage=stage.splitlines()[0]):
                 self.assertIn('Acquire::Retries "3";', stage)
 
+    def test_dockerfile_caches_stable_dependencies_before_application_sources(self):
+        text = (ROOT / "docker" / "Dockerfile.latest").read_text(encoding="utf-8")
+        source_copy = "COPY --chown=agent:agent . ${BUILD_PREFIX}"
+
+        self.assertIn("ARG INSTALL_BROWSER=true", text)
+        self.assertLess(
+            text.index("COPY requirements.txt /tmp/lightagent-requirements/requirements.txt"),
+            text.index(source_copy),
+        )
+        self.assertLess(
+            text.index("pip install --no-cache -r /tmp/lightagent-requirements/requirements.txt"),
+            text.index(source_copy),
+        )
+        self.assertLess(text.index("python -m playwright install chromium"), text.index(source_copy))
+        self.assertLess(text.index(source_copy), text.index("pip install --no-cache --no-deps -e ."))
+
     def test_compose_persists_private_data_and_workspace(self):
         path = ROOT / "docker" / "docker-compose.yml"
         compose = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -87,13 +103,48 @@ class DockerDeploymentContractTest(unittest.TestCase):
         self.assertIn('"$IMAGE_OUTPUT_DIR"', text)
         self.assertIn("Password is persisted in", text)
 
-    def test_release_workflow_publishes_one_multiarch_image(self):
-        workflow = (
-            ROOT / ".github" / "workflows" / "deploy-image.yml"
-        ).read_text(encoding="utf-8")
-        self.assertIn("platforms: linux/amd64,linux/arm64", workflow)
-        self.assertIn("docker/setup-qemu-action", workflow)
-        self.assertIn("docker/setup-buildx-action", workflow)
+    def test_release_workflow_builds_on_native_runners_and_merges_manifests(self):
+        workflow_path = ROOT / ".github" / "workflows" / "deploy-image.yml"
+        workflow = workflow_path.read_text(encoding="utf-8")
+        parsed = yaml.safe_load(workflow)
+        build_job = parsed["jobs"]["build-and-push-image"]
+        manifest_job = parsed["jobs"]["publish-manifest"]
+        matrix = build_job["strategy"]["matrix"]["include"]
+        platform_runners = {
+            (entry["variant"], entry["platform"]): entry["runner"]
+            for entry in matrix
+        }
+
+        self.assertEqual(
+            {
+                ("base", "linux/amd64"): "ubuntu-24.04",
+                ("base", "linux/arm64"): "ubuntu-24.04-arm",
+                ("skills-full", "linux/amd64"): "ubuntu-24.04",
+                ("skills-full", "linux/arm64"): "ubuntu-24.04-arm",
+            },
+            platform_runners,
+        )
+        build_step = next(
+            step
+            for step in build_job["steps"]
+            if step.get("uses") == "docker/build-push-action@v6"
+        )
+        self.assertEqual("${{ matrix.platform }}", build_step["with"]["platforms"])
+        self.assertIn("push-by-digest=true", build_step["with"]["outputs"])
+        self.assertIn("name-canonical=true", build_step["with"]["outputs"])
+        self.assertEqual(
+            "type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }}",
+            build_step["with"]["cache-from"],
+        )
+        self.assertEqual(
+            "type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.variant }}-${{ matrix.arch }},mode=max",
+            build_step["with"]["cache-to"],
+        )
+        self.assertNotIn("docker/setup-qemu-action", workflow)
+        self.assertIn("actions/upload-artifact@v4", workflow)
+        self.assertIn("actions/download-artifact@v4", workflow)
+        self.assertIn("docker buildx imagetools create", workflow)
+        self.assertEqual("build-and-push-image", manifest_job["needs"])
         self.assertFalse(
             (ROOT / ".github" / "workflows" / "deploy-image-arm.yml").exists()
         )

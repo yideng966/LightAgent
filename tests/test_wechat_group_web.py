@@ -1196,7 +1196,11 @@ class WechatGroupWebTest(unittest.TestCase):
         handler = WechatGroupMembershipImageHandler()
         with patch("channel.web.web_channel._require_auth"), \
                 patch("channel.web.web_channel.web.input", return_value=types.SimpleNamespace(path="../secret.png")), \
-                patch("channel.web.web_channel.web.notfound", return_value=RuntimeError("not found")):
+                patch(
+                    "channel.web.web_channel.web.notfound",
+                    return_value=RuntimeError("not found"),
+                    create=True,
+                ):
             with self.assertRaisesRegex(RuntimeError, "not found"):
                 handler.GET()
 
