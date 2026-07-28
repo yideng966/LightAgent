@@ -12,7 +12,6 @@ name: Create and publish a Docker image
 on:
   push:
     tags: ['v*']
-  workflow_dispatch:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: yideng966/lightagent
@@ -20,7 +19,7 @@ env:
 
 jobs:
   build-and-push-image:
-    if: github.repository == 'yideng966/LightAgent'
+    if: github.repository == 'yideng966/LightAgent' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -46,11 +45,7 @@ jobs:
         id: ver
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "push" ]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version="$(tr -d '\r\n' < cli/VERSION)"
-          fi
+          version="${GITHUB_REF_NAME#v}"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Set up Python
