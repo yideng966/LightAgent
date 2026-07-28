@@ -245,7 +245,7 @@ def normalize_wechat_group_membership_notice_config(
     result: Dict[str, Any] = {}
     for event, definition in _EVENT_CONFIG.items():
         prefix = definition["prefix"]
-        enabled = _normalize_bool(source.get(prefix + "_enabled", False))
+        enabled = _normalize_bool(source.get(prefix + "_enabled", True))
         content_type = _normalize_content_type(source.get(prefix + "_content_type", "text"))
         raw_text = source.get(prefix + "_text", definition["default_text"])
         raw_image_path = source.get(prefix + "_image_path", "")

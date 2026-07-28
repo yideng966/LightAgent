@@ -2,6 +2,31 @@
 
 ## 2026-07-28
 
+### 默认开启进退群消息开关
+
+- Web“群聊 -> 进退群消息”继续分别提供入群欢迎与离群通知开关，开关保存后会写入 `config.json`；补充可访问名称，保留现有 44px 点击区域、键盘焦点样式和移动端布局。
+- `config.py` 与 `config-template.json` 中两个全局开关改为默认开启；旧 `config.json` 缺少对应字段时，后端归一化与 Web UI 也统一按开启处理。
+- 显式保存为 `false`、按群 `disabled`、稳定群选择和身份确认门禁均保持原行为；新增回归测试直接校验示例配置、缺键 fallback、显式关闭和磁盘落盘结果。
+
+关键文件：
+
+- `config.py`
+- `config-template.json`
+- `channel/wechat_group/wechat_group_membership_notice.py`
+- `channel/web/static/js/console.js`
+- `tests/test_wechat_group_membership_notice.py`
+- `tests/test_wechat_group_web.py`
+- `README.md`
+- `AGENTS.md`
+- `plans/20260728_进退群消息开关默认开启.md`
+
+验证记录：
+
+- 测试先行阶段在旧实现上出现 4 个预期失败；修改后进退群配置与 Web 保存定向 17 项、微信群配置/Web/通道组合 268 项均通过。
+- `python -X utf8 -m unittest discover -s tests`：共运行 1174 项，结果 OK，1 项按条件跳过。
+- `node --check channel/web/static/js/console.js`、Python 内存编译、`config-template.json` 解析与默认值断言、`git diff --check` 均通过；`py_compile` 因 Windows 拒绝覆盖既有 `__pycache__` 未作为最终语法校验手段。
+- 使用隔离数据目录运行当前仓库 `python app.py`，在 1440x900 与 375x812 视口完成 Playwright 验收：入群、离群开关初始均为开启，页面无横向溢出或控件重叠；关闭并保存后，临时 `config.json` 两个字段均为 `false`，刷新后 UI 正确回读。浏览器无脚本错误，仅有项目既存的 Tailwind CDN 警告。
+
 ### GitHub Webhook 全事件通知配置
 
 - 将原有单一 `push` 提交通知扩展为 GitHub 仓库事件通知，内置当前 53 个仓库级事件目录，支持“选定事件 / 全部事件”模式和按事件筛选 `action`；默认仍为 `push + main`，升级不会扩大通知范围。

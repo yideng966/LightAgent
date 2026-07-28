@@ -1087,9 +1087,14 @@ class WechatGroupWebTest(unittest.TestCase):
                 patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")), \
                 patch("channel.web.web_channel.get_data_root", return_value=tmpdir):
             result = json.loads(handler.POST())
+            persisted = json.loads(
+                Path(tmpdir, "config.json").read_text(encoding="utf-8")
+            )
 
         self.assertEqual("success", result["status"])
         self.assertEqual(["wgr_new"], conf()["wechat_group_stable_room_ids"])
+        self.assertTrue(persisted["wechat_group_join_welcome_enabled"])
+        self.assertTrue(persisted["wechat_group_leave_notice_enabled"])
         self.assertEqual(
             "wgr_new",
             conf()["wechat_group_join_welcome_room_overrides"][0]["stable_room_id"],
@@ -1217,6 +1222,8 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("class=\"sm:hidden w-full min-h-11", console_js)
         self.assertIn("'wechat_group_join_welcome'", console_js)
         self.assertIn("'wechat_group_leave_notice'", console_js)
+        self.assertIn("enabled: source.enabled !== false", console_js)
+        self.assertIn("aria-label=\"${escapeHtml(t('groups_membership_enabled'))}\"", console_js)
         for suffix in ("_enabled", "_content_type", "_text", "_image_path", "_room_overrides"):
             self.assertIn("`${prefix}" + suffix + "`", console_js)
 

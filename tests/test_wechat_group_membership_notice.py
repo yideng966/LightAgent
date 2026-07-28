@@ -1,7 +1,9 @@
 # encoding:utf-8
+import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 from channel.wechat_group.wechat_group_membership_notice import (
     WechatGroupMembershipNoticeConfigError,
@@ -18,13 +20,35 @@ from channel.wechat_group.wechat_group_membership_notice import (
 
 
 class WechatGroupMembershipNoticeTest(unittest.TestCase):
-    def test_defaults_are_disabled_and_keep_expected_templates(self):
+    def test_defaults_are_enabled_and_keep_expected_templates(self):
         result = normalize_wechat_group_membership_notice_config({}, selected_room_ids=[])
 
-        self.assertFalse(result["wechat_group_join_welcome_enabled"])
+        self.assertTrue(result["wechat_group_join_welcome_enabled"])
         self.assertEqual(result["wechat_group_join_welcome_text"], "欢迎加入群聊！")
-        self.assertFalse(result["wechat_group_leave_notice_enabled"])
+        self.assertTrue(result["wechat_group_leave_notice_enabled"])
         self.assertEqual(result["wechat_group_leave_notice_text"], "{member_names} 已离开群聊。")
+
+    def test_explicit_disabled_config_stays_disabled(self):
+        result = normalize_wechat_group_membership_notice_config({
+            "wechat_group_join_welcome_enabled": False,
+            "wechat_group_leave_notice_enabled": False,
+        }, selected_room_ids=[])
+
+        self.assertFalse(result["wechat_group_join_welcome_enabled"])
+        self.assertFalse(result["wechat_group_leave_notice_enabled"])
+
+    def test_default_config_and_template_enable_both_notices(self):
+        from config import available_setting
+
+        template = json.loads(Path("config-template.json").read_text(encoding="utf-8"))
+
+        for key in (
+            "wechat_group_join_welcome_enabled",
+            "wechat_group_leave_notice_enabled",
+        ):
+            with self.subTest(key=key):
+                self.assertTrue(available_setting[key])
+                self.assertTrue(template[key])
 
     def test_room_custom_and_disabled_override_global_independently(self):
         config = {

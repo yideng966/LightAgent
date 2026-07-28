@@ -10089,7 +10089,7 @@ function normalizeGroupsMembershipEntry(raw, eventType) {
         ? ['{room_name}', '{member_name}', '{member_names}', '{member_count}', '{event_time}', '{bot_name}', '{inviter_name}']
         : ['{room_name}', '{member_name}', '{member_names}', '{member_count}', '{event_time}', '{bot_name}', '{remover_name}'];
     return {
-        enabled: source.enabled === true,
+        enabled: source.enabled !== false,
         content_type: source.content_type === 'image' ? 'image' : 'text',
         text: String(source.text ?? fallbackText),
         image_path: String(source.image_path || ''),
@@ -10262,7 +10262,7 @@ function buildGroupsMembershipGlobalToggle(eventDraft) {
                 <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_membership_enabled_hint')}</p>
             </div>
             <label class="relative inline-flex items-center justify-center w-11 h-11 cursor-pointer flex-shrink-0">
-                <input id="groups-membership-enabled" type="checkbox" class="sr-only peer" onchange="setGroupsMembershipEnabled(this.checked)" ${eventDraft.enabled ? 'checked' : ''}>
+                <input id="groups-membership-enabled" type="checkbox" class="sr-only peer" aria-label="${escapeHtml(t('groups_membership_enabled'))}" onchange="setGroupsMembershipEnabled(this.checked)" ${eventDraft.enabled ? 'checked' : ''}>
                 <span class="relative w-10 h-5 bg-slate-300 dark:bg-slate-600 rounded-full peer peer-checked:bg-primary-500 peer-focus-visible:ring-2 peer-focus-visible:ring-primary-500 peer-focus-visible:ring-offset-2 dark:peer-focus-visible:ring-offset-[#111111] after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:h-4 after:w-4 after:rounded-full after:transition-all peer-checked:after:translate-x-5"></span>
             </label>
         </div>
