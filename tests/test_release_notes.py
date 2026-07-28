@@ -57,8 +57,8 @@ class ReleaseNotesValidatorTest(unittest.TestCase):
         self.assertTrue(any("至少保留一个变更分类" in error for error in errors))
 
     def test_current_release_notes_pass(self):
-        path = ROOT / "docs" / "releases" / "v2.1.10.md"
-        self.assertEqual([], validate_release_notes(path, "v2.1.10"))
+        path = ROOT / "docs" / "releases" / "v2.1.11.md"
+        self.assertEqual([], validate_release_notes(path, "v2.1.11"))
 
     def test_release_workflow_uses_versioned_notes(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")

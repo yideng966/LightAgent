@@ -104,6 +104,17 @@ version = "keep-me"
             docker_workflow.index("docker/build-push-action"),
         )
 
+    def test_docker_workflow_only_publishes_tag_versions(self):
+        docker_workflow = (
+            ROOT / ".github" / "workflows" / "deploy-image.yml"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("tags: ['v*']", docker_workflow)
+        self.assertIn("startsWith(github.ref, 'refs/tags/v')", docker_workflow)
+        self.assertIn('version="${GITHUB_REF_NAME#v}"', docker_workflow)
+        self.assertNotIn("workflow_dispatch", docker_workflow)
+        self.assertNotIn("cli/VERSION", docker_workflow)
+
     def test_github_release_workflow_has_no_desktop_packaging(self):
         workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(
             encoding="utf-8"

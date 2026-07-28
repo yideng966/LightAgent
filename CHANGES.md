@@ -2,6 +2,29 @@
 
 ## 2026-07-28
 
+### 修复 latest 镜像版本回退
+
+- 修复标签发布后手动运行 Docker 工作流会读取仓库旧 `cli/VERSION`，并把 `latest`、`skills-full` 覆盖为错误版本的问题；正式镜像发布现仅接受 `v*` 标签推送，镜像版本只从当前标签派生。
+- 为发布 Job 增加标签引用硬门禁，并增加静态合同测试，防止后续重新开放手动发布入口或恢复 `cli/VERSION` 回退。
+- 将仓库中的 CLI 与 Python 包版本源同步为 `2.1.11`，并新增对应发行说明；Web 控制台、CLI 和 `pip show lightagent` 将显示一致版本。
+
+关键文件：
+
+- `.github/workflows/deploy-image.yml`
+- `tests/test_release_version.py`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.1.11.md`
+- `plans/20260728_修复镜像发布版本覆盖.md`
+- `AGENTS.md`
+
+验证记录：
+
+- `python -m unittest tests.test_release_version tests.test_release_notes tests.test_docker_deployment`：18 项通过。
+- `PYTHONUTF8=1 python -m unittest discover -s tests`：1119 项通过，1 项按条件跳过。
+- `v2.1.11` 发行说明校验、全部 GitHub Actions YAML 解析、版本源一致性检查和 `git diff --check` 通过。
+- 远端 GitHub Release 与多架构镜像结果待标签发布完成后回写。
+
 ### 直接艾特启用拟人化群聊上下文
 
 - 修复微信群成员直接 `@` 机器人时被默认当作独立问题、跳过最近群聊上下文的问题；`direct_reply` 现在进入拟人化历史链路，能够理解群内正在讨论的月卡、自然月等承接话题。
