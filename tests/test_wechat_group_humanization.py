@@ -436,8 +436,8 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
         msg.wechat_group_stable_member_id = "wgm_alice"
         return msg
 
-    def test_intent_classifier_keeps_standalone_at_slim(self):
-        self.assertFalse(should_include_contextual_history("what is 2+2", "direct_reply"))
+    def test_direct_reply_and_contextual_sources_include_history(self):
+        self.assertTrue(should_include_contextual_history("what is 2+2", "direct_reply"))
         self.assertTrue(should_include_contextual_history("summarize above", "direct_reply"))
         self.assertTrue(should_include_contextual_history("plain ambient", "free_reply"))
 
@@ -608,7 +608,7 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
         self.assertIn("<recent-wechat-group-transcript>", result.content)
         self.assertIn("release window is Friday", result.content)
 
-    def test_builder_does_not_inject_recent_for_standalone_direct_reply(self):
+    def test_builder_injects_configured_context_for_direct_reply(self):
         class FakeChannel:
             def __init__(self, archive):
                 self.archive = archive
@@ -638,18 +638,29 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             message_id="prev",
             room_id="room@@a",
             sender_nickname="Bob",
-            text="old context",
+            text="都是算30天又不是自然月",
             created_at=1000,
         )
         result = WechatGroupHumanizedContextBuilder(FakeChannel(self.archive)).build(
-            msg=self._msg(text="@LightBot what is 2+2"),
-            user_content="what is 2+2",
+            msg=self._msg(text="@LightBot 你说说是自然月吗"),
+            user_content="你说说是自然月吗",
             trigger_source="direct_reply",
         )
 
-        self.assertNotIn("<recent-wechat-group-transcript>", result.content)
-        self.assertNotIn("<wechat-group-archive-evidence>", result.content)
+        self.assertIn("<recent-wechat-group-transcript>", result.content)
+        self.assertIn("都是算30天又不是自然月", result.content)
+        self.assertIn("<wechat-group-archive-evidence>", result.content)
         self.assertIn("<wechat-group-reply-policy>", result.content)
+
+        conf()["wechat_group_recent_context_enabled"] = False
+        disabled_result = WechatGroupHumanizedContextBuilder(FakeChannel(self.archive)).build(
+            msg=self._msg(text="@LightBot 你说说是自然月吗"),
+            user_content="你说说是自然月吗",
+            trigger_source="direct_reply",
+        )
+
+        self.assertNotIn("<recent-wechat-group-transcript>", disabled_result.content)
+        self.assertIn("<wechat-group-archive-evidence>", disabled_result.content)
 
     def test_free_reply_uses_recent_conversation_only(self):
         class FakeChannel:

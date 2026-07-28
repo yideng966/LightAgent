@@ -675,7 +675,7 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         self.assertNotIn("<wechat-group-topic>", context.content)
         self.assertEqual("room@@abc", focus_service.args[1])
 
-    def test_channel_does_not_inject_old_focus_for_standalone_at(self):
+    def test_channel_injects_recent_context_for_standalone_at(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_record_messages"] = True
         conf()["wechat_group_recent_context_enabled"] = True
@@ -707,8 +707,10 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
 
         self.assertIn("让gpt来帮忙了", context.content)
-        self.assertNotIn("她不爱我了", context.content)
-        self.assertNotIn("不爱你了吗", context.content)
+        self.assertIn("她不爱我了", context.content)
+        self.assertIn("不爱你了吗", context.content)
+        self.assertIn("<recent-wechat-group-transcript>", context.content)
+        self.assertTrue(context["wechat_group_recent_context_injected"])
         self.assertNotIn("<wechat-group-topic>", context.content)
 
     def test_channel_keeps_focus_messages_for_summary_request(self):

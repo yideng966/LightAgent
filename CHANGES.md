@@ -2,6 +2,26 @@
 
 ## 2026-07-28
 
+### 直接艾特启用拟人化群聊上下文
+
+- 修复微信群成员直接 `@` 机器人时被默认当作独立问题、跳过最近群聊上下文的问题；`direct_reply` 现在进入拟人化历史链路，能够理解群内正在讨论的月卡、自然月等承接话题。
+- 最近群聊、归档证据和本地摘要继续受各自现有开关与范围配置约束；关闭 `wechat_group_recent_context_enabled` 后，直接 `@` 仍不会注入最近群聊块。
+- 更新原有相反行为测试，并增加“自然月”场景和关闭最近上下文开关的回归覆盖。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_humanized_context.py`
+- `tests/test_wechat_group_humanization.py`
+- `tests/test_wechat_group_context.py`
+- `plans/20260728_直接艾特启用群聊上下文.md`
+- `AGENTS.md`
+
+验证记录：
+
+- `python -m unittest tests.test_wechat_group_humanization`：21 项通过。
+- 微信群拟人化、上下文、消息、通道和 Web 定向回归：292 项通过。
+- `git diff --check`：通过。
+
 ### 停止维护桌面端并收敛 GitHub Release 流程
 
 - 将 `desktop/` 明确为停止维护的历史源码归档，不再开发、修复、编译或发布 Electron 桌面端；Python 后端 `app.py`、Web 控制台、CLI、消息渠道和 Docker 继续维护。

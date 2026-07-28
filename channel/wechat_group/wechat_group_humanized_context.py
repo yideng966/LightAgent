@@ -268,7 +268,7 @@ class WechatGroupHumanizedContextBuilder:
 
 def should_include_contextual_history(user_content: str, trigger_source: str = "") -> bool:
     source = str(trigger_source or "").strip()
-    if source in {"free_reply", "quote_self", "image_message"}:
+    if source in {"direct_reply", "free_reply", "quote_self", "image_message"}:
         return True
     text = str(user_content or "").lower()
     markers = (

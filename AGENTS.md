@@ -381,8 +381,8 @@ docker push yideng966/lightagent:latest
 
 按意图注入历史的规则：
 
-- `should_include_contextual_history()` 是 direct/quote/image 场景归档证据、本地摘要和普通 recent transcript 的主要门控；文本中出现“刚才、上面、之前、谁说、总结、继续、引用、图片、照片、这张、链接、啥意思、什么意思”等上下文依赖表达时需要历史。普通 `free_reply` 是单独的 recent-only 策略，不能据此打开远期事实块。
-- 独立 direct reply 或 standalone @ 默认不注入大段旧聊天；它仍可以注入管理员策略、触发/回复策略、人设、群记忆、风格、情绪、引用策略和多模态块，但不得为了“补上下文”自动塞入大量 recent transcript。
+- `should_include_contextual_history()` 是 direct/quote/image 场景归档证据、本地摘要和普通 recent transcript 的主要门控；直接 `@` 产生的 `direct_reply` 必须进入该门控，并按拟人化页面已有开关、时间窗口和条数上限注入历史。文本中出现“刚才、上面、之前、谁说、总结、继续、引用、图片、照片、这张、链接、啥意思、什么意思”等上下文依赖表达时，其他触发来源也需要历史。普通 `free_reply` 是单独的 recent-only 策略，不能据此打开远期事实块。
+- 独立 direct reply 或 standalone @ 必须按配置注入当前 stable room 的归档证据、本地摘要和 recent transcript；关闭对应开关时不注入相应块。直接 `@` 仍使用既有 `fresh` / `interactive_session` 会话策略，不得因此恢复无关的旧成员 Agent 历史或陈旧焦点。
 - 普通 `free_reply` 只从当前 stable room 的 conversation timeline 注入最近 30 分钟、最多 12 条安全消息，包含机器人已真实发送的回复并排除当前 `message_id`；不得注入 archive evidence、local summary 或旧焦点。其他上下文依赖场景的 `<recent-wechat-group-transcript>` 才允许优先使用当前焦点消息并按配置回退归档。
 - `<wechat-group-archive-evidence>` 和 `<local-extractive-summary>` 只在非普通自由回复的上下文依赖场景注入，并且必须先按当前 stable room 过滤，再排除当前 `message_id`。`get_messages_for_distill()` 必须倒序截取最新 N 条后正序返回；本地摘要必须过滤 transport XML、base64、路径、敏感键值和 URL 查询参数。
 - 自由回复本地判定必须先分析近场收件人关系。“另一名群友刚陈述结果 -> 当前成员发无明确对象的短问句”命中 `likely_human_followup` 后硬抑制，Scorer、legacy Judge、active/crazy 档位均不得覆盖；“大家/谁能/有没有人”等明确开放群问题和明确机器人目标除外。
@@ -428,7 +428,7 @@ messages:
 
   <recent-wechat-group-transcript>
   当前 room_id 最近群聊归档，默认窗口 1440 分钟、最多 100 条。
-  standalone @ 默认不注入；上下文依赖、引用、自由回复、图片/文件理解等请求才按需注入。
+  standalone @ 按拟人化上下文配置注入；其他上下文依赖、引用、自由回复、图片/文件理解等请求继续按各自策略注入。
   </recent-wechat-group-transcript>
 
   <wechat-group-focus>
