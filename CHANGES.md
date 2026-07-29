@@ -2,6 +2,29 @@
 
 ## 2026-07-29
 
+### 修复 Docker 多架构清单发布清理竞态并发布 2.1.21
+
+- 修复基础版与完整技能版并行创建 GHCR 多架构清单时，基础版任务提前清理未标记 canonical digest，导致完整技能版 OCI 子 manifest 被删除并发布失败的问题。
+- 将 GHCR 未标记版本清理迁移为独立 Job，仅在整个 `publish-manifest` 矩阵成功后执行；任一变体失败时跳过清理，保留后续重试与排障所需的 digest。
+- 保持原生 AMD64/ARM64 构建、Docker Hub 与 GHCR 双 Registry、版本标签和浮动标签规则不变，并补充发布任务依赖契约测试。
+
+关键文件：
+
+- `.github/workflows/deploy-image.yml`
+- `tests/test_docker_deployment.py`
+- `plans/20260729_修复Docker清单发布竞态.md`
+- `AGENTS.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.1.21.md`
+
+验证记录：
+
+- 修复前清理时序契约测试因缺少独立 `cleanup-ghcr` Job 按预期失败；修复后通过。
+- `python scripts/validate_release_notes.py --tag v2.1.21 docs/releases/v2.1.21.md` 通过；发行说明、版本与 Docker 发布契约测试 19 项通过。
+- `python -X utf8 -m unittest discover -s tests`：共运行 1223 项，结果 OK，1 项按条件跳过。
+- GitHub Actions YAML、两个版本来源与 `git diff --check` 通过；按用户确认未重跑或修复 `v2.1.20` 远端镜像。
+
 ### 优化微信群永久记忆运行、生成与管理入口
 
 - 自动群记忆 Dream 改为扫描已选择的稳定群、归档高水位和持久化游标；首次启用显式记录 `from_now` 基线，已有游标可在无新消息信号时恢复积压，稀疏旧窗口按总积压或最长等待继续推进。临时失败使用持久化递增退避，进程启动会把遗留 `running` 记录归档为 `interrupted`。

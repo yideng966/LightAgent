@@ -232,8 +232,15 @@ jobs:
           create_manifest "$DOCKERHUB_IMAGE"
           create_manifest "$REGISTRY/$IMAGE_NAME"
 
-      - uses: actions/delete-package-versions@v4
-        if: matrix.variant == 'base'
+  cleanup-ghcr:
+    if: ${{ always() && needs.publish-manifest.result == 'success' && github.repository == 'yideng966/LightAgent' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: publish-manifest
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+    steps:
+      - name: Delete untagged GHCR versions
+        uses: actions/delete-package-versions@v4
         with:
           package-name: 'lightagent'
           package-type: 'container'
