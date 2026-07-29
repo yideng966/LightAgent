@@ -120,6 +120,7 @@ class DockerDeploymentContractTest(unittest.TestCase):
         parsed = yaml.safe_load(workflow)
         build_job = parsed["jobs"]["build-and-push-image"]
         manifest_job = parsed["jobs"]["publish-manifest"]
+        cleanup_job = parsed["jobs"]["cleanup-ghcr"]
         matrix = build_job["strategy"]["matrix"]["include"]
         platform_runners = {
             (entry["variant"], entry["platform"]): entry["runner"]
@@ -156,6 +157,19 @@ class DockerDeploymentContractTest(unittest.TestCase):
         self.assertIn("actions/download-artifact@v4", workflow)
         self.assertIn("docker buildx imagetools create", workflow)
         self.assertEqual("build-and-push-image", manifest_job["needs"])
+        self.assertNotIn(
+            "actions/delete-package-versions@v4",
+            [step.get("uses") for step in manifest_job["steps"]],
+        )
+        self.assertEqual("publish-manifest", cleanup_job["needs"])
+        self.assertIn(
+            "needs.publish-manifest.result == 'success'",
+            cleanup_job["if"],
+        )
+        self.assertIn(
+            "actions/delete-package-versions@v4",
+            [step.get("uses") for step in cleanup_job["steps"]],
+        )
         self.assertFalse(
             (ROOT / ".github" / "workflows" / "deploy-image-arm.yml").exists()
         )
