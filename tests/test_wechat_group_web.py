@@ -71,6 +71,12 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_recent_context_minutes": conf().get("wechat_group_recent_context_minutes"),
             "wechat_group_humanized_context_enabled": conf().get("wechat_group_humanized_context_enabled"),
             "wechat_group_context_persist_raw_user_only": conf().get("wechat_group_context_persist_raw_user_only"),
+            "wechat_group_context_engine_mode": conf().get("wechat_group_context_engine_mode"),
+            "wechat_group_session_scope": conf().get("wechat_group_session_scope"),
+            "wechat_group_thread_followup_ttl_minutes": conf().get("wechat_group_thread_followup_ttl_minutes"),
+            "wechat_group_room_singleflight_enabled": conf().get("wechat_group_room_singleflight_enabled"),
+            "wechat_group_rolling_summary_enabled": conf().get("wechat_group_rolling_summary_enabled"),
+            "wechat_group_continuation_enabled": conf().get("wechat_group_continuation_enabled"),
             "wechat_group_reply_policy_enabled": conf().get("wechat_group_reply_policy_enabled"),
             "wechat_group_archive_evidence_enabled": conf().get("wechat_group_archive_evidence_enabled"),
             "wechat_group_archive_evidence_limit": conf().get("wechat_group_archive_evidence_limit"),
@@ -388,6 +394,17 @@ class WechatGroupWebTest(unittest.TestCase):
                 "response_cleanup_max_chars": 800,
             },
             item["extra"]["humanization"],
+        )
+        self.assertEqual(
+            {
+                "mode": "legacy",
+                "session_scope": "member",
+                "thread_followup_ttl_minutes": 15,
+                "room_singleflight_enabled": True,
+                "rolling_summary_enabled": False,
+                "continuation_enabled": False,
+            },
+            item["extra"]["context_engine"],
         )
 
     def test_wechat_group_qr_handler_returns_running_channel_status(self):
@@ -1869,6 +1886,12 @@ class WechatGroupWebTest(unittest.TestCase):
                 "wechat_group_sticker_cooldown_seconds": "1",
                 "wechat_group_humanized_context_enabled": False,
                 "wechat_group_context_persist_raw_user_only": False,
+                "wechat_group_context_engine_mode": "v2",
+                "wechat_group_session_scope": "room",
+                "wechat_group_thread_followup_ttl_minutes": "9999",
+                "wechat_group_room_singleflight_enabled": False,
+                "wechat_group_rolling_summary_enabled": True,
+                "wechat_group_continuation_enabled": True,
                 "wechat_group_reply_policy_enabled": False,
                 "wechat_group_archive_evidence_enabled": False,
                 "wechat_group_archive_evidence_limit": "999",
@@ -1931,6 +1954,12 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual(5, conf()["wechat_group_sticker_cooldown_seconds"])
         self.assertFalse(conf()["wechat_group_humanized_context_enabled"])
         self.assertFalse(conf()["wechat_group_context_persist_raw_user_only"])
+        self.assertEqual("v2", conf()["wechat_group_context_engine_mode"])
+        self.assertEqual("room", conf()["wechat_group_session_scope"])
+        self.assertEqual(1440, conf()["wechat_group_thread_followup_ttl_minutes"])
+        self.assertFalse(conf()["wechat_group_room_singleflight_enabled"])
+        self.assertTrue(conf()["wechat_group_rolling_summary_enabled"])
+        self.assertTrue(conf()["wechat_group_continuation_enabled"])
         self.assertFalse(conf()["wechat_group_reply_policy_enabled"])
         self.assertFalse(conf()["wechat_group_archive_evidence_enabled"])
         self.assertEqual(100, conf()["wechat_group_archive_evidence_limit"])
@@ -2591,6 +2620,12 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("groups-humanization-recent-enabled", console_js)
         self.assertIn("groups-humanization-recent-limit", console_js)
         self.assertIn("groups-humanization-recent-minutes", console_js)
+        self.assertIn("groups-context-engine-mode", console_js)
+        self.assertIn("groups-context-session-scope", console_js)
+        self.assertIn("groups-context-thread-ttl", console_js)
+        self.assertIn("groups-context-singleflight-enabled", console_js)
+        self.assertIn("groups-context-rolling-summary-enabled", console_js)
+        self.assertIn("groups-context-continuation-enabled", console_js)
 
     def test_console_anchors_wechat_group_switch_knobs_to_their_tracks(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:

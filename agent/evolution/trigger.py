@@ -180,8 +180,14 @@ def _scan_loop(agent_bridge) -> None:
 def _scan_once(agent_bridge, cfg) -> None:
     now = time.time()
     # Snapshot to avoid holding the dict while running long evolutions.
-    sessions = list(getattr(agent_bridge, "agents", {}).items())
-    for session_id, agent in sessions:
+    snapshot = getattr(agent_bridge, "agent_items_snapshot", None)
+    sessions = (
+        snapshot()
+        if callable(snapshot)
+        else list(getattr(agent_bridge, "agents", {}).items())
+    )
+    for cache_key, agent in sessions:
+        session_id = cache_key[0] if isinstance(cache_key, tuple) else cache_key
         try:
             from agent.memory.routing import resolve_memory_route
 

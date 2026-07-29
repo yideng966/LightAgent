@@ -84,14 +84,20 @@ class ChatChannel(Channel):
                     # Keep missing/legacy configs aligned with the documented
                     # default: group members use independent sessions unless
                     # shared group context is explicitly enabled.
-                    group_shared_session = conf().get("group_shared_session", False)
                     if context.get("channel_type") == "wechat_group" and stable_group_id:
-                        if group_shared_session:
-                            session_id = f"wechat_group:{stable_group_id}"
-                        else:
-                            session_member = stable_member_id or cmsg.actual_user_id
-                            session_id = f"wechat_group:{stable_group_id}:{session_member}"
-                    elif group_shared_session:
+                        from channel.wechat_group.wechat_group_session_policy import (
+                            build_wechat_group_owner_session_id,
+                        )
+
+                        session_id = (
+                            context.get("wechat_group_owner_session_id")
+                            or build_wechat_group_owner_session_id(
+                                stable_group_id,
+                                stable_member_id,
+                                fallback_member_id=cmsg.actual_user_id,
+                            )
+                        )
+                    elif conf().get("group_shared_session", False):
                         # All users in the group share the same session
                         session_id = group_id
                     else:

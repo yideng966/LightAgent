@@ -38,12 +38,18 @@ class AgentInitializer:
         self.bridge = bridge
         self.agent_bridge = agent_bridge
     
-    def initialize_agent(self, session_id: Optional[str] = None) -> Agent:
+    def initialize_agent(
+        self,
+        session_id: Optional[str] = None,
+        history_thread_id: Optional[str] = None,
+    ) -> Agent:
         """
         Initialize agent for a session
         
         Args:
-            session_id: Session ID (None for default agent)
+            session_id: Owner session ID (None for default agent)
+            history_thread_id: Optional logical history thread. Other channels
+                leave this unset and retain session-wide history behavior.
         
         Returns:
             Initialized agent instance
@@ -119,14 +125,23 @@ class AgentInitializer:
 
         # Restore persisted conversation history for this session
         if session_id:
-            self._restore_conversation_history(agent, session_id)
+            self._restore_conversation_history(
+                agent,
+                session_id,
+                history_thread_id=history_thread_id,
+            )
 
         # Start daily memory flush timer (once, on first agent init regardless of session)
         self._start_daily_flush_timer()
 
         return agent
 
-    def _restore_conversation_history(self, agent, session_id: str) -> None:
+    def _restore_conversation_history(
+        self,
+        agent,
+        session_id: str,
+        history_thread_id: Optional[str] = None,
+    ) -> None:
         """
         Load persisted conversation messages from SQLite and inject them
         into the agent's in-memory message list.
@@ -157,7 +172,11 @@ class AgentInitializer:
                 restore_turns = max(1, max_turns // 5)
             else:
                 restore_turns = max(3, max_turns // 6)
-            saved = store.load_messages(session_id, max_turns=restore_turns)
+            saved = store.load_messages(
+                session_id,
+                max_turns=restore_turns,
+                thread_id=history_thread_id,
+            )
             if saved:
                 filtered = self._filter_text_only_messages(saved)
                 if filtered:
@@ -166,7 +185,7 @@ class AgentInitializer:
                     logger.debug(
                         f"[AgentInitializer] Restored {len(filtered)} text messages "
                         f"(from {len(saved)} total, {restore_turns} turns cap) "
-                        f"for session={session_id}"
+                        f"for session={session_id} thread={history_thread_id or 'legacy'}"
                     )
         except Exception as e:
             logger.warning(
@@ -626,8 +645,11 @@ class AgentInitializer:
         agents = []
         if self.agent_bridge.default_agent:
             agents.append(("default", self.agent_bridge.default_agent))
-        for sid, agent in self.agent_bridge.agents.items():
-            agents.append((sid, agent))
+        snapshot = getattr(self.agent_bridge, "agent_items_snapshot", None)
+        items = snapshot() if callable(snapshot) else list(self.agent_bridge.agents.items())
+        for cache_key, agent in items:
+            owner_session_id = cache_key[0] if isinstance(cache_key, tuple) else cache_key
+            agents.append((owner_session_id, agent))
 
         if not agents:
             return

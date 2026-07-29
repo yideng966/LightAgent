@@ -344,6 +344,9 @@ docker push yideng966/lightagent:latest
 - 群记忆管理、上下文注入和 Agent 查询必须统一绑定当前 `stable_room_id`，只允许列出 `wechat_group_stable_room_ids`，不得回退展示 runtime 群快照；群记忆工具 schema 不得接收模型传入的 `room_id`。内部历史类名、配置键和数据库表名可为兼容保留 knowledge 命名，但不得据此把群永久记忆重新展示为知识。
 - 微信群归档按群查询必须优先严格匹配 `stable_room_id`；只有归档记录自身未绑定稳定群 ID 时，才允许使用 legacy `room_id` 兼容读取，不得用无条件 `stable_room_id OR room_id` 扩大检索范围。
 - 微信群成员会话默认按 `stable_room_id + stable_member_id` 隔离；旧配置缺少 `group_shared_session` 时必须按 `false` 处理，不能回退为全群共享。显式开启全群共享时保持兼容，但不要通过提高同一共享会话的 `concurrency_in_session` 解决阻塞，以免引入会话历史和回复顺序竞争。
+- 微信群 Context Engine V2 必须区分 room timeline、owner session、Agent thread、request 和 Provider transport；`new_thread` 不得清空或推进旧 session 的 `context_start_seq`，其他渠道未传 `thread_id` 时必须保持旧 session 语义。V2 thread 只持久化首个用户原文和最终助手文本，工具原始消息、thinking、增强 Prompt、runtime ID 与媒体路径不得进入可恢复历史。
+- V2 Agent turn 必须以 sidecar `send_result` 为两阶段提交边界：生成完成后只能写模型/Web 均不可见的 pending 行；仅确认 `sent` 后才允许确认 thread、记录已发送 assistant timeline、保存 continuation capsule 并刷新 Agent 缓存。发送失败、未知、超时、清洗为空、静默或 stale 抑制必须删除本请求 pending 行且不创建/续期 thread；不得把“已交给 sidecar”当作发送成功。
+- `wechat_group_context_engine_mode` 在真实群 canary 完成前保持默认 `legacy`；room single-flight 只在 V2 生效，rolling summary 与 continuation 必须可独立关闭。无法获得稳定 outbound message ID 时不得按相似文本伪造 quote-to-thread anchor。
 - 身份恢复必须按 stable account -> stable room -> stable member 的顺序确认；未确认 account 不得确认 room，未确认 member 不得写入管理员 stable 配置或继承敏感权限。
 - legacy runtime room/member 如果在多个 stable account 下产生歧义，必须返回未解析并要求人工确认，不得按最近记录任取；在线成员解析应优先使用当前运行中 room 的 stable 映射。
 - 通道层管理员硬门禁、humanized 降级上下文、生图额度和 scheduler 会话都必须使用 stable scope；runtime 字段只用于微信真实发送和 legacy 快照。

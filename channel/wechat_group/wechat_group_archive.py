@@ -95,18 +95,20 @@ class WechatGroupArchive:
         created_at: Optional[int] = None,
         stable_room_id: str = "",
         runtime_room_id: str = "",
-    ) -> None:
+        thread_id: str = "",
+        request_id: str = "",
+    ) -> int:
         if not room_id or not content:
-            return
+            return 0
         ts = _coerce_timestamp(created_at)
         with self._lock, closing(self._connect()) as conn:
             with conn:
-                conn.execute(
+                cursor = conn.execute(
                     """
                     INSERT INTO wechat_group_assistant_replies (
                         room_id, room_name, reply_type, content, mention_ids, created_at,
-                        stable_room_id, runtime_room_id
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        stable_room_id, runtime_room_id, thread_id, request_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         str(room_id),
@@ -117,8 +119,38 @@ class WechatGroupArchive:
                         ts,
                         str(stable_room_id or ""),
                         str(runtime_room_id or room_id),
+                        str(thread_id or ""),
+                        str(request_id or ""),
                     ),
                 )
+                return int(cursor.lastrowid or 0)
+
+    def get_room_revision(self, room_id: str) -> Dict[str, int]:
+        """Return stable-room inbound/assistant high-water marks."""
+        scope = str(room_id or "").strip()
+        if not scope:
+            return {"inbound_cursor": 0, "assistant_cursor": 0}
+        with self._lock, closing(self._connect()) as conn:
+            inbound = conn.execute(
+                """
+                SELECT COALESCE(MAX(id), 0) FROM wechat_group_messages
+                WHERE stable_room_id = ?
+                   OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                """,
+                (scope, scope),
+            ).fetchone()
+            assistant = conn.execute(
+                """
+                SELECT COALESCE(MAX(id), 0) FROM wechat_group_assistant_replies
+                WHERE stable_room_id = ?
+                   OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                """,
+                (scope, scope),
+            ).fetchone()
+        return {
+            "inbound_cursor": int((inbound or [0])[0] or 0),
+            "assistant_cursor": int((assistant or [0])[0] or 0),
+        }
 
     def record_image_create_usage(
         self,
@@ -250,7 +282,8 @@ class WechatGroupArchive:
             assistant_rows = conn.execute(
                 """
                 SELECT id, room_id, room_name, reply_type, content, created_at,
-                       stable_room_id, runtime_room_id
+                       stable_room_id, runtime_room_id, thread_id, request_id,
+                       mention_ids
                 FROM wechat_group_assistant_replies
                 WHERE (
                     stable_room_id = ?
@@ -293,6 +326,13 @@ class WechatGroupArchive:
                     "stable_member_id": "",
                     "runtime_sender_id": "",
                     "is_bot": True,
+                    "thread_id": str(data.get("thread_id") or ""),
+                    "request_id": str(data.get("request_id") or ""),
+                    "mention_ids": [
+                        value for value in str(data.get("mention_ids") or "").split(",")
+                        if value
+                    ],
+                    "source_event_id": "assistant:{}".format(reply_id),
                     "_timeline_source_order": 1,
                 }
             )
@@ -306,7 +346,92 @@ class WechatGroupArchive:
         timeline = timeline[-max_limit:]
         for item in timeline:
             item.pop("_timeline_source_order", None)
+            if not item.get("source_event_id"):
+                item["source_event_id"] = "inbound:{}".format(int(item.get("id") or 0))
         return timeline
+
+    def get_conversation_messages_after_revision(
+        self,
+        room_id: str,
+        inbound_cursor: int = 0,
+        assistant_cursor: int = 0,
+        limit: int = 200,
+    ) -> List[Dict[str, Any]]:
+        """Return chronological room events newer than the supplied cursors."""
+        scope = str(room_id or "").strip()
+        if not scope:
+            return []
+        max_limit = min(max(int(limit or 200), 1), 500)
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            inbound_rows = conn.execute(
+                """
+                SELECT id, message_id, room_id, room_name, sender_id,
+                       sender_nickname, message_type, text, media_path, is_at,
+                       metadata, created_at, stable_room_id, runtime_room_id,
+                       stable_member_id, runtime_sender_id
+                FROM wechat_group_messages
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                ) AND id > ?
+                ORDER BY id ASC LIMIT ?
+                """,
+                (scope, scope, max(int(inbound_cursor or 0), 0), max_limit),
+            ).fetchall()
+            assistant_rows = conn.execute(
+                """
+                SELECT id, room_id, room_name, reply_type, content, created_at,
+                       stable_room_id, runtime_room_id, thread_id, request_id,
+                       mention_ids
+                FROM wechat_group_assistant_replies
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                ) AND id > ?
+                ORDER BY id ASC LIMIT ?
+                """,
+                (scope, scope, max(int(assistant_cursor or 0), 0), max_limit),
+            ).fetchall()
+        timeline = []
+        for row in inbound_rows:
+            item = self._message_row_to_dict(row)
+            item.update({
+                "is_bot": False,
+                "source_event_id": "inbound:{}".format(int(item.get("id") or 0)),
+                "_timeline_source_order": 0,
+            })
+            timeline.append(item)
+        for row in assistant_rows:
+            data = dict(row)
+            reply_id = int(data.get("id") or 0)
+            timeline.append({
+                "id": reply_id,
+                "message_id": "assistant-reply:{}".format(reply_id),
+                "room_id": str(data.get("room_id") or ""),
+                "room_name": str(data.get("room_name") or ""),
+                "sender_id": "__lightagent_bot__",
+                "sender_nickname": "LightAgent",
+                "message_type": str(data.get("reply_type") or "text"),
+                "text": str(data.get("content") or ""),
+                "metadata": {"source": "assistant_reply"},
+                "created_at": int(data.get("created_at") or 0),
+                "stable_room_id": str(data.get("stable_room_id") or ""),
+                "runtime_room_id": str(data.get("runtime_room_id") or ""),
+                "is_bot": True,
+                "thread_id": str(data.get("thread_id") or ""),
+                "request_id": str(data.get("request_id") or ""),
+                "source_event_id": "assistant:{}".format(reply_id),
+                "_timeline_source_order": 1,
+            })
+        timeline.sort(key=lambda item: (
+            int(item.get("created_at") or 0),
+            int(item.get("_timeline_source_order") or 0),
+            int(item.get("id") or 0),
+        ))
+        for item in timeline:
+            item.pop("_timeline_source_order", None)
+        return timeline[:max_limit]
 
     def search_messages(
         self,
@@ -1103,12 +1228,16 @@ class WechatGroupArchive:
                         mention_ids TEXT,
                         created_at INTEGER NOT NULL,
                         stable_room_id TEXT NOT NULL DEFAULT '',
-                        runtime_room_id TEXT NOT NULL DEFAULT ''
+                        runtime_room_id TEXT NOT NULL DEFAULT '',
+                        thread_id TEXT NOT NULL DEFAULT '',
+                        request_id TEXT NOT NULL DEFAULT ''
                     )
                     """
                 )
                 _ensure_column(conn, "wechat_group_assistant_replies", "stable_room_id", "TEXT NOT NULL DEFAULT ''")
                 _ensure_column(conn, "wechat_group_assistant_replies", "runtime_room_id", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_assistant_replies", "thread_id", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_assistant_replies", "request_id", "TEXT NOT NULL DEFAULT ''")
                 conn.execute(
                     """
                     CREATE INDEX IF NOT EXISTS idx_wechat_group_replies_stable_room_time

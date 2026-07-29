@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS messages (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id   TEXT    NOT NULL,
+    thread_id    TEXT    NOT NULL DEFAULT '',
     seq          INTEGER NOT NULL,
     role         TEXT    NOT NULL,
     content      TEXT    NOT NULL,
@@ -51,6 +52,25 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_session
     ON messages (session_id, seq);
+
+CREATE TABLE IF NOT EXISTS conversation_threads (
+    session_id       TEXT    NOT NULL,
+    thread_id        TEXT    NOT NULL,
+    channel_type     TEXT    NOT NULL DEFAULT '',
+    stable_room_id   TEXT    NOT NULL DEFAULT '',
+    stable_member_id TEXT    NOT NULL DEFAULT '',
+    status           TEXT    NOT NULL DEFAULT 'active',
+    root_message_id  TEXT    NOT NULL DEFAULT '',
+    last_message_id  TEXT    NOT NULL DEFAULT '',
+    created_at       INTEGER NOT NULL,
+    last_active      INTEGER NOT NULL,
+    expires_at       INTEGER NOT NULL DEFAULT 0,
+    metadata         TEXT    NOT NULL DEFAULT '',
+    PRIMARY KEY (session_id, thread_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_conversation_threads_active
+    ON conversation_threads (session_id, status, last_active DESC);
 
 CREATE INDEX IF NOT EXISTS idx_sessions_last_active
     ON sessions (last_active);
@@ -73,6 +93,10 @@ ALTER TABLE sessions ADD COLUMN context_start_seq INTEGER NOT NULL DEFAULT 0;
 # Always optional — readers must tolerate missing column / empty / invalid JSON.
 _MIGRATION_ADD_MSG_EXTRAS = """
 ALTER TABLE messages ADD COLUMN extras TEXT NOT NULL DEFAULT '';
+"""
+
+_MIGRATION_ADD_MSG_THREAD_ID = """
+ALTER TABLE messages ADD COLUMN thread_id TEXT NOT NULL DEFAULT '';
 """
 
 DEFAULT_MAX_AGE_DAYS: int = 30
@@ -111,16 +135,34 @@ def _extract_display_text(content: Any) -> str:
 
 
 def _message_history_visibility(raw_extras: Any) -> str:
-    if isinstance(raw_extras, dict):
-        extras = raw_extras
-    else:
-        try:
-            extras = json.loads(raw_extras) if raw_extras else {}
-        except Exception:
-            extras = {}
+    extras = _parse_message_extras(raw_extras)
     if not isinstance(extras, dict):
         return ""
     return str(extras.get("history_visibility") or "").strip()
+
+
+def _parse_message_extras(raw_extras: Any) -> Dict[str, Any]:
+    if isinstance(raw_extras, dict):
+        return raw_extras
+    try:
+        extras = json.loads(raw_extras) if raw_extras else {}
+    except Exception:
+        extras = {}
+    return extras if isinstance(extras, dict) else {}
+
+
+def _message_delivery_state(raw_extras: Any) -> str:
+    return str(
+        _parse_message_extras(raw_extras).get("delivery_state") or ""
+    ).strip()
+
+
+def _pending_delivery_matches(raw_extras: Any, request_id: str) -> bool:
+    extras = _parse_message_extras(raw_extras)
+    return bool(
+        extras.get("delivery_state") == "pending"
+        and str(extras.get("delivery_request_id") or "") == str(request_id or "")
+    )
 
 
 # Internal markers written into the session for the agent's own bookkeeping
@@ -376,6 +418,7 @@ class ConversationStore:
         session_id: str,
         max_turns: int = 30,
         include_observe_only: bool = False,
+        thread_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Load the most recent messages for a session, for injection into the LLM.
@@ -392,6 +435,9 @@ class ConversationStore:
             max_turns: Maximum number of visible user-assistant turns to keep.
             include_observe_only: Include audit-only turns that must not be
                 restored into normal model context. Defaults to False.
+            thread_id: Optional logical conversation thread. ``None`` keeps
+                the legacy session-wide behavior; a string selects only that
+                thread, including the empty legacy thread when ``""``.
 
         Returns:
             Chronologically ordered list of message dicts (role, content).
@@ -406,15 +452,26 @@ class ConversationStore:
                 ).fetchone()
                 ctx_start = ctx_row[0] if ctx_row else 0
 
-                rows = conn.execute(
-                    """
-                    SELECT seq, role, content, extras
-                    FROM messages
-                    WHERE session_id = ? AND seq >= ?
-                    ORDER BY seq DESC
-                    """,
-                    (session_id, ctx_start),
-                ).fetchall()
+                if thread_id is None:
+                    rows = conn.execute(
+                        """
+                        SELECT seq, role, content, extras
+                        FROM messages
+                        WHERE session_id = ? AND seq >= ?
+                        ORDER BY seq DESC
+                        """,
+                        (session_id, ctx_start),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        """
+                        SELECT seq, role, content, extras
+                        FROM messages
+                        WHERE session_id = ? AND seq >= ? AND thread_id = ?
+                        ORDER BY seq DESC
+                        """,
+                        (session_id, ctx_start, str(thread_id or "")),
+                    ).fetchall()
             finally:
                 conn.close()
 
@@ -426,6 +483,10 @@ class ConversationStore:
                 row for row in rows
                 if _message_history_visibility(row[3]) != "observe_only"
             ]
+        rows = [
+            row for row in rows
+            if _message_delivery_state(row[3]) != "pending"
+        ]
 
         visible_turn_seqs: List[int] = []
         for seq, role, raw_content, _extras in rows:
@@ -477,6 +538,7 @@ class ConversationStore:
         session_id: str,
         messages: List[Dict[str, Any]],
         channel_type: str = "",
+        thread_id: str = "",
     ) -> None:
         """
         Append new messages to a session's history.
@@ -489,6 +551,7 @@ class ConversationStore:
             messages: List of message dicts to append.
             channel_type: Source channel (e.g. "feishu", "web", "wechat").
                           Only written on session creation; ignored on update.
+            thread_id: Optional logical thread within the owner session.
         """
         if not messages:
             return
@@ -531,10 +594,18 @@ class ConversationStore:
                         conn.execute(
                             """
                             INSERT OR IGNORE INTO messages
-                                (session_id, seq, role, content, created_at, extras)
-                            VALUES (?, ?, ?, ?, ?, ?)
+                                (session_id, thread_id, seq, role, content, created_at, extras)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
                             """,
-                            (session_id, next_seq, role, content, now, extras),
+                            (
+                                session_id,
+                                str(thread_id or ""),
+                                next_seq,
+                                role,
+                                content,
+                                now,
+                                extras,
+                            ),
                         )
                         next_seq += 1
 
@@ -568,6 +639,216 @@ class ConversationStore:
                                     break
             finally:
                 conn.close()
+
+    def create_thread(
+        self,
+        session_id: str,
+        thread_id: str,
+        channel_type: str = "wechat_group",
+        stable_room_id: str = "",
+        stable_member_id: str = "",
+        root_message_id: str = "",
+        ttl_seconds: int = 900,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Create and activate a non-destructive logical conversation thread."""
+        session_key = str(session_id or "").strip()
+        thread_key = str(thread_id or "").strip()
+        if not session_key or not thread_key:
+            raise ValueError("session_id and thread_id are required")
+        now = int(time.time())
+        ttl = max(int(ttl_seconds or 0), 0)
+        expires_at = now + ttl if ttl else 0
+        metadata_json = json.dumps(metadata or {}, ensure_ascii=False) if metadata else ""
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    conn.execute(
+                        "UPDATE conversation_threads SET status = 'closed' "
+                        "WHERE session_id = ? AND status = 'active' AND thread_id <> ?",
+                        (session_key, thread_key),
+                    )
+                    conn.execute(
+                        """
+                        INSERT OR IGNORE INTO conversation_threads (
+                            session_id, thread_id, channel_type, stable_room_id,
+                            stable_member_id, status, root_message_id,
+                            last_message_id, created_at, last_active, expires_at,
+                            metadata
+                        ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            session_key,
+                            thread_key,
+                            str(channel_type or ""),
+                            str(stable_room_id or ""),
+                            str(stable_member_id or ""),
+                            str(root_message_id or ""),
+                            str(root_message_id or ""),
+                            now,
+                            now,
+                            expires_at,
+                            metadata_json,
+                        ),
+                    )
+                    conn.execute(
+                        """
+                        UPDATE conversation_threads
+                        SET status = 'active', last_active = ?, expires_at = ?,
+                            last_message_id = CASE WHEN ? <> '' THEN ? ELSE last_message_id END
+                        WHERE session_id = ? AND thread_id = ?
+                        """,
+                        (
+                            now,
+                            expires_at,
+                            str(root_message_id or ""),
+                            str(root_message_id or ""),
+                            session_key,
+                            thread_key,
+                        ),
+                    )
+            finally:
+                conn.close()
+        return self.get_thread(session_key, thread_key) or {}
+
+    def touch_thread(
+        self,
+        session_id: str,
+        thread_id: str,
+        message_id: str = "",
+        ttl_seconds: int = 900,
+    ) -> bool:
+        """Refresh one thread without changing any other thread's history."""
+        now = int(time.time())
+        ttl = max(int(ttl_seconds or 0), 0)
+        expires_at = now + ttl if ttl else 0
+        with self._lock:
+            conn = self._connect()
+            try:
+                with conn:
+                    cur = conn.execute(
+                        """
+                        UPDATE conversation_threads
+                        SET status = 'active', last_active = ?, expires_at = ?,
+                            last_message_id = CASE WHEN ? <> '' THEN ? ELSE last_message_id END
+                        WHERE session_id = ? AND thread_id = ?
+                        """,
+                        (
+                            now,
+                            expires_at,
+                            str(message_id or ""),
+                            str(message_id or ""),
+                            str(session_id or ""),
+                            str(thread_id or ""),
+                        ),
+                    )
+                    return cur.rowcount > 0
+            finally:
+                conn.close()
+
+    def get_active_thread(
+        self,
+        session_id: str,
+        ttl_seconds: int = 900,
+    ) -> Optional[Dict[str, Any]]:
+        """Return the newest unexpired active thread for an owner session."""
+        now = int(time.time())
+        cutoff = now - max(int(ttl_seconds or 0), 0)
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    """
+                    SELECT session_id, thread_id, channel_type, stable_room_id,
+                           stable_member_id, status, root_message_id,
+                           last_message_id, created_at, last_active, expires_at,
+                           metadata
+                    FROM conversation_threads
+                    WHERE session_id = ? AND status = 'active'
+                      AND last_active >= ?
+                      AND (expires_at = 0 OR expires_at >= ?)
+                    ORDER BY last_active DESC, created_at DESC
+                    LIMIT 1
+                    """,
+                    (str(session_id or ""), cutoff, now),
+                ).fetchone()
+            finally:
+                conn.close()
+        return self._thread_row_to_dict(row)
+
+    def get_thread(self, session_id: str, thread_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            conn = self._connect()
+            try:
+                row = conn.execute(
+                    """
+                    SELECT session_id, thread_id, channel_type, stable_room_id,
+                           stable_member_id, status, root_message_id,
+                           last_message_id, created_at, last_active, expires_at,
+                           metadata
+                    FROM conversation_threads
+                    WHERE session_id = ? AND thread_id = ?
+                    """,
+                    (str(session_id or ""), str(thread_id or "")),
+                ).fetchone()
+            finally:
+                conn.close()
+        return self._thread_row_to_dict(row)
+
+    def get_thread_source_event_ids(self, session_id: str, thread_id: str) -> List[str]:
+        """Return room timeline event ids already represented in a thread."""
+        if not session_id or not thread_id:
+            return []
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT extras FROM messages
+                    WHERE session_id = ? AND thread_id = ? AND extras <> ''
+                    ORDER BY seq ASC
+                    """,
+                    (str(session_id), str(thread_id)),
+                ).fetchall()
+            finally:
+                conn.close()
+        result = []
+        seen = set()
+        for (raw,) in rows:
+            extras = _parse_message_extras(raw)
+            if extras.get("delivery_state") == "pending":
+                continue
+            event_id = str(
+                extras.get("source_event_id") if isinstance(extras, dict) else ""
+            ).strip()
+            if event_id and event_id not in seen:
+                seen.add(event_id)
+                result.append(event_id)
+        return result
+
+    @staticmethod
+    def _thread_row_to_dict(row) -> Optional[Dict[str, Any]]:
+        if not row:
+            return None
+        try:
+            metadata = json.loads(row[11]) if row[11] else {}
+        except Exception:
+            metadata = {}
+        return {
+            "session_id": str(row[0] or ""),
+            "thread_id": str(row[1] or ""),
+            "channel_type": str(row[2] or ""),
+            "stable_room_id": str(row[3] or ""),
+            "stable_member_id": str(row[4] or ""),
+            "status": str(row[5] or ""),
+            "root_message_id": str(row[6] or ""),
+            "last_message_id": str(row[7] or ""),
+            "created_at": int(row[8] or 0),
+            "last_active": int(row[9] or 0),
+            "expires_at": int(row[10] or 0),
+            "metadata": metadata if isinstance(metadata, dict) else {},
+        }
 
     def clear_context(self, session_id: str) -> int:
         """
@@ -673,6 +954,10 @@ class ConversationStore:
                 with conn:
                     conn.execute(
                         "DELETE FROM messages WHERE session_id = ?", (session_id,)
+                    )
+                    conn.execute(
+                        "DELETE FROM conversation_threads WHERE session_id = ?",
+                        (session_id,),
                     )
                     conn.execute(
                         "DELETE FROM sessions WHERE session_id = ?", (session_id,)
@@ -920,6 +1205,10 @@ class ConversationStore:
                             "DELETE FROM messages WHERE session_id = ?", (sid,)
                         )
                         conn.execute(
+                            "DELETE FROM conversation_threads WHERE session_id = ?",
+                            (sid,),
+                        )
+                        conn.execute(
                             "DELETE FROM sessions WHERE session_id = ?", (sid,)
                         )
                         deleted += 1
@@ -934,6 +1223,7 @@ class ConversationStore:
         self,
         session_id: str,
         extras: Dict[str, Any],
+        thread_id: Optional[str] = None,
     ) -> Optional[int]:
         """
         Merge ``extras`` into the latest assistant message of a session.
@@ -949,14 +1239,24 @@ class ConversationStore:
         with self._lock:
             conn = self._connect()
             try:
-                row = conn.execute(
-                    """
-                    SELECT seq, extras FROM messages
-                    WHERE session_id = ? AND role = 'assistant'
-                    ORDER BY seq DESC LIMIT 1
-                    """,
-                    (session_id,),
-                ).fetchone()
+                if thread_id is None:
+                    row = conn.execute(
+                        """
+                        SELECT seq, extras FROM messages
+                        WHERE session_id = ? AND role = 'assistant'
+                        ORDER BY seq DESC LIMIT 1
+                        """,
+                        (session_id,),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        """
+                        SELECT seq, extras FROM messages
+                        WHERE session_id = ? AND thread_id = ? AND role = 'assistant'
+                        ORDER BY seq DESC LIMIT 1
+                        """,
+                        (session_id, str(thread_id or "")),
+                    ).fetchone()
                 if not row:
                     return None
                 seq, raw = row
@@ -976,6 +1276,210 @@ class ConversationStore:
             except Exception as e:
                 logger.warning(f"[ConversationStore] attach_extras failed: {e}")
                 return None
+            finally:
+                conn.close()
+
+    def confirm_thread_turn_delivery(
+        self,
+        session_id: str,
+        thread_id: str,
+        request_id: str,
+        assistant_source_event_id: str = "",
+        assistant_text: Optional[str] = None,
+        thread_action: str = "",
+        channel_type: str = "wechat_group",
+        stable_room_id: str = "",
+        stable_member_id: str = "",
+        message_id: str = "",
+        ttl_seconds: int = 900,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        """Commit one pending turn and its thread after send confirmation."""
+        if not session_id or not thread_id or not request_id:
+            return 0
+        updated = 0
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT seq, role, extras FROM messages
+                    WHERE session_id = ? AND thread_id = ? AND extras <> ''
+                    ORDER BY seq ASC
+                    """,
+                    (str(session_id), str(thread_id)),
+                ).fetchall()
+                with conn:
+                    for seq, role, raw_extras in rows:
+                        extras = _parse_message_extras(raw_extras)
+                        if (
+                            extras.get("delivery_state") != "pending"
+                            or str(extras.get("delivery_request_id") or "")
+                            != str(request_id)
+                        ):
+                            continue
+                        extras["delivery_state"] = "sent"
+                        if role == "assistant" and assistant_source_event_id:
+                            extras["source_event_id"] = str(
+                                assistant_source_event_id
+                            )
+                        stored_content = None
+                        if role == "assistant" and assistant_text is not None:
+                            stored_content = json.dumps(
+                                [{"type": "text", "text": str(assistant_text)}],
+                                ensure_ascii=False,
+                            )
+                        if stored_content is None:
+                            conn.execute(
+                                """
+                                UPDATE messages SET extras = ?
+                                WHERE session_id = ? AND seq = ?
+                                """,
+                                (
+                                    json.dumps(extras, ensure_ascii=False),
+                                    str(session_id),
+                                    int(seq),
+                                ),
+                            )
+                        else:
+                            conn.execute(
+                                """
+                                UPDATE messages SET content = ?, extras = ?
+                                WHERE session_id = ? AND seq = ?
+                                """,
+                                (
+                                    stored_content,
+                                    json.dumps(extras, ensure_ascii=False),
+                                    str(session_id),
+                                    int(seq),
+                                ),
+                            )
+                        updated += 1
+                    if updated and thread_action in {"new_thread", "resume_thread"}:
+                        now = int(time.time())
+                        ttl = max(int(ttl_seconds or 0), 0)
+                        expires_at = now + ttl if ttl else 0
+                        metadata_json = (
+                            json.dumps(metadata or {}, ensure_ascii=False)
+                            if metadata
+                            else ""
+                        )
+                        if thread_action == "new_thread":
+                            conn.execute(
+                                """
+                                UPDATE conversation_threads SET status = 'closed'
+                                WHERE session_id = ? AND status = 'active'
+                                  AND thread_id <> ?
+                                """,
+                                (str(session_id), str(thread_id)),
+                            )
+                        conn.execute(
+                            """
+                            INSERT OR IGNORE INTO conversation_threads (
+                                session_id, thread_id, channel_type,
+                                stable_room_id, stable_member_id, status,
+                                root_message_id, last_message_id, created_at,
+                                last_active, expires_at, metadata
+                            ) VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                str(session_id),
+                                str(thread_id),
+                                str(channel_type or ""),
+                                str(stable_room_id or ""),
+                                str(stable_member_id or ""),
+                                str(message_id or ""),
+                                str(message_id or ""),
+                                now,
+                                now,
+                                expires_at,
+                                metadata_json,
+                            ),
+                        )
+                        conn.execute(
+                            """
+                            UPDATE conversation_threads
+                            SET status = 'active', last_active = ?, expires_at = ?,
+                                last_message_id = CASE
+                                    WHEN ? <> '' THEN ? ELSE last_message_id END
+                            WHERE session_id = ? AND thread_id = ?
+                            """,
+                            (
+                                now,
+                                expires_at,
+                                str(message_id or ""),
+                                str(message_id or ""),
+                                str(session_id),
+                                str(thread_id),
+                            ),
+                        )
+            finally:
+                conn.close()
+        return updated
+
+    def discard_pending_thread_turn(
+        self,
+        session_id: str,
+        thread_id: str,
+        request_id: str,
+    ) -> int:
+        """Remove a turn that never reached the WeChat room."""
+        if not session_id or not thread_id or not request_id:
+            return 0
+        with self._lock:
+            conn = self._connect()
+            try:
+                rows = conn.execute(
+                    """
+                    SELECT seq, extras FROM messages
+                    WHERE session_id = ? AND thread_id = ? AND extras <> ''
+                    """,
+                    (str(session_id), str(thread_id)),
+                ).fetchall()
+                seqs = [
+                    int(seq)
+                    for seq, raw_extras in rows
+                    if _pending_delivery_matches(raw_extras, request_id)
+                ]
+                if not seqs:
+                    return 0
+                placeholders = ",".join("?" * len(seqs))
+                with conn:
+                    conn.execute(
+                        "DELETE FROM messages WHERE session_id = ? "
+                        f"AND seq IN ({placeholders})",
+                        (str(session_id), *seqs),
+                    )
+                    remaining = conn.execute(
+                        "SELECT COUNT(*) FROM messages WHERE session_id = ?",
+                        (str(session_id),),
+                    ).fetchone()[0]
+                    if remaining:
+                        conn.execute(
+                            "UPDATE sessions SET msg_count = ? WHERE session_id = ?",
+                            (int(remaining), str(session_id)),
+                        )
+                    else:
+                        conn.execute(
+                            "DELETE FROM sessions WHERE session_id = ?",
+                            (str(session_id),),
+                        )
+                    thread_remaining = conn.execute(
+                        """
+                        SELECT COUNT(*) FROM messages
+                        WHERE session_id = ? AND thread_id = ?
+                        """,
+                        (str(session_id), str(thread_id)),
+                    ).fetchone()[0]
+                    if not thread_remaining:
+                        conn.execute(
+                            """
+                            DELETE FROM conversation_threads
+                            WHERE session_id = ? AND thread_id = ?
+                            """,
+                            (str(session_id), str(thread_id)),
+                        )
+                return len(seqs)
             finally:
                 conn.close()
 
@@ -1063,6 +1567,11 @@ class ConversationStore:
             include_thinking = False
 
         # Strip seq for display grouping, but record max seq per visible user group
+        rows = [
+            row
+            for row in rows
+            if _message_delivery_state(row[4]) != "pending"
+        ]
         plain_rows = [
             (role, content, created_at, extras_raw)
             for _seq, role, content, created_at, extras_raw in rows
@@ -1269,6 +1778,21 @@ class ConversationStore:
                 logger.info("[ConversationStore] Migrated: added messages.extras column")
             except Exception as e:
                 logger.warning(f"[ConversationStore] Migration (extras) failed: {e}")
+        if "thread_id" not in msg_cols:
+            try:
+                conn.execute(_MIGRATION_ADD_MSG_THREAD_ID)
+                conn.commit()
+                logger.info("[ConversationStore] Migrated: added messages.thread_id column")
+            except Exception as e:
+                logger.warning(f"[ConversationStore] Migration (thread_id) failed: {e}")
+        try:
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_messages_session_thread "
+                "ON messages (session_id, thread_id, seq)"
+            )
+            conn.commit()
+        except Exception as e:
+            logger.warning(f"[ConversationStore] thread index migration failed: {e}")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(str(self._db_path), timeout=10)

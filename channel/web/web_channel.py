@@ -4476,6 +4476,22 @@ class ChannelsHandler:
                 "limit": conf().get("wechat_group_recent_context_limit", 100),
                 "minutes": conf().get("wechat_group_recent_context_minutes", 1440),
             },
+            "context_engine": {
+                "mode": conf().get("wechat_group_context_engine_mode", "legacy"),
+                "session_scope": conf().get("wechat_group_session_scope", "member"),
+                "thread_followup_ttl_minutes": conf().get(
+                    "wechat_group_thread_followup_ttl_minutes", 15
+                ),
+                "room_singleflight_enabled": conf().get(
+                    "wechat_group_room_singleflight_enabled", True
+                ),
+                "rolling_summary_enabled": conf().get(
+                    "wechat_group_rolling_summary_enabled", False
+                ),
+                "continuation_enabled": conf().get(
+                    "wechat_group_continuation_enabled", False
+                ),
+            },
             "humanization": {
                 "enabled": conf().get("wechat_group_humanized_context_enabled", True),
                 "recent_enabled": conf().get("wechat_group_recent_context_enabled", True),
@@ -4752,6 +4768,12 @@ class ChannelsHandler:
             "wechat_group_recent_context_minutes",
             "wechat_group_humanized_context_enabled",
             "wechat_group_context_persist_raw_user_only",
+            "wechat_group_context_engine_mode",
+            "wechat_group_session_scope",
+            "wechat_group_thread_followup_ttl_minutes",
+            "wechat_group_room_singleflight_enabled",
+            "wechat_group_rolling_summary_enabled",
+            "wechat_group_continuation_enabled",
             "wechat_group_reply_policy_enabled",
             "wechat_group_archive_evidence_enabled",
             "wechat_group_archive_evidence_limit",
@@ -5016,6 +5038,9 @@ class ChannelsHandler:
                 "wechat_group_recent_context_enabled",
                 "wechat_group_humanized_context_enabled",
                 "wechat_group_context_persist_raw_user_only",
+                "wechat_group_room_singleflight_enabled",
+                "wechat_group_rolling_summary_enabled",
+                "wechat_group_continuation_enabled",
                 "wechat_group_reply_policy_enabled",
                 "wechat_group_archive_evidence_enabled",
                 "wechat_group_local_summary_enabled",
@@ -5054,6 +5079,16 @@ class ChannelsHandler:
                 "github_commit_notify_enabled",
             ):
                 value = cls._normalize_bool(value)
+            elif key == "wechat_group_context_engine_mode":
+                value = str(value or "legacy").strip().lower()
+                if value not in {"legacy", "v2"}:
+                    value = "legacy"
+            elif key == "wechat_group_session_scope":
+                value = str(value or "member").strip().lower()
+                if value not in {"member", "room"}:
+                    value = "member"
+            elif key == "wechat_group_thread_followup_ttl_minutes":
+                value = cls._clamp_int(value, 1, 1440, 15)
             elif key == "github_commit_notify_max_commits":
                 value = cls._clamp_int(value, 1, 20, 8)
             elif key == "github_commit_notify_retry_hours":
@@ -8636,9 +8671,8 @@ class SessionDetailHandler:
             try:
                 from bridge.bridge import Bridge
                 ab = Bridge().get_agent_bridge()
-                if session_id in ab.agents:
-                    del ab.agents[session_id]
-                    logger.info(f"[WebChannel] Removed agent instance for session {session_id}")
+                ab.clear_session(session_id)
+                logger.info(f"[WebChannel] Removed agent instance for session {session_id}")
             except Exception:
                 pass
 
@@ -8717,9 +8751,8 @@ class SessionClearContextHandler:
                 from bridge.bridge import Bridge
                 bridge = Bridge()
                 ab = bridge.get_agent_bridge()
-                if session_id in ab.agents:
-                    del ab.agents[session_id]
-                    logger.info(f"[WebChannel] Cleared agent instance for session {session_id}")
+                ab.clear_session(session_id)
+                logger.info(f"[WebChannel] Cleared agent instance for session {session_id}")
             except Exception:
                 pass
 

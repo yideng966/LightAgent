@@ -64,6 +64,74 @@ class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
 
         self.assertEqual("enhanced prompt", result)
 
+    def test_thread_persistence_keeps_only_first_user_and_final_assistant(self):
+        messages = [
+            {"role": "user", "content": "raw question"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "intermediate"},
+                    {"type": "tool_use", "id": "call-1", "name": "web_fetch"},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "call-1", "content": "result"}
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "text", "text": "final answer"}],
+            },
+        ]
+
+        result = self._bridge()._thread_text_only_messages(messages)
+
+        self.assertEqual(["user", "assistant"], [item["role"] for item in result])
+        self.assertEqual("raw question", result[0]["content"][0]["text"])
+        self.assertEqual("final answer", result[1]["content"][0]["text"])
+        self.assertNotIn("tool_use", str(result))
+        self.assertNotIn("tool_result", str(result))
+
+    def test_thread_turn_is_staged_pending_and_hidden_from_restore(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = ConversationStore(Path(tmpdir) / "conversations.db")
+            bridge = self._bridge()
+            messages = [
+                {"role": "user", "content": "raw question"},
+                {"role": "assistant", "content": "final answer"},
+            ]
+
+            with patch("agent.memory.get_conversation_store", return_value=store):
+                persisted = bridge._persist_messages(
+                    "wechat_group:wgr_room:wgm_alice",
+                    messages,
+                    channel_type="wechat_group",
+                    thread_id="wgt_thread",
+                    delivery_request_id="request-1",
+                    inbound_source_event_id="inbound:3",
+                )
+
+            self.assertTrue(persisted)
+            self.assertEqual(
+                [],
+                store.load_messages(
+                    "wechat_group:wgr_room:wgm_alice",
+                    thread_id="wgt_thread",
+                ),
+            )
+            self.assertEqual(
+                [],
+                store.load_history_page(
+                    "wechat_group:wgr_room:wgm_alice"
+                )["messages"],
+            )
+            self.assertEqual([], store.get_thread_source_event_ids(
+                "wechat_group:wgr_room:wgm_alice",
+                "wgt_thread",
+            ))
+
     def test_sanitize_wechat_group_runtime_messages_replaces_current_user_turn(self):
         enhanced = "<wechat-group-reply-policy>\ninternal\n</wechat-group-reply-policy>\n\nraw user text"
         raw = "raw user text"

@@ -373,6 +373,24 @@ const I18N = {
         groups_humanization_desc: '控制群聊回复策略、证据检索、摘要、链接策略和发送前清洗。',
         groups_humanization_enabled: '启用拟人化上下文',
         groups_humanization_enabled_hint: '按触发来源和意图组织当前轮微信群上下文。',
+        groups_context_engine_title: '上下文与会话引擎',
+        groups_context_engine_desc: '控制 V2 灰度、线程复用与群级回复协调。',
+        groups_context_engine_mode: '引擎模式',
+        groups_context_engine_mode_hint: 'Legacy 保持原行为；V2 启用快照、线程和发送确认。',
+        groups_context_engine_legacy: 'Legacy',
+        groups_context_engine_v2: 'V2',
+        groups_context_session_scope: '会话作用域',
+        groups_context_session_scope_hint: '成员隔离为默认；整群共享仅用于兼容旧配置。',
+        groups_context_session_member: '按成员隔离',
+        groups_context_session_room: '整群共享',
+        groups_context_thread_ttl: '承接线程有效期（分钟）',
+        groups_context_thread_ttl_hint: '短追问在该时间内可继续同一 Agent 线程。',
+        groups_context_singleflight: '启用单群串行回复',
+        groups_context_singleflight_hint: '同一群只生成一个最终回复，显式请求优先于自由接话。',
+        groups_context_rolling_summary: '启用滚动摘要',
+        groups_context_rolling_summary_hint: '后台压缩较早群现场，不增加直接回复首包等待。',
+        groups_context_continuation: '启用安全工具续接',
+        groups_context_continuation_hint: '短时复用白名单只读工具的清洗摘要。',
         groups_humanization_persist_raw_user_only: '历史只保存用户原文',
         groups_humanization_persist_raw_user_only_hint: '增强提示词只进入当前轮请求，不写入后续对话历史。',
         groups_humanization_reply_policy_enabled: '启用回复策略',
@@ -1410,6 +1428,24 @@ const I18N = {
         groups_humanization_desc: 'Controls reply policy, evidence search, summaries, link policy, and outgoing cleanup.',
         groups_humanization_enabled: 'Enable humanized context',
         groups_humanization_enabled_hint: 'Build current-turn WeChat group context by trigger source and intent.',
+        groups_context_engine_title: 'Context and session engine',
+        groups_context_engine_desc: 'Controls V2 rollout, thread reuse, and room-level reply coordination.',
+        groups_context_engine_mode: 'Engine mode',
+        groups_context_engine_mode_hint: 'Legacy preserves current behavior; V2 enables snapshots, threads, and send confirmation.',
+        groups_context_engine_legacy: 'Legacy',
+        groups_context_engine_v2: 'V2',
+        groups_context_session_scope: 'Session scope',
+        groups_context_session_scope_hint: 'Per-member isolation is the default; room sharing is for legacy compatibility.',
+        groups_context_session_member: 'Per member',
+        groups_context_session_room: 'Shared room',
+        groups_context_thread_ttl: 'Follow-up thread TTL (minutes)',
+        groups_context_thread_ttl_hint: 'Short follow-ups can resume the same Agent thread during this window.',
+        groups_context_singleflight: 'Enable room single-flight',
+        groups_context_singleflight_hint: 'Generate one final reply per room, prioritizing explicit requests over ambient replies.',
+        groups_context_rolling_summary: 'Enable rolling summary',
+        groups_context_rolling_summary_hint: 'Compress older room context in the background without delaying direct replies.',
+        groups_context_continuation: 'Enable safe tool continuation',
+        groups_context_continuation_hint: 'Temporarily reuse sanitized summaries from allowlisted read-only tools.',
         groups_humanization_persist_raw_user_only: 'Persist raw user text only',
         groups_humanization_persist_raw_user_only_hint: 'Use enhanced prompts only for the current request, not future chat history.',
         groups_humanization_reply_policy_enabled: 'Enable reply policy',
@@ -12010,9 +12046,34 @@ function readWechatGroupVoiceInteractionMode(saved = {}) {
 function buildGroupsHumanizationPanel(extra) {
     const humanization = extra.humanization || {};
     const recent = extra.recent_context || {};
-    const settings = readWechatGroupHumanizationSettings(humanization, recent);
+    const contextEngine = extra.context_engine || {};
+    const settings = readWechatGroupHumanizationSettings(humanization, recent, contextEngine);
     return `<div class="h-full w-full">
         ${buildGroupsPanelTitle('fa-user-check', 'groups_humanization_title', 'groups_humanization_desc')}
+        <details open class="mb-5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111]">
+            <summary class="min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
+                <i class="fas fa-diagram-project mr-2 text-primary-500"></i>${t('groups_context_engine_title')}
+                <span class="block pl-6 mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">${t('groups_context_engine_desc')}</span>
+            </summary>
+            <div class="border-t border-slate-200 dark:border-white/10 p-4">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                    ${buildGroupsSegmentedControl('groups-context-engine-mode', 'groups_context_engine_mode', 'groups_context_engine_mode_hint', settings.context_engine_mode, [
+                        { value: 'legacy', label: 'groups_context_engine_legacy' },
+                        { value: 'v2', label: 'groups_context_engine_v2' },
+                    ])}
+                    ${buildGroupsSegmentedControl('groups-context-session-scope', 'groups_context_session_scope', 'groups_context_session_scope_hint', settings.session_scope, [
+                        { value: 'member', label: 'groups_context_session_member' },
+                        { value: 'room', label: 'groups_context_session_room' },
+                    ])}
+                </div>
+                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
+                    ${buildGroupsNumberField('groups-context-thread-ttl', 'groups_context_thread_ttl', 'groups_context_thread_ttl_hint', settings.thread_followup_ttl_minutes, 1, 1440)}
+                    ${buildGroupsHumanizationToggle('groups-context-singleflight-enabled', 'groups_context_singleflight', 'groups_context_singleflight_hint', settings.room_singleflight_enabled)}
+                    ${buildGroupsHumanizationToggle('groups-context-rolling-summary-enabled', 'groups_context_rolling_summary', 'groups_context_rolling_summary_hint', settings.rolling_summary_enabled)}
+                    ${buildGroupsHumanizationToggle('groups-context-continuation-enabled', 'groups_context_continuation', 'groups_context_continuation_hint', settings.continuation_enabled)}
+                </div>
+            </div>
+        </details>
         <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
             ${buildGroupsHumanizationToggle('groups-humanization-enabled', 'groups_humanization_enabled', 'groups_humanization_enabled_hint', settings.enabled)}
             ${buildGroupsHumanizationToggle('groups-humanization-persist-raw-user-only', 'groups_humanization_persist_raw_user_only', 'groups_humanization_persist_raw_user_only_hint', settings.persist_raw_user_only)}
@@ -12131,7 +12192,7 @@ async function runGroupsContextPreview() {
     }
 }
 
-function readWechatGroupHumanizationSettings(saved = {}, recentCompat = {}) {
+function readWechatGroupHumanizationSettings(saved = {}, recentCompat = {}, contextEngine = {}) {
     const boolValue = (id, fallback) => document.getElementById(id) ? !!document.getElementById(id).checked : fallback;
     const numberValue = (id, fallback, min = 1) => {
         const el = document.getElementById(id);
@@ -12143,7 +12204,18 @@ function readWechatGroupHumanizationSettings(saved = {}, recentCompat = {}) {
         limit: saved.recent_limit ?? recentCompat.limit ?? 100,
         minutes: saved.recent_minutes ?? recentCompat.minutes ?? 1440,
     };
+    const selectedValue = (name, fallback, allowed) => {
+        const selected = document.querySelector(`input[name="${name}"]:checked`);
+        const value = String(selected?.value || fallback || '').trim().toLowerCase();
+        return allowed.includes(value) ? value : allowed[0];
+    };
     return {
+        context_engine_mode: selectedValue('groups-context-engine-mode', contextEngine.mode || 'legacy', ['legacy', 'v2']),
+        session_scope: selectedValue('groups-context-session-scope', contextEngine.session_scope || 'member', ['member', 'room']),
+        thread_followup_ttl_minutes: numberValue('groups-context-thread-ttl', Number(contextEngine.thread_followup_ttl_minutes || 15)),
+        room_singleflight_enabled: boolValue('groups-context-singleflight-enabled', contextEngine.room_singleflight_enabled !== false),
+        rolling_summary_enabled: boolValue('groups-context-rolling-summary-enabled', !!contextEngine.rolling_summary_enabled),
+        continuation_enabled: boolValue('groups-context-continuation-enabled', !!contextEngine.continuation_enabled),
         enabled: boolValue('groups-humanization-enabled', saved.enabled !== false),
         persist_raw_user_only: boolValue('groups-humanization-persist-raw-user-only', saved.persist_raw_user_only !== false),
         reply_policy_enabled: boolValue('groups-humanization-reply-policy-enabled', saved.reply_policy_enabled !== false),
@@ -14881,6 +14953,19 @@ function getGroupsMemoryRooms(extra) {
     }));
 }
 
+function buildGroupsSegmentedControl(name, labelKey, hintKey, value, options) {
+    return `<fieldset class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+        <legend class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(labelKey)}</legend>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t(hintKey)}</p>
+        <div class="grid grid-cols-2 gap-2 mt-3" role="radiogroup">
+            ${options.map(option => `<label class="min-h-11 cursor-pointer rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-center text-sm text-slate-700 dark:text-slate-200 has-[:checked]:border-primary-500 has-[:checked]:bg-primary-50 dark:has-[:checked]:bg-primary-500/10 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-primary-500 transition-colors">
+                <input type="radio" name="${name}" value="${escapeHtml(option.value)}" class="sr-only" ${value === option.value ? 'checked' : ''}>
+                <span>${t(option.label)}</span>
+            </label>`).join('')}
+        </div>
+    </fieldset>`;
+}
+
 function resetGroupsProfileEvolutionRoomState() {
     groupsProfilesState.evolutionRequestId += 1;
     groupsProfilesState.evolutionStatus = null;
@@ -16384,7 +16469,7 @@ function saveWechatGroupSettings() {
     if (Object.prototype.hasOwnProperty.call(githubCommitNotify, 'webhook_secret')) {
         githubCommitNotifyConfig.github_commit_notify_webhook_secret = githubCommitNotify.webhook_secret;
     }
-    const humanization = readWechatGroupHumanizationSettings(extra.humanization || {}, extra.recent_context || {});
+    const humanization = readWechatGroupHumanizationSettings(extra.humanization || {}, extra.recent_context || {}, extra.context_engine || {});
     const freeReply = readWechatGroupFreeReplySettings(extra.free_reply || {});
     const voiceInteractionMode = readWechatGroupVoiceInteractionMode(extra.voice_interaction || {});
     const freeReplyStableRoomIds = Array.isArray(freeReply.stable_room_ids) ? freeReply.stable_room_ids : [];
@@ -16412,6 +16497,12 @@ function saveWechatGroupSettings() {
                 wechat_group_alias_sync_cooldown_minutes: aliasSyncCooldownMinutes,
                 tools_web_fetch_proxy: basicProxy,
                 ...githubCommitNotifyConfig,
+                wechat_group_context_engine_mode: humanization.context_engine_mode,
+                wechat_group_session_scope: humanization.session_scope,
+                wechat_group_thread_followup_ttl_minutes: humanization.thread_followup_ttl_minutes,
+                wechat_group_room_singleflight_enabled: humanization.room_singleflight_enabled,
+                wechat_group_rolling_summary_enabled: humanization.rolling_summary_enabled,
+                wechat_group_continuation_enabled: humanization.continuation_enabled,
                 wechat_group_humanized_context_enabled: humanization.enabled,
                 wechat_group_context_persist_raw_user_only: humanization.persist_raw_user_only,
                 wechat_group_reply_policy_enabled: humanization.reply_policy_enabled,

@@ -2,6 +2,44 @@
 
 ## 2026-07-29
 
+### 重构微信群上下文与会话引擎并发布 2.1.22
+
+- 引入统一 room timeline、双游标 request snapshot 和 `minimal / recent / contextual / recall` ContextPolicy；自然语言 direct @ 在 V2 下默认读取同一稳定群的有界最新现场，当前消息、已进入 thread 的来源事件、rolling summary 与 recent tail 按来源游标去重。
+- 将 owner session 与 Agent thread 解耦，新增 `new_thread / resume_thread / observe_only` 状态机、兼容 SQLite thread schema 和有界 LRU Agent 缓存；新话题不再清空旧会话，明确继续和 quote-self 仅恢复同群同成员 active thread，其他渠道继续使用原 session 历史。
+- 新增 room single-flight、显式请求优先和 ambient 发送前 revision 复核；高频图片、总结、召回、链接、scheduler 与群记忆意图只收窄既有 Agent 工具候选，最终仍经过管理员硬门禁。
+- 新增稳定群隔离的后台 rolling summary 和 thread-scoped 安全 continuation capsule；只允许清洗后的白名单只读工具结果短时续接，不恢复原始工具链、文件正文、密钥、本机路径或跨群结果。
+- Agent turn 改为发送确认后的两阶段提交：生成完成只写 pending 的用户原文与最终文本，模型恢复和 Web 历史均不可见；sidecar 确认 `sent` 后才激活 thread、绑定已发送 timeline、保存 capsule，失败、未知、静默、空清洗结果和 stale 抑制统一回滚并重载缓存。
+- Web“群聊 -> 拟人化上下文”增加 V2、成员/群 session 作用域、thread TTL、room single-flight、rolling summary 与 continuation 配置；本版本继续默认 `legacy`，summary 和 continuation 默认关闭，等待单群 canary 后再切换。
+
+关键文件：
+
+- `agent/memory/conversation_store.py`
+- `bridge/agent_bridge.py`
+- `bridge/agent_initializer.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_archive.py`
+- `channel/wechat_group/wechat_group_humanized_context.py`
+- `channel/wechat_group/wechat_group_timeline_service.py`
+- `channel/wechat_group/wechat_group_request_snapshot.py`
+- `channel/wechat_group/wechat_group_context_policy.py`
+- `channel/wechat_group/wechat_group_session_policy.py`
+- `channel/wechat_group/wechat_group_reply_coordinator.py`
+- `channel/wechat_group/wechat_group_intent_router.py`
+- `channel/wechat_group/wechat_group_continuation_store.py`
+- `channel/wechat_group/wechat_group_rolling_summary.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `plans/20260729_微信群上下文与会话引擎重构计划.md`
+- `docs/releases/v2.1.22.md`
+
+验证记录：
+
+- 微信群主通道 144 项、Web 配置 119 项、V2/会话/两阶段提交专项 41 项、上下文兼容组 53 项通过。
+- `PYTHONUTF8=1 python -m unittest discover -s tests`：运行 1259 项，结果 OK，1 项按条件跳过；首次未设置 UTF-8 的运行仅有既存技能市场测试按 Windows GBK 读取 UTF-8 缓存失败，本次未修改无关测试。
+- 微信群 sidecar `npm test`：61 项通过；Python 编译、JavaScript 语法检查、发行说明校验与 `git diff --check` 通过。
+- 使用独立临时数据目录运行当前仓库 `python app.py`，Web-only 实例在 `127.0.0.1:9929` 返回 HTTP 200；验证后已停止临时进程并清理数据，未影响本机既有进程。
+- 未连接、更新或重启远端 Docker，未操作真实微信群数据；V2 真实群 canary 和默认切换保留为发布后门禁。
+
 ### 重构微信群思考隔离与备用模型请求边界
 
 - 删除 `v2.1.20` 引入的无标签自然语言正则，不再根据“用户要求我”“我应该”等句式猜测并截断模型正文；显式 `<think>...</think>` 改由单一有状态解析器跨 SSE 分片归一，Web 思考流与最终正文分离，IM 继续丢弃思考块和标签。

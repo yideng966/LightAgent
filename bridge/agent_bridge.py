@@ -9,7 +9,9 @@ import copy
 import threading
 import time
 import types
+from collections import OrderedDict
 from typing import Optional, List
+from uuid import uuid4
 
 from agent.protocol import Agent, LLMModel, LLMRequest, get_cancel_registry
 from bridge.agent_event_handler import AgentEventHandler
@@ -1051,7 +1053,9 @@ class AgentBridge:
     
     def __init__(self, bridge: Bridge):
         self.bridge = bridge
-        self.agents = {}  # session_id -> Agent instance mapping
+        self.agents = OrderedDict()  # owner session or (owner session, thread)
+        self._agents_lock = threading.RLock()
+        self._active_agent_cache_keys = set()
         self.default_agent = None  # For backward compatibility (no session_id)
         self.agent: Optional[Agent] = None
         self.scheduler_initialized = False
@@ -1132,7 +1136,63 @@ class AgentBridge:
 
         return agent
     
-    def get_agent(self, session_id: str = None) -> Optional[Agent]:
+    @staticmethod
+    def _agent_cache_key(session_id: str, thread_id: Optional[str] = None):
+        return (session_id, str(thread_id)) if thread_id else session_id
+
+    def _agent_cache_lock(self):
+        if not hasattr(self, "agents"):
+            self.agents = OrderedDict()
+        lock = getattr(self, "_agents_lock", None)
+        if lock is None:
+            lock = threading.RLock()
+            self._agents_lock = lock
+        return lock
+
+    def _touch_agent_cache_key(self, cache_key) -> None:
+        move_to_end = getattr(self.agents, "move_to_end", None)
+        if callable(move_to_end):
+            move_to_end(cache_key)
+            return
+        agent = self.agents.pop(cache_key)
+        self.agents[cache_key] = agent
+
+    def _enforce_thread_agent_cache_limit(self) -> None:
+        try:
+            limit = int(
+                conf().get("wechat_group_thread_agent_cache_max_entries", 128)
+                or 128
+            )
+        except (TypeError, ValueError):
+            limit = 128
+        limit = min(max(limit, 8), 1024)
+        active_keys = getattr(self, "_active_agent_cache_keys", set())
+        thread_keys = [
+            key
+            for key in self.agents
+            if isinstance(key, tuple) and key not in active_keys
+        ]
+        total_thread_entries = sum(
+            1 for key in self.agents if isinstance(key, tuple)
+        )
+        while total_thread_entries > limit and thread_keys:
+            evicted = thread_keys.pop(0)
+            self.agents.pop(evicted, None)
+            total_thread_entries -= 1
+            logger.debug(
+                "[AgentBridge] Evicted inactive WeChat group thread agent: %s",
+                evicted,
+            )
+
+    def agent_items_snapshot(self):
+        with self._agent_cache_lock():
+            return list(self.agents.items())
+
+    def get_agent(
+        self,
+        session_id: str = None,
+        thread_id: Optional[str] = None,
+    ) -> Optional[Agent]:
         """
         Get agent instance for the given session
         
@@ -1149,20 +1209,34 @@ class AgentBridge:
             return self.default_agent
         
         # Check if agent exists for this session
-        if session_id not in self.agents:
-            self._init_agent_for_session(session_id)
-        
-        return self.agents[session_id]
+        cache_key = self._agent_cache_key(session_id, thread_id)
+        with self._agent_cache_lock():
+            if cache_key not in self.agents:
+                self._init_agent_for_session(session_id, thread_id=thread_id)
+                self._enforce_thread_agent_cache_limit()
+            else:
+                self._touch_agent_cache_key(cache_key)
+            return self.agents[cache_key]
     
     def _init_default_agent(self):
         """Initialize default super agent"""
         agent = self.initializer.initialize_agent(session_id=None)
         self.default_agent = agent
     
-    def _init_agent_for_session(self, session_id: str):
+    def _init_agent_for_session(
+        self,
+        session_id: str,
+        thread_id: Optional[str] = None,
+    ):
         """Initialize agent for a specific session"""
-        agent = self.initializer.initialize_agent(session_id=session_id)
-        self.agents[session_id] = agent
+        if thread_id:
+            agent = self.initializer.initialize_agent(
+                session_id=session_id,
+                history_thread_id=thread_id,
+            )
+        else:
+            agent = self.initializer.initialize_agent(session_id=session_id)
+        self.agents[self._agent_cache_key(session_id, thread_id)] = agent
 
     def sync_session_messages_from_store(self, session_id: str) -> int:
         """Reload an agent's in-memory ``messages`` list from the persistent
@@ -1177,34 +1251,65 @@ class AgentBridge:
             Number of messages now held in the agent's memory. Returns -1 if
             the agent does not exist or has no compatible ``messages`` attr.
         """
-        if not session_id or session_id not in self.agents:
+        if not session_id:
             return -1
-        agent = self.agents[session_id]
-        if not (hasattr(agent, "messages") and hasattr(agent, "messages_lock")):
+        targets = []
+        for cache_key, agent in self.agent_items_snapshot():
+            owner = cache_key[0] if isinstance(cache_key, tuple) else cache_key
+            if owner == session_id:
+                thread_id = cache_key[1] if isinstance(cache_key, tuple) else None
+                targets.append((agent, thread_id))
+        if not targets:
             return -1
-        try:
-            from agent.memory import get_conversation_store
-            store = get_conversation_store()
-            # No turn cap here: we want a faithful mirror of what the store
-            # has for this session after deletion.
-            remaining = store.load_messages(session_id, max_turns=10**6)
-        except Exception as e:
-            logger.warning(
-                f"[AgentBridge] Failed to load messages for sync (session={session_id}): {e}"
-            )
-            return -1
-        with agent.messages_lock:
-            agent.messages.clear()
-            for msg in remaining:
-                agent.messages.append({
-                    "role": msg["role"],
-                    "content": msg["content"],
-                })
-            count = len(agent.messages)
+        count = 0
+        from agent.memory import get_conversation_store
+        store = get_conversation_store()
+        for agent, thread_id in targets:
+            if not (hasattr(agent, "messages") and hasattr(agent, "messages_lock")):
+                continue
+            try:
+                remaining = store.load_messages(
+                    session_id,
+                    max_turns=10**6,
+                    thread_id=thread_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    f"[AgentBridge] Failed to load messages for sync "
+                    f"(session={session_id}, thread={thread_id or 'legacy'}): {e}"
+                )
+                continue
+            with agent.messages_lock:
+                agent.messages.clear()
+                for msg in remaining:
+                    agent.messages.append({
+                        "role": msg["role"],
+                        "content": msg["content"],
+                    })
+                count += len(agent.messages)
         logger.info(
             f"[AgentBridge] Synced agent memory for session={session_id}, messages={count}"
         )
         return count
+
+    def sync_thread_messages_from_store(
+        self,
+        session_id: str,
+        thread_id: str,
+    ) -> int:
+        """Reload one cached thread from its committed text-only history."""
+        if not session_id or not thread_id:
+            return -1
+        cache_key = self._agent_cache_key(session_id, thread_id)
+        with self._agent_cache_lock():
+            agent = self.agents.get(cache_key)
+        if agent is None:
+            return -1
+        return self._reload_thread_agent_from_store(
+            agent,
+            session_id,
+            thread_id,
+        )
 
     def agent_reply(self, query: str, context: Context = None, 
                    on_event=None, clear_history: bool = False) -> Reply:
@@ -1221,6 +1326,8 @@ class AgentBridge:
             Reply object
         """
         session_id = None
+        history_thread_id = None
+        session_action = ""
         agent = None
         request_id = None
         cancel_event = None
@@ -1231,6 +1338,7 @@ class AgentBridge:
         history_snapshot_restored = False
         run_stream_executor = None
         observed_messages = []
+        agent_cache_key = None
         memory_route = None
         registry = None
         token_key = None
@@ -1239,11 +1347,34 @@ class AgentBridge:
             if context:
                 session_id = context.kwargs.get("session_id") or context.get("session_id")
                 request_id = context.kwargs.get("request_id") or context.get("request_id")
+                session_action = str(
+                    context.get("wechat_group_session_action") or ""
+                ).strip()
+                if session_action in {"new_thread", "resume_thread"}:
+                    history_thread_id = str(
+                        context.get("wechat_group_thread_id") or ""
+                    ).strip() or None
+                if history_thread_id and not request_id:
+                    request_id = uuid4().hex
+                    context["request_id"] = request_id
 
             # Get agent for this session (will auto-initialize if needed)
-            agent = self.get_agent(session_id=session_id)
+            if history_thread_id:
+                agent = self.get_agent(
+                    session_id=session_id,
+                    thread_id=history_thread_id,
+                )
+            else:
+                agent = self.get_agent(session_id=session_id)
             if not agent:
                 return Reply(ReplyType.ERROR, "Failed to initialize super agent")
+            agent_cache_key = self._agent_cache_key(session_id, history_thread_id)
+            with self._agent_cache_lock():
+                active_keys = getattr(self, "_active_agent_cache_keys", None)
+                if active_keys is None:
+                    active_keys = set()
+                    self._active_agent_cache_keys = active_keys
+                active_keys.add(agent_cache_key)
 
             from agent.memory.routing import resolve_memory_route
             memory_route = resolve_memory_route(
@@ -1270,7 +1401,12 @@ class AgentBridge:
                 cancel_event = registry.register(token_key, session_id=session_id)
 
             history_mode = self._resolve_agent_history_mode(context)
-            history_snapshot = self._prepare_agent_history_for_mode(agent, history_mode)
+            preparation_mode = (
+                "interactive_session"
+                if history_thread_id and session_action in {"new_thread", "resume_thread"}
+                else history_mode
+            )
+            history_snapshot = self._prepare_agent_history_for_mode(agent, preparation_mode)
             
             # Create event handler for logging and channel communication
             event_handler = AgentEventHandler(context=context, original_callback=on_event)
@@ -1433,6 +1569,29 @@ class AgentBridge:
                     if current_suffix else suffix
                 )
                 suffix_modified = True
+
+            if context and context.get("channel_type") == const.WECHAT_GROUP:
+                suggested_tool_names = context.get("wechat_group_suggested_tool_names")
+                if isinstance(suggested_tool_names, list) and suggested_tool_names:
+                    allowed_names = {
+                        str(name or "").strip()
+                        for name in suggested_tool_names
+                        if str(name or "").strip()
+                    }
+                    current_tools = list(agent.tools)
+                    agent.tools = [
+                        tool for tool in current_tools
+                        if str(getattr(tool, "name", "") or "") in allowed_names
+                    ]
+                    tools_modified = True
+                    context["wechat_group_route_tool_count"] = len(agent.tools)
+                    logger.info(
+                        "[AgentBridge] WeChat group route narrowed tools: "
+                        "route=%s tools=%s/%s",
+                        context.get("wechat_group_intent_route") or "unknown",
+                        len(agent.tools),
+                        len(current_tools),
+                    )
             
             # Pass context metadata to model for downstream API requests
             if context and hasattr(agent, 'model'):
@@ -1460,14 +1619,20 @@ class AgentBridge:
             # The reply (assistant/tool messages) is appended once the run
             # completes; the final persist skips this already-stored user turn.
             persisted_user_query = self._select_persisted_user_query(query, context)
-            if history_mode == "fresh":
+            if history_mode == "fresh" and not history_thread_id:
                 self._start_fresh_persistent_context(session_id, context)
-            pre_persisted = self._pre_persist_user_message(
-                session_id,
-                persisted_user_query,
-                context,
-                clear_history and history_mode != "observe_only",
-            )
+            if history_thread_id:
+                # V2 thread turns are staged as one pending user/assistant pair
+                # after generation. This avoids exposing or committing a
+                # half-written turn before WeChat confirms the actual send.
+                pre_persisted = False
+            else:
+                pre_persisted = self._pre_persist_user_message(
+                    session_id,
+                    persisted_user_query,
+                    context,
+                    clear_history and history_mode != "observe_only",
+                )
 
             # Mark this session as mid-run so the self-evolution idle scan does
             # not fire concurrently when a single turn runs longer than
@@ -1548,9 +1713,58 @@ class AgentBridge:
                 # drop it here so it isn't stored twice.
                 if pre_persisted and new_messages and new_messages[0].get("role") == "user":
                     new_messages = new_messages[1:]
-                if new_messages:
-                    self._persist_messages(session_id, list(new_messages), channel_type)
-                elif history_mode != "observe_only" and hasattr(agent, "messages") and hasattr(agent, "messages_lock"):
+                messages_to_persist = list(new_messages)
+                if history_thread_id:
+                    # Agent context trimming can make _last_run_new_messages
+                    # incomplete. Build an explicit turn envelope so confirmed
+                    # delivery always has a recoverable user/final pair.
+                    messages_to_persist = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": persisted_user_query}
+                            ],
+                        },
+                        *messages_to_persist,
+                        {
+                            "role": "assistant",
+                            "content": [
+                                {"type": "text", "text": str(response or "")}
+                            ],
+                        },
+                    ]
+                if messages_to_persist:
+                    persisted = self._persist_messages(
+                        session_id,
+                        messages_to_persist,
+                        channel_type,
+                        thread_id=history_thread_id or "",
+                        delivery_request_id=(request_id or "") if history_thread_id else "",
+                        inbound_source_event_id=(
+                            "inbound:{}".format(
+                                int(context.get("wechat_group_inbound_archive_row_id") or 0)
+                            )
+                            if history_thread_id
+                            and context
+                            and context.get("wechat_group_inbound_archive_row_id")
+                            else ""
+                        ),
+                    )
+                    if history_thread_id and persisted and context is not None:
+                        self._stage_wechat_group_delivery(
+                            session_id,
+                            history_thread_id,
+                            session_action,
+                            request_id or "",
+                            list(new_messages),
+                            context,
+                        )
+                elif (
+                    history_mode != "observe_only"
+                    and not history_thread_id
+                    and hasattr(agent, "messages")
+                    and hasattr(agent, "messages_lock")
+                ):
                     with agent.messages_lock:
                         msg_count = len(agent.messages)
                     if msg_count == 0:
@@ -1610,9 +1824,18 @@ class AgentBridge:
             
         except Exception as e:
             logger.error(f"Agent reply error: {e}")
+            if session_id and history_thread_id:
+                self._discard_pending_thread_turn(
+                    session_id,
+                    history_thread_id,
+                    request_id or "",
+                    agent=agent,
+                )
+                if context is not None:
+                    context.pop("wechat_group_pending_agent_delivery", None)
             # If the agent cleared its messages due to format error / overflow,
             # also purge the DB so the next request starts clean.
-            if session_id and agent and history_mode != "observe_only":
+            if session_id and agent and history_mode != "observe_only" and not history_thread_id:
                 try:
                     if hasattr(agent, "messages") and hasattr(agent, "messages_lock"):
                         with agent.messages_lock:
@@ -1640,6 +1863,12 @@ class AgentBridge:
                 self._restore_agent_history_snapshot(agent, history_snapshot)
             if execution_lock_acquired and execution_lock is not None:
                 execution_lock.release()
+            if agent_cache_key is not None:
+                with self._agent_cache_lock():
+                    getattr(self, "_active_agent_cache_keys", set()).discard(
+                        agent_cache_key
+                    )
+                    self._enforce_thread_agent_cache_limit()
 
     def _create_wechat_group_memory_tools(self, agent, context: Context = None):
         if not context or context.get("channel_type") != "wechat_group":
@@ -1968,6 +2197,77 @@ class AgentBridge:
                 f"[AgentBridge] Failed to start fresh context for session={session_id}: {e}"
             )
 
+    @staticmethod
+    def _reload_thread_agent_from_store(
+        agent,
+        session_id: str,
+        thread_id: str,
+    ) -> int:
+        if not agent or not session_id or not thread_id:
+            return -1
+        if not (hasattr(agent, "messages") and hasattr(agent, "messages_lock")):
+            return -1
+        try:
+            from agent.memory import get_conversation_store
+
+            saved = get_conversation_store().load_messages(
+                session_id,
+                max_turns=10**6,
+                thread_id=thread_id,
+            )
+            with agent.messages_lock:
+                agent.messages = [
+                    {"role": item["role"], "content": item["content"]}
+                    for item in saved
+                ]
+                if hasattr(agent, "_last_run_new_messages"):
+                    agent._last_run_new_messages = []
+            return len(saved)
+        except Exception as e:
+            logger.warning(
+                "[AgentBridge] Failed to reload thread after delivery: "
+                "session=%s thread=%s error=%s",
+                session_id,
+                thread_id,
+                e,
+            )
+            return -1
+
+    def _discard_pending_thread_turn(
+        self,
+        session_id: str,
+        thread_id: str,
+        request_id: str,
+        agent=None,
+    ) -> int:
+        removed = 0
+        if session_id and thread_id and request_id:
+            try:
+                from agent.memory import get_conversation_store
+
+                removed = get_conversation_store().discard_pending_thread_turn(
+                    session_id,
+                    thread_id,
+                    request_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "[AgentBridge] Failed to discard pending thread turn: "
+                    "session=%s thread=%s request=%s error=%s",
+                    session_id,
+                    thread_id,
+                    request_id,
+                    e,
+                )
+        target = agent
+        if target is None:
+            cache_key = self._agent_cache_key(session_id, thread_id)
+            with self._agent_cache_lock():
+                target = self.agents.get(cache_key)
+        if target is not None:
+            self._reload_thread_agent_from_store(target, session_id, thread_id)
+        return removed
+
     def _persist_observe_only_assistant(
         self,
         session_id: str,
@@ -1996,7 +2296,12 @@ class AgentBridge:
             )
 
     def _pre_persist_user_message(
-        self, session_id: str, query: str, context: Context, clear_history: bool
+        self,
+        session_id: str,
+        query: str,
+        context: Context,
+        clear_history: bool,
+        thread_id: str = "",
     ) -> bool:
         """Persist the user's message before the agent runs.
 
@@ -2029,12 +2334,22 @@ class AgentBridge:
                 "role": "user",
                 "content": [{"type": "text", "text": query}],
             }
+            if context and context.get("wechat_group_inbound_archive_row_id"):
+                user_msg["extras"] = {
+                    "source_event_id": "inbound:{}".format(
+                        int(context.get("wechat_group_inbound_archive_row_id") or 0)
+                    )
+                }
             if self._resolve_agent_history_mode(context) == "observe_only":
-                user_msg["extras"] = self._history_visibility_extras(
-                    context,
-                    "observe_only",
-                )
-            store.append_messages(session_id, [user_msg], channel_type=channel_type)
+                extras = dict(user_msg.get("extras") or {})
+                extras.update(self._history_visibility_extras(context, "observe_only"))
+                user_msg["extras"] = extras
+            store.append_messages(
+                session_id,
+                [user_msg],
+                channel_type=channel_type,
+                thread_id=thread_id,
+            )
             return True
         except Exception as e:
             logger.warning(
@@ -2103,19 +2418,25 @@ class AgentBridge:
         return False
 
     def _persist_messages(
-        self, session_id: str, new_messages: list, channel_type: str = ""
-    ) -> None:
+        self,
+        session_id: str,
+        new_messages: list,
+        channel_type: str = "",
+        thread_id: str = "",
+        delivery_request_id: str = "",
+        inbound_source_event_id: str = "",
+    ) -> bool:
         """
         Persist new messages to the conversation store after each agent run.
 
         Failures are logged but never propagate — they must not interrupt replies.
         """
         if not new_messages:
-            return
+            return False
         try:
             from config import conf
             if not conf().get("conversation_persistence", True):
-                return
+                return False
             # When deep-thinking display is disabled, strip "thinking" content
             # blocks before persisting so they don't resurface on history reload.
             # The in-memory message list keeps them intact for this run's
@@ -2127,15 +2448,144 @@ class AgentBridge:
         messages_to_store = new_messages
         if not thinking_enabled:
             messages_to_store = self._strip_thinking_blocks(new_messages)
+        if thread_id:
+            messages_to_store = self._thread_text_only_messages(messages_to_store)
+            roles = {str(item.get("role") or "") for item in messages_to_store}
+            if roles != {"user", "assistant"}:
+                logger.warning(
+                    "[AgentBridge] Skip incomplete WeChat group thread turn: "
+                    "session=%s thread=%s roles=%s",
+                    session_id,
+                    thread_id,
+                    sorted(roles),
+                )
+                return False
+        if thread_id and delivery_request_id:
+            staged_messages = []
+            for message in messages_to_store:
+                staged = dict(message)
+                extras = dict(staged.get("extras") or {})
+                extras.update({
+                    "delivery_state": "pending",
+                    "delivery_request_id": str(delivery_request_id),
+                })
+                if staged.get("role") == "user" and inbound_source_event_id:
+                    extras["source_event_id"] = str(inbound_source_event_id)
+                staged["extras"] = extras
+                staged_messages.append(staged)
+            messages_to_store = staged_messages
+
+        if not messages_to_store:
+            return False
 
         try:
             from agent.memory import get_conversation_store
             get_conversation_store().append_messages(
-                session_id, messages_to_store, channel_type=channel_type
+                session_id,
+                messages_to_store,
+                channel_type=channel_type,
+                thread_id=thread_id,
             )
+            return True
         except Exception as e:
             logger.warning(
                 f"[AgentBridge] Failed to persist messages for session={session_id}: {e}"
+            )
+            return False
+
+    @staticmethod
+    def _thread_text_only_messages(messages: list) -> list:
+        """Keep the first real user text and the final assistant text only."""
+        first_user = None
+        last_assistant = None
+        for message in messages or []:
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "")
+            if role not in {"user", "assistant"}:
+                continue
+            content = message.get("content")
+            if isinstance(content, str):
+                text_blocks = (
+                    [{"type": "text", "text": content}]
+                    if content.strip()
+                    else []
+                )
+            elif isinstance(content, list):
+                text_blocks = [
+                    dict(block)
+                    for block in content
+                    if isinstance(block, dict)
+                    and block.get("type") == "text"
+                    and str(block.get("text") or "").strip()
+                ]
+            else:
+                text_blocks = []
+            if not text_blocks:
+                continue
+            cleaned = dict(message)
+            cleaned["content"] = text_blocks
+            if role == "user" and first_user is None:
+                first_user = cleaned
+            elif role == "assistant":
+                last_assistant = cleaned
+        return [item for item in (first_user, last_assistant) if item is not None]
+
+    @staticmethod
+    def _stage_wechat_group_delivery(
+        session_id: str,
+        thread_id: str,
+        action: str,
+        request_id: str,
+        messages: list,
+        context: Context,
+    ) -> None:
+        if not context or context.get("channel_type") != const.WECHAT_GROUP:
+            return
+        msg = context.get("msg")
+        try:
+            ttl_seconds = max(
+                int(context.get("wechat_group_thread_ttl_seconds") or 900),
+                60,
+            )
+        except (TypeError, ValueError):
+            ttl_seconds = 900
+        pending = {
+            "state": "pending",
+            "owner_session_id": str(session_id or ""),
+            "thread_id": str(thread_id or ""),
+            "request_id": str(request_id or ""),
+            "action": str(action or "new_thread"),
+            "stable_room_id": str(
+                context.get("wechat_group_stable_room_id") or ""
+            ),
+            "stable_member_id": str(
+                context.get("wechat_group_stable_member_id") or ""
+            ),
+            "message_id": str(getattr(msg, "msg_id", "") or ""),
+            "ttl_seconds": ttl_seconds,
+            "reason": str(context.get("wechat_group_session_reason") or ""),
+        }
+        context["wechat_group_pending_agent_delivery"] = pending
+        if not conf().get("wechat_group_continuation_enabled", False):
+            return
+        try:
+            from channel.wechat_group.wechat_group_continuation_store import (
+                build_safe_continuation_capsule,
+            )
+
+            ttl_minutes = max(
+                int(conf().get("wechat_group_continuation_ttl_minutes", 10) or 10),
+                1,
+            )
+            capsule = build_safe_continuation_capsule(messages)
+            if capsule:
+                pending["continuation_capsule"] = capsule
+                pending["continuation_ttl_seconds"] = ttl_minutes * 60
+        except Exception as e:
+            logger.warning(
+                "[AgentBridge] Failed to stage WeChat group continuation: %s",
+                e,
             )
 
     # Marker used to identify scheduler-injected user messages so we can apply
@@ -2364,15 +2814,22 @@ class AgentBridge:
         Args:
             session_id: Session identifier to clear
         """
-        if session_id in self.agents:
-            logger.info(f"[AgentBridge] Clearing session: {session_id}")
-            del self.agents[session_id]
+        with self._agent_cache_lock():
+            keys = [
+                key for key in self.agents
+                if (key[0] if isinstance(key, tuple) else key) == session_id
+            ]
+            if keys:
+                logger.info(f"[AgentBridge] Clearing session: {session_id}")
+                for key in keys:
+                    del self.agents[key]
     
     def clear_all_sessions(self):
         """Clear all agent sessions"""
-        logger.info(f"[AgentBridge] Clearing all sessions ({len(self.agents)} total)")
-        self.agents.clear()
-        self.default_agent = None
+        with self._agent_cache_lock():
+            logger.info(f"[AgentBridge] Clearing all sessions ({len(self.agents)} total)")
+            self.agents.clear()
+            self.default_agent = None
     
     def refresh_all_skills(self) -> int:
         """
@@ -2400,7 +2857,7 @@ class AgentBridge:
         agents_to_refresh = []
         if self.default_agent:
             agents_to_refresh.append(("default", self.default_agent))
-        for session_id, agent in self.agents.items():
+        for session_id, agent in self.agent_items_snapshot():
             agents_to_refresh.append((session_id, agent))
 
         for label, agent in agents_to_refresh:
