@@ -1,51 +1,44 @@
-# Contributing to LightAgent
+# 为 LightAgent 做贡献
 
-Thanks for taking the time to contribute! 🎉 LightAgent is built by a global
-community, and contributions of all sizes are welcome — from typo fixes to new
-features.
+感谢你愿意为 LightAgent 做出贡献！无论是修正错别字、完善文档，还是提交新功能，我们都欢迎清晰、专注且可验证的改进。
 
-## Language policy
+## 语言规范
 
-To keep the project accessible to a global community, **please write issues,
-pull requests, code comments, and commit messages in English.**
+为便于项目成员沟通与维护，**问题反馈、拉取请求、代码注释、文档字符串以及版本提交信息的标题和正文必须使用简体中文。**
 
-> 为方便全球开发者协作，请尽量使用**英文**提交 issue、PR、代码注释与
-> commit message。不必担心英文不完美——表达清楚即可，工具翻译也完全没问题。感谢理解 ❤️
+代码标识符、命令、路径、配置项、第三方产品名称和原始错误信息可保留其原始形式，但相关说明仍应使用简体中文。
 
-## Reporting issues
+## 报告问题
 
-Found a bug or have an idea? [Open an issue](https://github.com/yideng966/LightAgent/issues/new/choose).
+发现缺陷或有改进建议时，请[创建问题反馈](https://github.com/yideng966/LightAgent/issues/new/choose)。
 
-Before opening one, please search existing issues (including closed ones) to
-avoid duplicates, and make sure you're on the latest version.
+创建前请先搜索已有的问题反馈，包括已关闭的问题，避免重复提交；同时请确认问题能够在最新版本中复现。
 
-## Submitting a pull request
+## 提交拉取请求
 
-1. **Fork** the repo and create a branch from `master`
-   (e.g. `feat/web-search`, `fix/telegram-reconnect`).
-2. Make your change. Keep it focused — one logical change per PR.
-3. Follow the existing code style. Write comments and docstrings in English.
-4. Run the app locally to confirm your change works.
-5. Open a PR with a clear title and a short description of **what** and **why**.
+1. 将仓库派生到个人账号，并从 `master` 分支创建新分支，例如 `feat/web-search` 或 `fix/telegram-reconnect`。
+2. 保持改动目标单一，每个拉取请求只处理一项逻辑变更。
+3. 遵循项目现有的代码风格，新增代码注释和文档字符串必须使用简体中文。
+4. 在本地运行应用和相关测试，确认改动能够正常工作。
+5. 创建拉取请求，并使用简体中文清楚说明改了什么、为什么要改以及如何验证。
 
-We keep the bar friendly: clear, focused, and working is enough. Maintainers are
-happy to help polish details during review.
+我们重视清晰、专注且可运行的贡献。维护者会在审查过程中协助完善必要的细节。
 
-### Commit & PR titles
+### 提交信息与拉取请求标题
 
-Use a short, imperative summary. The [Conventional Commits](https://www.conventionalcommits.org/)
-style is preferred but not required:
+标题应简短、明确，并使用简体中文概括本次变更。提交信息的标题和正文必须全部使用简体中文，例如：
 
-```
-feat: add web search tool
-fix: reconnect Telegram websocket on timeout
-docs: clarify Docker setup
+```text
+增加网页搜索工具
+修复连接超时后无法重新连接的问题
+补充容器部署说明
 ```
 
-## Development setup
+拉取请求的标题和正文同样必须使用简体中文。
 
-See the [Install from Source](https://docs.cowagent.ai/guide/manual-install)
-guide. In short:
+## 开发环境
+
+请参阅[从源码安装](https://docs.cowagent.ai/guide/manual-install)指南。基本步骤如下：
 
 ```bash
 git clone https://github.com/yideng966/LightAgent.git
@@ -55,7 +48,6 @@ pip install -e .
 lightagent start
 ```
 
-## Code of conduct
+## 行为准则
 
-Be respectful and constructive. We want LightAgent to be a welcoming place for
-everyone.
+请保持尊重、友善和建设性的沟通，共同维护开放且包容的协作环境。
