@@ -338,7 +338,8 @@ docker push yideng966/lightagent:latest
 - 普通群成员可以问答、查询、总结和读取上下文，但不能触发知识库写入、永久记忆写入、群记忆写入、群友画像写入、自主进化、workspace 文件写入/编辑、定时任务修改或微信群配置修改。
 - 管理员门禁必须同时包含通道层拒绝、Agent 工具过滤和 Prompt 权限提示；不能只依赖模型自觉遵守提示词。
 - 微信群稳定身份改造后，`wechat_group_room_id` / `wechat_group_sender_id` 继续表示当前 Wechaty 登录态 runtime ID；长期配置、权限、会话、归档、记忆、画像、焦点、情绪、风格、表情和 scheduler 必须优先使用显式 stable 字段。
-- Web“知识”页的群知识只允许列出 `wechat_group_stable_room_ids`，不得回退展示 runtime 群快照；群知识存储、上下文注入和 Agent 查询必须统一绑定当前 stable room，群知识工具 schema 不得接收模型传入的 `room_id`，全局 Markdown 知识库继续保持独立。
+- 群永久记忆的唯一 Web 管理入口是「管理 → 记忆 → 群记忆」；「管理 → 知识」只管理全局 Markdown 知识库，「群聊」不得再提供重复的群永久记忆管理入口。群友画像及自主学习保留在「群聊 → 群友画像」，完整记忆与画像注入预览保留在「群聊 → 拟人化」。
+- 群记忆管理、上下文注入和 Agent 查询必须统一绑定当前 `stable_room_id`，只允许列出 `wechat_group_stable_room_ids`，不得回退展示 runtime 群快照；群记忆工具 schema 不得接收模型传入的 `room_id`。内部历史类名、配置键和数据库表名可为兼容保留 knowledge 命名，但不得据此把群永久记忆重新展示为知识。
 - 微信群归档按群查询必须优先严格匹配 `stable_room_id`；只有归档记录自身未绑定稳定群 ID 时，才允许使用 legacy `room_id` 兼容读取，不得用无条件 `stable_room_id OR room_id` 扩大检索范围。
 - 微信群成员会话默认按 `stable_room_id + stable_member_id` 隔离；旧配置缺少 `group_shared_session` 时必须按 `false` 处理，不能回退为全群共享。显式开启全群共享时保持兼容，但不要通过提高同一共享会话的 `concurrency_in_session` 解决阻塞，以免引入会话历史和回复顺序竞争。
 - 身份恢复必须按 stable account -> stable room -> stable member 的顺序确认；未确认 account 不得确认 room，未确认 member 不得写入管理员 stable 配置或继承敏感权限。
@@ -486,6 +487,7 @@ messages:
 - `wechat_group_profile_get` 等 Agent 画像工具必须由服务端绑定当前 `room_id`；查询、精确读取和列表模式都只能返回当前群画像，不能接受模型传入的跨群 room 参数。
 - 群友画像不是多条零散记忆拼接；每个 `stable_room_id + stable_member_id` 最多注入一份当前生效画像，历史版本和来源只用于审计。
 - 所有群记忆和画像召回必须先按 `stable_room_id` 或 `stable_room_id + stable_member_id` 强过滤，再排序；legacy runtime 字段只能用于兼容回查，不允许跨群泄露。
+- 群记忆显式查询必须应用真实相关性分数和 `min_score`，无相关结果返回空；最近记忆只能通过明确的 recent 读取策略使用，不得作为显式查询的无命中兜底。
 - LightAgent 全局 shared memory 仍属于通用 Agent 记忆能力，不放进 `<wechat-group-memory>`；全局 shared memory 只能作为通用背景，不能反向泄露其他群信息。
 
 焦点栈维护约束：

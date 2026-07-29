@@ -41,13 +41,22 @@ class WechatGroupContextService:
         ))
 
         if knowledge_enabled:
-            group_memories = self.knowledge_service.search_group_knowledge(
-                room_id,
-                query=query,
-                limit=int(conf().get("wechat_group_group_memory_context_limit", 5) or 5),
-            )
+            memory_limit = int(conf().get("wechat_group_group_memory_context_limit", 5) or 5)
+            if str(query or "").strip():
+                group_memories = self.knowledge_service.search_group_memories(
+                    room_id,
+                    query=query,
+                    limit=memory_limit,
+                    min_score=0.2,
+                )
+                if not group_memories:
+                    filtered_reasons.append("no relevant group memory")
+            else:
+                group_memories = self.knowledge_service.list_recent_group_memories(
+                    room_id, limit=memory_limit
+                )
         else:
-            filtered_reasons.append("group knowledge disabled")
+            filtered_reasons.append("group memory disabled")
 
         if profile_enabled:
             resolved = self.profile_service.resolve_profiles_for_prompt(

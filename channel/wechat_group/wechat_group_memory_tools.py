@@ -13,7 +13,7 @@ from channel.wechat_group.wechat_group_profile_service import WechatGroupProfile
 class WechatGroupMemorySearchTool(BaseTool):
     name = "wechat_group_memory_search"
     description = (
-        "Search long-term knowledge and memories for the current WeChat group only. "
+        "Search permanent memories for the current WeChat group only. "
         "Use this for current group rules, preferences, historical agreements, "
         "project facts, or recurring decisions. The current room is bound by "
         "the server and cannot be changed by tool arguments."
@@ -33,7 +33,7 @@ class WechatGroupMemorySearchTool(BaseTool):
             "min_score": {
                 "type": "number",
                 "description": "Minimum relevance score from 0 to 1",
-                "default": 0,
+                "default": 0.2,
             },
         },
         "required": ["query"],
@@ -50,10 +50,11 @@ class WechatGroupMemorySearchTool(BaseTool):
             return ToolResult.fail("Error: query parameter is required")
         max_results = _to_int(params.get("max_results"), 5)
         try:
-            rows = self.service.search_group_knowledge(
+            rows = self.service.search_group_memories(
                 self.room_id,
                 query=query,
                 limit=max_results,
+                min_score=_to_float(params.get("min_score"), 0.2),
             )
         except Exception as e:
             return ToolResult.fail(f"Error searching current group memory: {e}")
@@ -62,7 +63,9 @@ class WechatGroupMemorySearchTool(BaseTool):
             return ToolResult.success("No current group memories found.")
         lines = [f"Found {len(rows)} current group memories:"]
         for idx, item in enumerate(rows, 1):
-            lines.append(f"\n{idx}. {item.get('content', '')}")
+            score = item.get("score")
+            suffix = f" (score={float(score):.2f})" if score is not None else ""
+            lines.append(f"\n{idx}. {item.get('content', '')}{suffix}")
         return ToolResult.success("\n".join(lines))
 
 
@@ -108,15 +111,8 @@ class WechatGroupMemoryWriteTool(BaseTool):
                 params.get("evidence_message_ids"),
                 limit=20,
             )
-            if evidence_message_ids:
-                archive = self.archive or WechatGroupArchive()
-                if any(
-                    archive.get_message_by_id(self.room_id, message_id) is None
-                    for message_id in evidence_message_ids
-                ):
-                    return ToolResult.fail(
-                        "Error: evidence_message_ids must belong to the current group"
-                    )
+            if self.archive is not None:
+                self.service.archive = self.archive
             memory = self.service.add_group_memory(
                 self.room_id,
                 content,
@@ -298,6 +294,13 @@ def _to_int(value, fallback: int) -> int:
     except Exception:
         return fallback
     return max(1, parsed)
+
+
+def _to_float(value, fallback: float) -> float:
+    try:
+        return min(max(float(value), 0.0), 1.0)
+    except Exception:
+        return fallback
 
 
 def _to_bool(value) -> bool:

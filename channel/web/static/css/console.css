@@ -1290,17 +1290,33 @@
    ============================================================ */
 
 /* Tab toggle */
-.knowledge-tab, .knowledge-scope, .memory-tab {
+.knowledge-tab, .memory-tab, .memory-scope-tab {
     color: #64748b;
 }
-.knowledge-tab.active, .knowledge-scope.active, .memory-tab.active {
+.knowledge-tab.active, .memory-tab.active, .memory-scope-tab.active {
     background: #fff;
     color: #334155;
     box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
-.dark .knowledge-tab.active, .dark .knowledge-scope.active, .dark .memory-tab.active {
+.dark .knowledge-tab.active, .dark .memory-tab.active, .dark .memory-scope-tab.active {
     background: rgba(255,255,255,0.1);
     color: #e2e8f0;
+}
+.memory-scope-tab:focus-visible,
+.group-memory-tab:focus-visible {
+    outline: 2px solid var(--color-primary-500, #2563eb);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .memory-scope-tab,
+    .group-memory-tab,
+    #group-memory-dialog * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
 /* File tree */

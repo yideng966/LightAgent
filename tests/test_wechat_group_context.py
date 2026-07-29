@@ -464,7 +464,31 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             ("alice-runtime", "Alice"),
             ("bob-runtime", "Bob"),
         ])
-        knowledge_service = WechatGroupKnowledgeService(WechatGroupKnowledgeStore(self.knowledge_db_path))
+        archive = WechatGroupArchive(self.db_path)
+        archive.record_message(
+            message_id="m1",
+            room_id=room_id,
+            room_name="Test Group",
+            sender_id=members["alice-runtime"],
+            sender_nickname="Alice",
+            text="发布窗口是周五晚上",
+            stable_room_id=room_id,
+            stable_member_id=members["alice-runtime"],
+        )
+        archive.record_message(
+            message_id="m2",
+            room_id="wgr_other",
+            room_name="Other Group",
+            sender_id="wgm_other",
+            sender_nickname="Other",
+            text="另一个群的发布窗口是周六早上",
+            stable_room_id="wgr_other",
+            stable_member_id="wgm_other",
+        )
+        knowledge_service = WechatGroupKnowledgeService(
+            WechatGroupKnowledgeStore(self.knowledge_db_path),
+            archive=archive,
+        )
         knowledge_service.add_group_memory(room_id, "发布窗口是周五晚上", ["m1"], "讨论结果", "manual")
         knowledge_service.add_group_memory("wgr_other", "另一个群的发布窗口是周六早上", ["m2"], "其他群讨论", "manual")
         profile_service.upsert_manual_profile(
@@ -493,7 +517,7 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         preview = service.preview_context(
             room_id=room_id,
             sender_id="alice-runtime",
-            query="总结一下",
+            query="发布窗口",
             mentioned_sender_ids=["bob-runtime"],
         )
 

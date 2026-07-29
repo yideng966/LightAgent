@@ -28,7 +28,7 @@ class WechatGroupMemoryDreamTest(unittest.TestCase):
         root = Path(self.temp_dir.name)
         self.archive = WechatGroupArchive(str(root / "archive.db"))
         self.store = WechatGroupKnowledgeStore(str(root / "knowledge.db"))
-        self.service = WechatGroupKnowledgeService(self.store)
+        self.service = WechatGroupKnowledgeService(self.store, archive=self.archive)
         self.config = {
             "wechat_group_learning_batch_message_limit": 50,
             "wechat_group_learning_group_memory_min_messages": 1,
@@ -89,6 +89,7 @@ class WechatGroupMemoryDreamTest(unittest.TestCase):
         self.assertEqual(1, len(self.store.list_group_memories("wgr_a")))
         self.assertEqual([], self.store.list_group_memories("wgr_b"))
         self.assertEqual(self.archive.get_max_row_id("wgr_a"), self.store.get_cursor("wgr_a")["last_archive_row_id"])
+        self.assertEqual("", self.store.list_learning_runs("wgr_a", limit=1)[0]["dream_summary"])
 
     def test_cross_room_evidence_is_rejected_without_advancing_cursor(self):
         self._record("a1", "wgr_a", "A room agreement")
@@ -162,7 +163,7 @@ class WechatGroupMemoryDreamTest(unittest.TestCase):
 
     def test_update_requires_server_provided_memory_token(self):
         self._record("a1", "wgr_a", "Friday changed to Thursday")
-        self.service.add_group_memory("wgr_a", "Deploy Friday", ["old"])
+        self.service.add_group_memory("wgr_a", "Deploy Friday", ["a1"])
         engine = FakeDreamEngine([
             json.dumps({"summary": "Changed to Thursday", "evidence_message_ids": ["a1"]}),
             json.dumps({
@@ -181,6 +182,71 @@ class WechatGroupMemoryDreamTest(unittest.TestCase):
 
         self.assertEqual("failed", result["status"])
         self.assertEqual("Deploy Friday", self.store.list_group_memories("wgr_a")[0]["content"])
+
+    def test_invalid_json_is_repaired_once_with_original_safe_material(self):
+        self._record("a1", "wgr_a", "The group deploys on Friday")
+        engine = FakeDreamEngine([
+            "not-json",
+            json.dumps({"summary": "Friday deployment", "evidence_message_ids": ["a1"]}),
+            json.dumps({"memories": [], "dream_summary": "No write"}),
+        ])
+
+        result = self._dream_service(engine).run_once("wgr_a")
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(3, result["attempt_count"])
+        self.assertEqual(
+            "wechat_group_memory_daily_summary_repair",
+            engine.calls[1]["purpose"],
+        )
+        repair_payload = json.loads(engine.calls[1]["user_prompt"])
+        self.assertEqual(["a1"], repair_payload["allowed_evidence_message_ids"])
+        self.assertNotIn("not-json", engine.calls[1]["user_prompt"])
+        run = self.store.list_learning_runs("wgr_a", limit=1)[0]
+        self.assertEqual(3, run["attempt_count"])
+        self.assertEqual(result["cursor_after"], run["cursor_after"])
+
+    def test_invalid_json_after_one_repair_fails_without_advancing_cursor(self):
+        self._record("a1", "wgr_a", "The group deploys on Friday")
+        engine = FakeDreamEngine(["not-json", "still-not-json"])
+
+        result = self._dream_service(engine).run_once("wgr_a")
+
+        self.assertEqual("failed", result["status"])
+        self.assertEqual("invalid_json", result["failure_code"])
+        self.assertEqual(2, result["attempt_count"])
+        self.assertEqual(0, self.store.get_cursor("wgr_a")["last_archive_row_id"])
+        self.assertEqual(2, len(engine.calls))
+
+    def test_failed_completion_persists_router_attempt_metadata(self):
+        from agent.memory.dream_engine import MemoryDreamError
+
+        self._record("a1", "wgr_a", "The group deploys on Friday")
+
+        class FailedFallbackEngine(FakeDreamEngine):
+            def __init__(self):
+                super().__init__([])
+                self.last_completion_metadata = {
+                    "fallback_used": True,
+                    "attempt_count": 3,
+                }
+
+            def complete(self, **kwargs):
+                self.calls.append(kwargs)
+                raise MemoryDreamError(
+                    "HTTP 503",
+                    status_code=503,
+                    transient=True,
+                )
+
+        result = self._dream_service(FailedFallbackEngine()).run_once("wgr_a")
+
+        self.assertEqual("failed", result["status"])
+        self.assertEqual(3, result["attempt_count"])
+        self.assertTrue(result["fallback_used"])
+        run = self.store.list_learning_runs("wgr_a", limit=1)[0]
+        self.assertEqual(3, run["attempt_count"])
+        self.assertEqual(1, run["fallback_used"])
 
     def test_same_room_runs_are_serialized_across_service_instances(self):
         self._record("a1", "wgr_a", "The release window is Friday")
@@ -281,6 +347,88 @@ class WechatGroupMemoryDreamTest(unittest.TestCase):
         self.assertEqual("success", results["first"]["status"])
         self.assertEqual("success", results["second"]["status"])
         self.assertEqual(2, len(second_engine.calls))
+
+    def test_history_uses_independent_cursor_and_continues_after_failure(self):
+        self.config["wechat_group_learning_batch_message_limit"] = 1
+        self._record("a1", "wgr_a", "First durable agreement", ts=100)
+        self._record("a2", "wgr_a", "Second durable agreement", ts=1000)
+        self.store.update_cursor("wgr_a", self.archive.get_max_row_id("wgr_a"))
+        failing_engine = FakeDreamEngine([
+            json.dumps({"summary": "First", "evidence_message_ids": ["a1"]}),
+            json.dumps({"memories": [], "dream_summary": "No write"}),
+            "not-json",
+        ])
+        dream = self._dream_service(failing_engine)
+
+        first = dream.run_history("wgr_a", max_batches=2, operation="restart")
+
+        self.assertEqual("failed", first["status"])
+        self.assertGreater(first["backfill_cursor"], 0)
+        self.assertEqual(
+            self.archive.get_max_row_id("wgr_a"),
+            self.store.get_cursor("wgr_a")["last_archive_row_id"],
+        )
+        failed_cursor = self.store.get_backfill_state("wgr_a")["cursor_row_id"]
+
+        continuing = self._dream_service(FakeDreamEngine([
+            json.dumps({"summary": "Second", "evidence_message_ids": ["a2"]}),
+            json.dumps({"memories": [], "dream_summary": "No write"}),
+        ])).run_history("wgr_a", max_batches=2, operation="continue")
+
+        self.assertEqual("success", continuing["status"])
+        self.assertEqual(failed_cursor, continuing["runs"][0]["cursor_before"])
+        self.assertEqual("completed", self.store.get_backfill_state("wgr_a")["status"])
+
+    def test_history_preview_freezes_current_high_watermark(self):
+        self._record("a1", "wgr_a", "First durable agreement")
+        dream = self._dream_service(FakeDreamEngine([]))
+
+        preview = dream.preview_history("wgr_a")
+
+        self.assertEqual(0, preview["cursor_start"])
+        self.assertEqual(self.archive.get_max_row_id("wgr_a"), preview["frozen_high_watermark"])
+        self.assertEqual(1, preview["pending_count"])
+
+    def test_completed_history_continue_only_processes_new_archive_rows(self):
+        self.config["wechat_group_learning_batch_message_limit"] = 1
+        self._record("a1", "wgr_a", "First durable agreement", ts=100)
+        first = self._dream_service(FakeDreamEngine([
+            json.dumps({"summary": "First", "evidence_message_ids": ["a1"]}),
+            json.dumps({"memories": [], "dream_summary": "No write"}),
+        ])).run_history("wgr_a", max_batches=1, operation="restart")
+        first_target = first["backfill_target_row_id"]
+        self.assertEqual("completed", self.store.get_backfill_state("wgr_a")["status"])
+
+        self._record("a2", "wgr_a", "Second durable agreement", ts=200)
+        dream = self._dream_service(FakeDreamEngine([
+            json.dumps({"summary": "Second", "evidence_message_ids": ["a2"]}),
+            json.dumps({"memories": [], "dream_summary": "No write"}),
+        ]))
+        preview = dream.preview_history("wgr_a", operation="continue")
+        continued = dream.run_history("wgr_a", max_batches=1, operation="continue")
+
+        self.assertEqual(first_target, preview["cursor_start"])
+        self.assertEqual(first_target, continued["runs"][0]["cursor_before"])
+        self.assertEqual("completed", self.store.get_backfill_state("wgr_a")["status"])
+
+    def test_history_restart_preview_always_starts_from_zero(self):
+        self._record("a1", "wgr_a", "First durable agreement", ts=100)
+        target = self.archive.get_max_row_id("wgr_a")
+        self.store.update_backfill_state(
+            "wgr_a",
+            cursor_row_id=target,
+            target_row_id=target,
+            status="completed",
+        )
+
+        preview = self._dream_service(FakeDreamEngine([])).preview_history(
+            "wgr_a",
+            operation="restart",
+        )
+
+        self.assertEqual(0, preview["cursor_start"])
+        self.assertEqual(target, preview["frozen_high_watermark"])
+        self.assertEqual(1, preview["pending_count"])
 
 
 if __name__ == "__main__":

@@ -2,6 +2,45 @@
 
 ## 2026-07-29
 
+### 优化微信群永久记忆运行、生成与管理入口
+
+- 自动群记忆 Dream 改为扫描已选择的稳定群、归档高水位和持久化游标；首次启用显式记录 `from_now` 基线，已有游标可在无新消息信号时恢复积压，稀疏旧窗口按总积压或最长等待继续推进。临时失败使用持久化递增退避，进程启动会把遗留 `running` 记录归档为 `interrupted`。
+- 历史生成使用独立 backfill 游标和冻结终点，默认从最近断点继续；已完成任务只接续冻结终点后的新增归档，只有显式确认重跑才从 0 开始，且不会回退自动增量游标。
+- 两阶段生成增加最多一次受控 JSON/schema 修复，继续严格校验当前群 evidence 和服务端 memory token；运行记录补充扫描/过滤/积压、前后游标、阶段耗时、失败代码、候选尝试次数和备用路由标记，不保存 prompt、模型正文或审计摘要。
+- 群记忆显式召回使用真实相关性分数和 `min_score`；无关查询返回空，最近记忆仅通过明确的 recent 读取策略使用。Web、Agent 工具和 Dream 写入统一在服务层校验当前稳定群 evidence。
+- Web 控制台删除“管理 -> 知识 -> 群知识”和“群聊 -> 永久记忆”，新增唯一入口“管理 -> 记忆 -> 群记忆”，提供记忆内容、生成运行和召回测试；群友画像自主学习保留在“群聊 -> 群友画像”，完整注入预览迁入“群聊 -> 拟人化”。
+- 群记忆 UI 支持 20 条精确分页、群切换迟到响应隔离、配置白名单保存、历史预览/确认、独立异步错误状态、键盘页签、对话框焦点恢复、44px 触控区、深浅主题、窄屏布局和 `prefers-reduced-motion`。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_memory_dream_trigger.py`
+- `channel/wechat_group/wechat_group_memory_dream.py`
+- `channel/wechat_group/wechat_group_knowledge_store.py`
+- `channel/wechat_group/wechat_group_knowledge_service.py`
+- `channel/wechat_group/wechat_group_archive.py`
+- `channel/web/web_channel.py`
+- `channel/web/chat.html`
+- `channel/web/static/js/console.js`
+- `channel/web/static/css/console.css`
+- `agent/memory/dream_engine.py`
+- `bridge/agent_bridge.py`
+- `tests/test_wechat_group_memory_dream.py`
+- `tests/test_wechat_group_memory_dream_trigger.py`
+- `tests/test_wechat_group_knowledge_store.py`
+- `tests/test_wechat_group_knowledge_service.py`
+- `tests/test_wechat_group_memory_ui.py`
+- `tests/test_wechat_group_web.py`
+- `plans/20260729_群记忆运行与生成优化计划.md`
+
+验证记录：
+
+- 群记忆调度、生成、存储、服务、工具、Web、UI、知识页和上下文定向组合 200 项通过；共享文本路由、Memory Dream 与群 Dream 组合 44 项通过。
+- `python -m unittest discover -s tests`：共运行 1205 项，结果 OK，1 项按条件跳过。
+- `node --check channel/web/static/js/console.js` 与 `git diff --check` 通过。
+- 使用当前仓库 `python app.py` 启动本地实际环境，在 375、768、1024、1440 四档视口及浅色/深色主题完成 Playwright 验收；页面无横向溢出，群记忆控件不小于 44px，键盘页签和对话框焦点正常，浏览器无脚本错误，仅有项目既存的 Tailwind CDN 警告。
+- 远端 Docker 仅用于实施前日志、配置摘要和 SQLite 只读排查；本次未部署、修改或重启远端容器，生产积压消费和历史续跑仍需发布后按计划验收。
+- 本次未新增跨 Provider、跨两阶段的可取消任务总 deadline，继续使用各 Provider 现有请求超时；候选审核体系也按计划保留为真实运行数据充分后的后续决策。
+
 ### 修复微信群扫描他人二维码入群未欢迎
 
 - 修复 `wechaty-puppet-wechat4u 1.14.14` 未识别无前导空格文案 `"成员"通过扫描"分享人"分享的二维码加入群聊` 的问题；sidecar 现在会把可信原始系统消息补充转换为既有 `room_join` 事件，不再误入普通消息和自由回复链路。

@@ -304,6 +304,34 @@ class TestTextModelRouter(unittest.TestCase):
         self.assertEqual(1, len(primary.calls))
         self.assertEqual(1, len(backup.calls))
 
+    def test_complete_exception_exposes_bounded_route_metadata(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        primary = FakeBot([TimeoutError("primary timed out")])
+        backup = FakeBot([TimeoutError("backup timed out")])
+
+        def raise_response(bot, **kwargs):
+            response = bot.responses.pop(0)
+            bot.calls.append(kwargs)
+            raise response
+
+        primary.call_with_tools = lambda **kwargs: raise_response(primary, **kwargs)
+        backup.call_with_tools = lambda **kwargs: raise_response(backup, **kwargs)
+
+        with patch("bridge.agent_bridge.conf", return_value=self._config()), \
+                patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+            with self.assertRaises(RuntimeError) as captured:
+                TextModelRouter(FakeBridge()).complete([
+                    {"role": "user", "content": "summarize"},
+                ])
+
+        self.assertTrue(captured.exception.model_fallback_exhausted)
+        self.assertEqual(
+            "fallback",
+            captured.exception._lightagent_route_source,
+        )
+        self.assertEqual(2, captured.exception._lightagent_route_attempt_count)
+
     def test_sync_tool_call_without_text_is_not_treated_as_unusable(self):
         from agent.protocol.models import LLMRequest
         from bridge.agent_bridge import TextModelRouter

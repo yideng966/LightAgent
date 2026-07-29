@@ -34,8 +34,6 @@ class WechatGroupMemoryDreamTrigger:
         self.config_getter = config_getter or (lambda key, default=None: conf().get(key, default))
         self.material_builder = WechatGroupMemoryMaterialBuilder(self.archive)
         self._signals: Dict[str, Dict[str, int]] = {}
-        self._last_triggered_observed_row_ids: Dict[str, int] = {}
-        self._backoff_until: Dict[str, int] = {}
         self._running_rooms = set()
         self._lock = threading.RLock()
         self._started = False
@@ -46,40 +44,45 @@ class WechatGroupMemoryDreamTrigger:
         if not room_id or row_id <= 0:
             return
         now_ts = int(now or time.time())
-        cursor = self.knowledge_store.get_cursor(room_id)
-        first_signal = int(cursor.get("updated_at") or 0) == 0
-        if first_signal:
-            self.knowledge_store.update_cursor(room_id, row_id)
+        scheduler = self.knowledge_store.get_scheduler_state(room_id)
+        latest = max(int(scheduler.get("latest_observed_row_id") or 0), row_id)
+        self.knowledge_store.update_scheduler_state(
+            room_id,
+            latest_observed_row_id=latest,
+            last_signal_at=now_ts,
+        )
         with self._lock:
-            previous = self._signals.get(room_id, {})
-            latest = max(int(previous.get("latest_observed_row_id") or 0), row_id)
             self._signals[room_id] = {
                 "latest_observed_row_id": latest,
                 "last_signal_at": now_ts,
             }
-            if first_signal:
-                self._last_triggered_observed_row_ids[room_id] = row_id
 
     def scan_once(self, now: Optional[int] = None) -> None:
         if not self._cfg_bool("wechat_group_learning_enabled", False):
             return
         now_ts = int(now or time.time())
-        with self._lock:
-            rooms = list(self._signals)
+        rooms = self._candidate_rooms()
         for room_id in rooms:
+            if not self._ensure_initialized(room_id, now_ts):
+                continue
+            scheduler = self.knowledge_store.get_scheduler_state(room_id)
             with self._lock:
-                signal = dict(self._signals.get(room_id) or {})
                 if room_id in self._running_rooms:
                     continue
-                if now_ts < int(self._backoff_until.get(room_id) or 0):
-                    continue
-            latest = int(signal.get("latest_observed_row_id") or 0)
-            if latest <= 0 or self._last_triggered_observed_row_ids.get(room_id) == latest:
+            if now_ts < int(scheduler.get("next_retry_at") or 0):
+                continue
+            latest = max(
+                int(scheduler.get("latest_observed_row_id") or 0),
+                self.archive.get_max_row_id(room_id),
+            )
+            cursor = int(self.knowledge_store.get_cursor(room_id).get("last_archive_row_id") or 0)
+            if latest <= cursor:
                 continue
             idle_seconds = self._cfg_int("wechat_group_learning_idle_minutes", 10) * 60
-            if now_ts - int(signal.get("last_signal_at") or 0) < idle_seconds:
+            last_signal_at = int(scheduler.get("last_signal_at") or 0)
+            if last_signal_at and now_ts - last_signal_at < idle_seconds:
                 continue
-            should_run, force = self._should_run(room_id, now_ts)
+            should_run, force, _ = self._run_decision(room_id, now_ts)
             if not should_run:
                 continue
             if not _GLOBAL_DREAM_LOCK.acquire(blocking=False):
@@ -87,17 +90,26 @@ class WechatGroupMemoryDreamTrigger:
             with self._lock:
                 self._running_rooms.add(room_id)
             try:
+                self.knowledge_store.update_scheduler_state(room_id, last_attempt_at=now_ts)
                 result = self.dream_service.run_once(
                     room_id,
                     trigger_source="idle",
                     force=force,
                 )
                 if str((result or {}).get("status") or "") == "success":
-                    self._last_triggered_observed_row_ids[room_id] = latest
-                    self._backoff_until.pop(room_id, None)
+                    self.knowledge_store.update_scheduler_state(
+                        room_id,
+                        latest_observed_row_id=max(
+                            latest,
+                            int((result or {}).get("cursor_after") or 0),
+                        ),
+                        last_success_at=now_ts,
+                        next_retry_at=0,
+                        consecutive_failures=0,
+                        last_failed_reason_code="",
+                    )
                 else:
-                    backoff = max(idle_seconds, 60)
-                    self._backoff_until[room_id] = now_ts + backoff
+                    self._record_failure(room_id, result or {}, now_ts, idle_seconds)
                     logger.warning(
                         "[wechat_group] group memory Dream deferred for "
                         "room=%s run=%s status=%s summary=%s dream=%s "
@@ -112,7 +124,12 @@ class WechatGroupMemoryDreamTrigger:
                         _bounded_log_value((result or {}).get("message"), limit=300),
                     )
             except Exception as exc:
-                self._backoff_until[room_id] = now_ts + max(idle_seconds, 60)
+                self._record_failure(
+                    room_id,
+                    {"status": "failed", "message": type(exc).__name__},
+                    now_ts,
+                    idle_seconds,
+                )
                 logger.warning(
                     "[wechat_group] group memory Dream trigger failed for room=%s: %s",
                     room_id,
@@ -126,30 +143,59 @@ class WechatGroupMemoryDreamTrigger:
     def get_status(self, stable_room_id: str) -> Dict[str, Any]:
         room_id = str(stable_room_id or "").strip()
         cursor = self.knowledge_store.get_cursor(room_id) if room_id else {}
+        scheduler = self.knowledge_store.get_scheduler_state(room_id) if room_id else {}
+        backfill = self.knowledge_store.get_backfill_state(room_id) if room_id else {}
         with self._lock:
-            signal = dict(self._signals.get(room_id) or {})
             running = room_id in self._running_rooms
-            backoff_until = int(self._backoff_until.get(room_id) or 0)
         pending = 0
+        batch = None
+        oldest = {}
+        high_watermark = 0
         if room_id:
             try:
                 batch = self._pending_batch(room_id)
-                pending = len(batch.messages)
+                pending = self.archive.count_text_messages_after_row_id(
+                    room_id, int(cursor.get("last_archive_row_id") or 0)
+                )
+                oldest = self.archive.get_oldest_text_message_after_row_id(
+                    room_id, int(cursor.get("last_archive_row_id") or 0)
+                )
+                high_watermark = self.archive.get_max_row_id(room_id)
             except Exception:
                 pending = 0
+        now_ts = int(time.time())
+        reason = self._blocking_reason(room_id, now_ts, running=running) if room_id else "no_data"
         return {
             "room_id": room_id,
+            "initialization_mode": str(scheduler.get("initialization_mode") or ""),
+            "initialized_at": int(scheduler.get("initialized_at") or 0),
             "last_archive_row_id": int(cursor.get("last_archive_row_id") or 0),
-            "latest_observed_row_id": int(signal.get("latest_observed_row_id") or 0),
-            "last_signal_at": int(signal.get("last_signal_at") or 0),
+            "incremental_cursor": int(cursor.get("last_archive_row_id") or 0),
+            "archive_high_watermark": high_watermark,
+            "latest_observed_row_id": max(
+                int(scheduler.get("latest_observed_row_id") or 0), high_watermark
+            ),
+            "last_signal_at": int(scheduler.get("last_signal_at") or 0),
             "pending_text_count": pending,
+            "next_window_scanned_count": int(getattr(batch, "scanned_count", 0) or 0),
+            "next_window_eligible_count": int(getattr(batch, "eligible_count", 0) or 0),
+            "next_window_filtered_count": int(getattr(batch, "filtered_count", 0) or 0),
+            "oldest_pending_at": int(oldest.get("created_at") or 0),
             "running": running,
-            "backoff_until": backoff_until,
+            "blocking_reason": reason,
+            "next_retry_at": int(scheduler.get("next_retry_at") or 0),
+            "backoff_until": int(scheduler.get("next_retry_at") or 0),
+            "consecutive_failures": int(scheduler.get("consecutive_failures") or 0),
+            "last_failed_reason_code": str(scheduler.get("last_failed_reason_code") or ""),
+            "last_attempt_at": int(scheduler.get("last_attempt_at") or 0),
+            "last_success_at": int(scheduler.get("last_success_at") or 0),
+            "backfill": backfill,
         }
 
     def start(self) -> None:
         if self._started:
             return
+        self.knowledge_store.interrupt_running_learning_runs()
         self._started = True
         thread = threading.Thread(
             target=self._scan_loop,
@@ -160,7 +206,6 @@ class WechatGroupMemoryDreamTrigger:
 
     def _scan_loop(self) -> None:
         while True:
-            time.sleep(_SCAN_INTERVAL_SECONDS)
             try:
                 self.scan_once()
             except Exception as exc:
@@ -168,19 +213,36 @@ class WechatGroupMemoryDreamTrigger:
                     "[wechat_group] group memory Dream scan failed: %s",
                     type(exc).__name__,
                 )
+            time.sleep(_SCAN_INTERVAL_SECONDS)
+
+    def _run_decision(self, room_id: str, now_ts: int) -> tuple[bool, bool, str]:
+        batch = self._pending_batch(room_id)
+        eligible = len(batch.messages)
+        if eligible <= 0:
+            if batch.scanned_count:
+                return True, True, "filtered"
+            return False, False, "no_data"
+        min_messages = self._cfg_int("wechat_group_learning_group_memory_min_messages", 20)
+        if eligible >= min_messages:
+            return True, False, "ready"
+        cursor = self.knowledge_store.get_cursor(room_id)
+        total_pending = self.archive.count_text_messages_after_row_id(
+            room_id, int(cursor.get("last_archive_row_id") or 0)
+        )
+        if total_pending >= min_messages:
+            return True, True, "sparse_window"
+        max_interval = self._cfg_int("wechat_group_learning_max_interval_minutes", 1440) * 60
+        oldest = self.archive.get_oldest_text_message_after_row_id(
+            room_id, int(cursor.get("last_archive_row_id") or 0)
+        )
+        oldest_at = int(oldest.get("created_at") or 0)
+        if oldest_at and now_ts - oldest_at >= max_interval:
+            return True, True, "max_interval"
+        return False, False, "below_threshold"
 
     def _should_run(self, room_id: str, now_ts: int) -> tuple[bool, bool]:
-        batch = self._pending_batch(room_id)
-        pending = len(batch.messages)
-        if pending <= 0:
-            return bool(batch.scanned_count), bool(batch.scanned_count)
-        min_messages = self._cfg_int("wechat_group_learning_group_memory_min_messages", 20)
-        if pending >= min_messages:
-            return True, False
-        cursor = self.knowledge_store.get_cursor(room_id)
-        max_interval = self._cfg_int("wechat_group_learning_max_interval_minutes", 1440) * 60
-        updated_at = int(cursor.get("updated_at") or 0)
-        return bool(updated_at and now_ts - updated_at >= max_interval), True
+        should_run, force, _ = self._run_decision(room_id, now_ts)
+        return should_run, force
 
     def _pending_batch(self, room_id: str):
         cursor = self.knowledge_store.get_cursor(room_id)
@@ -190,6 +252,68 @@ class WechatGroupMemoryDreamTrigger:
             limit=self._cfg_int("wechat_group_learning_batch_message_limit", 200),
             window_minutes=self._cfg_int("wechat_group_learning_group_memory_window_minutes", 120),
         )
+
+    def _candidate_rooms(self) -> list[str]:
+        configured = self.config_getter("wechat_group_stable_room_ids", []) or []
+        if not isinstance(configured, (list, tuple, set)):
+            configured = []
+        result = []
+        for value in configured:
+            room_id = str(value or "").strip()
+            if room_id and room_id not in result:
+                result.append(room_id)
+        return result
+
+    def _ensure_initialized(self, room_id: str, now_ts: int) -> bool:
+        scheduler = self.knowledge_store.get_scheduler_state(room_id)
+        if int(scheduler.get("initialized_at") or 0):
+            return True
+        cursor = self.knowledge_store.get_cursor(room_id)
+        if int(cursor.get("updated_at") or 0):
+            mode = "from_history" if int(cursor.get("last_archive_row_id") or 0) == 0 else "existing_cursor"
+            high_watermark = self.archive.get_max_row_id(room_id)
+        else:
+            mode = "from_now"
+            high_watermark = self.archive.get_max_row_id(room_id)
+            self.knowledge_store.update_cursor(room_id, high_watermark)
+        self.knowledge_store.update_scheduler_state(
+            room_id,
+            initialized_at=now_ts,
+            initialization_mode=mode,
+            latest_observed_row_id=high_watermark,
+        )
+        return mode != "from_now"
+
+    def _record_failure(
+        self, room_id: str, result: Dict[str, Any], now_ts: int, idle_seconds: int
+    ) -> None:
+        state = self.knowledge_store.get_scheduler_state(room_id)
+        failures = int(state.get("consecutive_failures") or 0) + 1
+        base = max(idle_seconds, 60)
+        delay = min(base * (2 ** min(failures - 1, 5)), 6 * 60 * 60)
+        code = _failure_reason_code(result)
+        self.knowledge_store.update_scheduler_state(
+            room_id,
+            next_retry_at=now_ts + delay,
+            consecutive_failures=failures,
+            last_failed_reason_code=code,
+        )
+
+    def _blocking_reason(self, room_id: str, now_ts: int, *, running: bool) -> str:
+        if running:
+            return "running"
+        state = self.knowledge_store.get_scheduler_state(room_id)
+        if now_ts < int(state.get("next_retry_at") or 0):
+            return "backoff"
+        cursor = int(self.knowledge_store.get_cursor(room_id).get("last_archive_row_id") or 0)
+        if self.archive.get_max_row_id(room_id) <= cursor:
+            return "no_data"
+        last_signal_at = int(state.get("last_signal_at") or 0)
+        idle_seconds = self._cfg_int("wechat_group_learning_idle_minutes", 10) * 60
+        if last_signal_at and now_ts - last_signal_at < idle_seconds:
+            return "idle_wait"
+        should_run, _, reason = self._run_decision(room_id, now_ts)
+        return "ready" if should_run else reason
 
     def _cfg_int(self, key: str, default: int) -> int:
         try:
@@ -207,6 +331,16 @@ class WechatGroupMemoryDreamTrigger:
 def _bounded_log_value(value: Any, limit: int = 120) -> str:
     text = sanitize_wechat_group_prompt_text(value, max_length=limit)
     return text or "-"
+
+
+def _failure_reason_code(result: Dict[str, Any]) -> str:
+    status_code = int(result.get("llm_status_code") or 0)
+    if status_code:
+        return f"http_{status_code}"
+    if result.get("transient"):
+        return "transient_model_error"
+    phase = str(result.get("dream_status") or result.get("summary_status") or "failed")
+    return phase if phase not in {"", "not_run"} else "failed"
 
 
 _default_trigger: Optional[WechatGroupMemoryDreamTrigger] = None

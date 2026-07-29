@@ -77,24 +77,20 @@ def test_knowledge_frontend_management_contract():
     assert "if (path === 'index.md' || path === 'log.md') return '';" in knowledge_section
 
 
-def test_knowledge_frontend_exposes_group_scope_contract():
+def test_knowledge_frontend_does_not_expose_group_memory_scope():
     root = Path(__file__).parents[1]
     html = (root / "channel/web/chat.html").read_text(encoding="utf-8")
     js = (root / "channel/web/static/js/console.js").read_text(encoding="utf-8")
 
-    assert 'id="knowledge-scope-global"' in html
-    assert 'id="knowledge-scope-group"' in html
-    assert 'id="knowledge-panel-group"' in html
-    assert 'id="knowledge-group-room"' in html
-    assert 'id="knowledge-group-search"' in html
-    assert 'id="knowledge-group-list"' in html
-    assert "function switchKnowledgeScope(" in js
-    assert "function loadGroupKnowledgeView(" in js
-    assert "function createGroupKnowledge(" in js
-    assert "function disableGroupKnowledge(" in js
-    assert "/api/wechat-group/memories/groups" in js
-    assert "/api/wechat-group/memories/group" in js
-    assert "/api/wechat-group/memories/disable" in js
+    assert 'id="knowledge-scope-group"' not in html
+    assert 'id="knowledge-panel-group"' not in html
+    assert 'id="knowledge-group-room"' not in html
+    assert 'id="knowledge-group-search"' not in html
+    assert 'id="knowledge-group-list"' not in html
+    assert "function switchKnowledgeScope(" not in js
+    assert "function loadGroupKnowledgeView(" not in js
+    assert "function createGroupKnowledge(" not in js
+    assert "function disableGroupKnowledge(" not in js
 
 
 class UploadedFile:

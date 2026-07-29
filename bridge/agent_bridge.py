@@ -744,6 +744,23 @@ class TextModelRouter(LLMModel):
         marked["model_fallback_exhausted"] = True
         return marked
 
+    @staticmethod
+    def _with_route_metadata(payload, candidate, attempt_count):
+        if not isinstance(payload, dict):
+            return payload
+        payload["_lightagent_route_source"] = str(candidate.get("source") or "primary")
+        payload["_lightagent_route_attempt_count"] = max(int(attempt_count or 1), 1)
+        return payload
+
+    @staticmethod
+    def _with_route_exception_metadata(exc, candidate, attempt_count):
+        try:
+            exc._lightagent_route_source = str(candidate.get("source") or "primary")
+            exc._lightagent_route_attempt_count = max(int(attempt_count or 1), 1)
+        except Exception:
+            pass
+        return exc
+
     def call(self, request: LLMRequest, model=None, provider=None):
         """
         Call the model using LightAgent's bot infrastructure
@@ -788,8 +805,8 @@ class TextModelRouter(LLMModel):
                         last_response = response
                         continue
                     if is_transient and candidate.get("source") == "fallback":
-                        return self._mark_fallback_exhausted(response)
-                    return response
+                        response = self._mark_fallback_exhausted(response)
+                    return self._with_route_metadata(response, candidate, index + 1)
                 except Exception as e:
                     is_transient = self._is_transient_model_error_text(str(e))
                     if is_transient:
@@ -806,7 +823,10 @@ class TextModelRouter(LLMModel):
                     if is_transient and candidate.get("source") == "fallback":
                         exhausted_error = RuntimeError(str(e))
                         exhausted_error.model_fallback_exhausted = True
-                        raise exhausted_error from e
+                        raise self._with_route_exception_metadata(
+                            exhausted_error, candidate, index + 1
+                        ) from e
+                    self._with_route_exception_metadata(e, candidate, index + 1)
                     raise
             return last_response
                 

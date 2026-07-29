@@ -87,11 +87,11 @@ class WechatGroupMemoryToolsTest(unittest.TestCase):
         self.assertIn("A room release window is Friday night", result.result)
         self.assertNotIn("B room release window is Saturday morning", result.result)
 
-    def test_memory_search_tool_uses_group_knowledge_query_api(self):
+    def test_memory_search_tool_uses_strict_group_memory_query_api(self):
         class FakeKnowledgeService:
-            def search_group_knowledge(self, room_id, query, limit=5):
-                self.args = (room_id, query, limit)
-                return [{"content": "仅当前群知识"}]
+            def search_group_memories(self, room_id, query, limit=5, min_score=0.2):
+                self.args = (room_id, query, limit, min_score)
+                return [{"content": "仅当前群记忆", "score": 0.8}]
 
         service = FakeKnowledgeService()
         result = WechatGroupMemorySearchTool(service, self.room_a).execute({
@@ -100,8 +100,25 @@ class WechatGroupMemoryToolsTest(unittest.TestCase):
         })
 
         self.assertEqual("success", result.status)
-        self.assertEqual((self.room_a, "发布窗口", 3), service.args)
-        self.assertIn("仅当前群知识", result.result)
+        self.assertEqual((self.room_a, "发布窗口", 3, 0.2), service.args)
+        self.assertIn("仅当前群记忆", result.result)
+        self.assertIn("score=0.80", result.result)
+
+    def test_memory_search_tool_applies_min_score(self):
+        class FakeKnowledgeService:
+            def search_group_memories(self, room_id, query, limit=5, min_score=0.2):
+                self.args = (room_id, query, limit, min_score)
+                return []
+
+        service = FakeKnowledgeService()
+        result = WechatGroupMemorySearchTool(service, self.room_a).execute({
+            "query": "发布",
+            "max_results": 5,
+            "min_score": 0.75,
+        })
+
+        self.assertEqual("success", result.status)
+        self.assertEqual((self.room_a, "发布", 5, 0.75), service.args)
 
     def test_profile_tool_resolves_runtime_sender_to_canonical_profile(self):
         tool = WechatGroupProfileGetTool(

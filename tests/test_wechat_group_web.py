@@ -777,9 +777,12 @@ class WechatGroupWebTest(unittest.TestCase):
         from channel.web.web_channel import WechatGroupMemoriesHandler
 
         class FakeKnowledgeService:
-            def list_group_memories(self, room_id, query="", limit=20):
-                self.args = (room_id, query, limit)
+            def list_group_memories(self, room_id, query="", limit=20, offset=0):
+                self.args = (room_id, query, limit, offset)
                 return [{"memory_id": "m1", "room_id": room_id}]
+
+            def count_group_memories(self, room_id, query=""):
+                return 1
 
         fake = FakeKnowledgeService()
         handler = WechatGroupMemoriesHandler()
@@ -793,7 +796,8 @@ class WechatGroupWebTest(unittest.TestCase):
             result = json.loads(handler.GET("group"))
 
         self.assertEqual("success", result["status"])
-        self.assertEqual(("wgr_room", None, 5), fake.args)
+        self.assertEqual(("wgr_room", "", 5, 0), fake.args)
+        self.assertEqual(1, result["total"])
         self.assertEqual("wgr_room", result["identity"]["stable_room_id"])
 
     def test_wechat_group_memory_groups_exposes_only_configured_stable_rooms(self):
@@ -808,8 +812,8 @@ class WechatGroupWebTest(unittest.TestCase):
                 return values.get(key, default)
 
         class FakeKnowledgeService:
-            def list_group_memories(self, room_id, limit=20):
-                return [{"memory_id": f"memory-{room_id}"}]
+            def count_group_memories(self, room_id, query=""):
+                return 1
 
         handler = WechatGroupMemoriesHandler()
         with patch("channel.web.web_channel._require_auth"), \
@@ -860,9 +864,12 @@ class WechatGroupWebTest(unittest.TestCase):
                 return "wgr_room"
 
         class FakeKnowledgeService:
-            def list_group_memories(self, room_id, query="", limit=20):
+            def list_group_memories(self, room_id, query="", limit=20, offset=0):
                 self.room_id = room_id
                 return []
+
+            def count_group_memories(self, room_id, query=""):
+                return 0
 
         handler = WechatGroupMemoriesHandler()
         fake_identity = FakeIdentityService()
@@ -1504,7 +1511,6 @@ class WechatGroupWebTest(unittest.TestCase):
 
         for token in (
             "/api/wechat-group/members?stable_room_id=",
-            "/api/wechat-group/memories/group?stable_room_id=",
             "/api/wechat-group/focus/active?stable_room_id=",
             "/api/wechat-group/styles/active?stable_room_id=",
             "/api/wechat-group/emotion/state?stable_room_id=",
@@ -1514,6 +1520,14 @@ class WechatGroupWebTest(unittest.TestCase):
             "legacy_sender_id: runtimeSenderId",
         ):
             self.assertIn(token, console_js)
+
+        memory_start = console_js.index("async function loadGroupMemoryItems(")
+        memory_end = console_js.index("function applyGroupMemorySearch(", memory_start)
+        memory_block = console_js[memory_start:memory_end]
+        self.assertIn("stable_room_id: roomId", memory_block)
+        self.assertIn("/api/wechat-group/memories/group?${params}", memory_block)
+        self.assertNotIn("new URLSearchParams({ room_id: roomId", memory_block)
+        self.assertNotIn("params.set('room_id'", memory_block)
 
         for token in (
             "buildGroupsSectionButton('identity'",
@@ -2626,16 +2640,17 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("groups-humanization-recent-limit", humanization_block)
         self.assertIn("groups-humanization-recent-minutes", humanization_block)
 
-    def test_console_memory_auto_save_does_not_write_recent_context(self):
+    def test_console_group_memory_policy_save_does_not_write_recent_context(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
             console_js = f.read()
 
-        start = console_js.index("function saveGroupsMemoryAutoConfig")
-        end = console_js.index("function runGroupsMemoryLearning", start)
+        start = console_js.index("async function saveGroupMemoryConfig")
+        end = console_js.index("async function runGroupMemoryIncremental", start)
         block = console_js[start:end]
         self.assertNotIn("wechat_group_recent_context_enabled", block)
         self.assertNotIn("wechat_group_recent_context_limit", block)
         self.assertNotIn("wechat_group_recent_context_minutes", block)
+        self.assertIn("/api/wechat-group/memories/config", block)
 
     def test_console_keeps_existing_wechat_group_management_sections(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
@@ -2649,10 +2664,11 @@ class WechatGroupWebTest(unittest.TestCase):
             "buildGroupsSectionButton('sticker'",
             "buildGroupsSectionButton('image'",
             "buildGroupsSectionButton('persona'",
-            "buildGroupsSectionButton('memory'",
             "buildGroupsSectionButton('profiles'",
         ):
             self.assertIn(token, console_js)
+        self.assertNotIn("buildGroupsSectionButton('memory'", console_js)
+        self.assertNotIn("groups_nav_memory", console_js)
 
     def test_console_contains_wechat_group_sticker_panel(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
@@ -2784,9 +2800,13 @@ class WechatGroupWebTest(unittest.TestCase):
         from channel.web.web_channel import WechatGroupMemoriesHandler
 
         class FakeKnowledgeService:
-            def list_group_memories(self, room_id, query="", limit=20):
+            def list_group_memories(self, room_id, query="", limit=20, offset=0):
                 self.room_id = room_id
                 return [{"memory_id": "m1"}, {"memory_id": "m2"}]
+
+            def count_group_memories(self, room_id, query=""):
+                self.room_id = room_id
+                return 2
 
         class FakeProfileService:
             def count_profiles(self, room_id, query=""):
@@ -2910,7 +2930,7 @@ class WechatGroupWebTest(unittest.TestCase):
         fake = FakeKnowledgeService()
         body = {
             "memory_type": "group",
-            "room_id": "room@@abc",
+            "stable_room_id": "wgr_abc",
             "memory_id": "chunk-1",
         }
         handler = WechatGroupMemoriesHandler()
@@ -2921,7 +2941,7 @@ class WechatGroupWebTest(unittest.TestCase):
 
         self.assertEqual("success", result["status"])
         self.assertTrue(result["disabled"])
-        self.assertEqual("room@@abc", fake.room_id)
+        self.assertEqual("wgr_abc", fake.room_id)
         self.assertEqual("chunk-1", fake.memory_id)
 
     def test_wechat_group_learn_runs_api_uses_room_filter(self):
@@ -2937,13 +2957,14 @@ class WechatGroupWebTest(unittest.TestCase):
         with patch("channel.web.web_channel._require_auth"), \
                 patch.object(WechatGroupMemoriesHandler, "_get_knowledge_store", return_value=fake), \
                 patch("channel.web.web_channel.web.input", return_value=types.SimpleNamespace(
-                    room_id="room@@abc", sender_id="", status="active", limit="5", offset="0", q="",
+                    stable_room_id="wgr_abc", runtime_room_id="", room_id="", sender_id="",
+                    stable_member_id="", status="active", limit="5", offset="0", q="",
                 )):
             result = json.loads(handler.GET("learn/runs"))
 
         self.assertEqual("success", result["status"])
         self.assertEqual("run-1", result["runs"][0]["run_id"])
-        self.assertEqual(("room@@abc", 5), fake.args)
+        self.assertEqual(("wgr_abc", 5), fake.args)
 
     def test_learn_run_api_replaces_candidate_approve_flow(self):
         from channel.web.web_channel import WechatGroupMemoriesHandler
@@ -2969,8 +2990,8 @@ class WechatGroupWebTest(unittest.TestCase):
         from channel.web.web_channel import WechatGroupMemoriesHandler
 
         class FakeLearner:
-            def run_history(self, room_id, max_batches=None):
-                self.args = (room_id, max_batches)
+            def run_history(self, room_id, max_batches=None, operation="continue"):
+                self.args = (room_id, max_batches, operation)
                 return {"status": "success", "processed_batches": 2}
 
         fake = FakeLearner()
@@ -2982,7 +3003,156 @@ class WechatGroupWebTest(unittest.TestCase):
             result = json.loads(handler.POST("learn/history"))
 
         self.assertEqual("success", result["status"])
-        self.assertEqual(("wgr_abc", 4), fake.args)
+        self.assertEqual(("wgr_abc", 4, "continue"), fake.args)
+
+    def test_group_memory_list_api_returns_accurate_pagination(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        class FakeKnowledgeService:
+            def list_group_memories(self, room_id, query="", limit=20, offset=0):
+                self.args = (room_id, query, limit, offset)
+                return [{"memory_id": "m21", "room_id": room_id}]
+
+            def count_group_memories(self, room_id, query=""):
+                return 21
+
+        fake = FakeKnowledgeService()
+        params = types.SimpleNamespace(
+            stable_room_id="wgr_abc", runtime_room_id="", room_id="",
+            stable_member_id="", runtime_sender_id="", sender_id="",
+            status="active", limit="20", offset="20", q="", run_id="",
+        )
+        with patch("channel.web.web_channel._require_auth"), \
+                patch.object(WechatGroupMemoriesHandler, "_get_knowledge_service", return_value=fake), \
+                patch("channel.web.web_channel.web.input", return_value=params):
+            result = json.loads(WechatGroupMemoriesHandler().GET("group"))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(21, result["total"])
+        self.assertEqual(20, result["offset"])
+        self.assertEqual(("wgr_abc", "", 20, 20), fake.args)
+
+    def test_group_memory_recall_api_applies_query_and_min_score(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        class FakeKnowledgeService:
+            def search_group_memories(self, room_id, query, limit=5, min_score=0.2):
+                self.args = (room_id, query, limit, min_score)
+                return [{"memory_id": "m1", "score": 0.88}]
+
+        fake = FakeKnowledgeService()
+        params = types.SimpleNamespace(
+            stable_room_id="wgr_abc", runtime_room_id="", room_id="",
+            stable_member_id="", runtime_sender_id="", sender_id="",
+            status="active", limit="5", offset="0", q="发布", run_id="", min_score="0.6",
+        )
+        with patch("channel.web.web_channel._require_auth"), \
+                patch.object(WechatGroupMemoriesHandler, "_get_knowledge_service", return_value=fake), \
+                patch("channel.web.web_channel.web.input", return_value=params):
+            result = json.loads(WechatGroupMemoriesHandler().GET("recall"))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(0.88, result["memories"][0]["score"])
+        self.assertEqual(("wgr_abc", "发布", 5, 0.6), fake.args)
+
+    def test_group_memory_learning_status_api_uses_stable_room(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        class FakeTrigger:
+            def get_status(self, room_id):
+                self.room_id = room_id
+                return {"pending_text_count": 7, "blocking_reason": "below_threshold"}
+
+        fake = FakeTrigger()
+        params = types.SimpleNamespace(
+            stable_room_id="wgr_abc", runtime_room_id="", room_id="",
+            stable_member_id="", runtime_sender_id="", sender_id="",
+            status="active", limit="20", offset="0", q="", run_id="",
+        )
+        with patch("channel.web.web_channel._require_auth"), \
+                patch.object(WechatGroupMemoriesHandler, "_get_memory_dream_trigger", return_value=fake), \
+                patch("channel.web.web_channel.web.input", return_value=params):
+            result = json.loads(WechatGroupMemoriesHandler().GET("learn/status"))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual("wgr_abc", fake.room_id)
+        self.assertEqual(7, result["learning_status"]["pending_text_count"])
+
+    def test_group_memory_history_preview_is_read_only(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        class FakeLearner:
+            def preview_history(self, room_id, operation="continue"):
+                self.args = (room_id, operation)
+                return {"cursor_start": 3, "frozen_high_watermark": 9, "pending_count": 6}
+
+        fake = FakeLearner()
+        body = {"stable_room_id": "wgr_abc", "operation": "restart"}
+        with patch("channel.web.web_channel._require_auth"), \
+                patch.object(WechatGroupMemoriesHandler, "_get_learner", return_value=fake), \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")):
+            result = json.loads(WechatGroupMemoriesHandler().POST("learn/history/preview"))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(("wgr_abc", "restart"), fake.args)
+        self.assertEqual(9, result["preview"]["frozen_high_watermark"])
+
+    def test_group_memory_history_restart_requires_explicit_confirmation(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        body = {"stable_room_id": "wgr_abc", "operation": "restart"}
+        with patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")):
+            result = json.loads(WechatGroupMemoriesHandler().POST("learn/history"))
+
+        self.assertEqual("error", result["status"])
+        self.assertIn("confirm_restart", result["message"])
+
+    def test_group_memory_config_api_applies_only_memory_whitelist(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        body = {
+            "wechat_group_learning_enabled": True,
+            "wechat_group_learning_idle_minutes": "8",
+            "wechat_group_persona_prompt": "must-not-change",
+            "wechat_group_stable_room_ids": ["must-not-change"],
+        }
+        with patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.ChannelsHandler._apply_wechat_group_config", return_value={
+                    "wechat_group_learning_enabled": True,
+                    "wechat_group_learning_idle_minutes": 8,
+                }) as apply_config, \
+                patch("channel.web.web_channel.ChannelsHandler._write_channel_config") as write_config, \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")):
+            result = json.loads(WechatGroupMemoriesHandler().POST("config"))
+
+        applied_input = apply_config.call_args.args[0]
+        self.assertEqual("success", result["status"])
+        self.assertEqual(
+            {"wechat_group_learning_enabled", "wechat_group_learning_idle_minutes"},
+            set(applied_input),
+        )
+        write_config.assert_called_once()
+
+    def test_group_profile_config_api_does_not_apply_memory_fields(self):
+        from channel.web.web_channel import WechatGroupMemoriesHandler
+
+        body = {
+            "wechat_group_profile_enabled": True,
+            "wechat_group_profile_evolution_idle_minutes": "7",
+            "wechat_group_learning_enabled": True,
+        }
+        with patch("channel.web.web_channel._require_auth"), \
+                patch("channel.web.web_channel.ChannelsHandler._apply_wechat_group_config", return_value={
+                    "wechat_group_profile_enabled": True,
+                    "wechat_group_profile_evolution_idle_minutes": 7,
+                }) as apply_config, \
+                patch("channel.web.web_channel.ChannelsHandler._write_channel_config"), \
+                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")):
+            result = json.loads(WechatGroupMemoriesHandler().POST("profiles/config"))
+
+        self.assertEqual("success", result["status"])
+        self.assertNotIn("wechat_group_learning_enabled", apply_config.call_args.args[0])
 
     def test_profile_evolution_config_api_reads_current_config(self):
         from channel.web.web_channel import WechatGroupMemoriesHandler

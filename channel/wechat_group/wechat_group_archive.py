@@ -450,12 +450,22 @@ class WechatGroupArchive:
             ).fetchall()
         return [self._message_row_to_dict(row) for row in rows]
 
-    def count_text_messages_after_row_id(self, room_id: str, last_row_id: int) -> int:
+    def count_text_messages_after_row_id(
+        self,
+        room_id: str,
+        last_row_id: int,
+        through_row_id: int = 0,
+    ) -> int:
         if not room_id:
             return 0
+        end_row_id = max(int(through_row_id or 0), 0)
+        end_clause = " AND id <= ?" if end_row_id else ""
+        params = [str(room_id), str(room_id), int(last_row_id or 0)]
+        if end_row_id:
+            params.append(end_row_id)
         with self._lock, closing(self._connect()) as conn:
             row = conn.execute(
-                """
+                f"""
                 SELECT COUNT(*)
                 FROM wechat_group_messages
                 WHERE (
@@ -464,10 +474,44 @@ class WechatGroupArchive:
                 )
                   AND id > ?
                   AND LOWER(message_type) = 'text'
+                  {end_clause}
                 """,
-                (str(room_id), str(room_id), int(last_row_id or 0)),
+                params,
             ).fetchone()
         return int(row[0] or 0) if row else 0
+
+    def get_oldest_text_message_after_row_id(
+        self,
+        room_id: str,
+        last_row_id: int,
+        through_row_id: int = 0,
+    ) -> Dict[str, Any]:
+        if not room_id:
+            return {}
+        end_row_id = max(int(through_row_id or 0), 0)
+        end_clause = " AND id <= ?" if end_row_id else ""
+        params = [str(room_id), str(room_id), int(last_row_id or 0)]
+        if end_row_id:
+            params.append(end_row_id)
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                f"""
+                SELECT id, created_at
+                FROM wechat_group_messages
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                )
+                  AND id > ?
+                  AND LOWER(message_type) = 'text'
+                  {end_clause}
+                ORDER BY id ASC
+                LIMIT 1
+                """,
+                params,
+            ).fetchone()
+        return dict(row) if row else {}
 
     def get_text_messages_after_row_id(
         self,
@@ -475,17 +519,23 @@ class WechatGroupArchive:
         last_row_id: int,
         limit: int = 200,
         window_minutes: int = 120,
+        through_row_id: int = 0,
     ) -> List[Dict[str, Any]]:
         if not room_id:
             return []
         max_limit = min(max(int(limit or 200), 1), 500)
         row_id = max(int(last_row_id or 0), 0)
         minutes = max(int(window_minutes or 120), 1)
+        end_row_id = max(int(through_row_id or 0), 0)
+        end_clause = " AND id <= ?" if end_row_id else ""
         scope_params = (str(room_id), str(room_id), row_id)
+        first_params = list(scope_params)
+        if end_row_id:
+            first_params.append(end_row_id)
         with self._lock, closing(self._connect()) as conn:
             conn.row_factory = sqlite3.Row
             first = conn.execute(
-                """
+                f"""
                 SELECT created_at
                 FROM wechat_group_messages
                 WHERE (
@@ -494,16 +544,21 @@ class WechatGroupArchive:
                 )
                   AND id > ?
                   AND LOWER(message_type) = 'text'
+                  {end_clause}
                 ORDER BY id ASC
                 LIMIT 1
                 """,
-                scope_params,
+                first_params,
             ).fetchone()
             if not first:
                 return []
             window_end = int(first[0] or 0) + minutes * 60
+            row_params = list(scope_params)
+            if end_row_id:
+                row_params.append(end_row_id)
+            row_params.extend([window_end, max_limit])
             rows = conn.execute(
-                """
+                f"""
                 SELECT id, message_id, room_id, room_name, sender_id, sender_nickname,
                        message_type, text, media_path, is_at, metadata, created_at,
                        stable_room_id, runtime_room_id, stable_member_id, runtime_sender_id
@@ -514,11 +569,12 @@ class WechatGroupArchive:
                 )
                   AND id > ?
                   AND LOWER(message_type) = 'text'
+                  {end_clause}
                   AND created_at <= ?
                 ORDER BY id ASC
                 LIMIT ?
                 """,
-                (*scope_params, window_end, max_limit),
+                row_params,
             ).fetchall()
         return [self._message_row_to_dict(row) for row in rows]
 

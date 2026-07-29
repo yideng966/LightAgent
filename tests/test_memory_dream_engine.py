@@ -136,6 +136,29 @@ class MemoryDreamEngineTest(unittest.TestCase):
 
         self.assertTrue(captured.exception.transient)
 
+    def test_exception_route_metadata_is_preserved_for_diagnostics(self):
+        from agent.memory.dream_engine import MemoryDreamEngine, MemoryDreamError
+
+        class FailedFallbackRouter:
+            def complete(self, *_args, **_kwargs):
+                error = RuntimeError("fallback timed out")
+                error._lightagent_route_source = "fallback"
+                error._lightagent_route_attempt_count = 3
+                raise error
+
+        engine = MemoryDreamEngine(FailedFallbackRouter())
+        with self.assertRaises(MemoryDreamError):
+            engine.complete(
+                system_prompt="system",
+                user_prompt="material",
+                purpose="wechat_group_memory_daily_summary",
+            )
+
+        self.assertEqual(
+            {"fallback_used": True, "attempt_count": 3},
+            engine.last_completion_metadata,
+        )
+
     def test_global_summary_and_dream_use_shared_engine(self):
         from agent.memory.summarizer import MemoryFlushManager
 

@@ -29,6 +29,14 @@ class WechatGroupMemoryMaterialBatch:
     messages: List[Dict[str, Any]]
     evidence_message_ids: List[str]
 
+    @property
+    def eligible_count(self) -> int:
+        return len(self.messages)
+
+    @property
+    def filtered_count(self) -> int:
+        return max(int(self.scanned_count or 0) - len(self.messages), 0)
+
 
 class WechatGroupMemoryMaterialBuilder:
     def __init__(self, archive: WechatGroupArchive):
@@ -41,6 +49,7 @@ class WechatGroupMemoryMaterialBuilder:
         after_row_id: int,
         limit: int,
         window_minutes: int,
+        through_row_id: int = 0,
     ) -> WechatGroupMemoryMaterialBatch:
         room_id = str(stable_room_id or "").strip()
         if not room_id:
@@ -50,6 +59,7 @@ class WechatGroupMemoryMaterialBuilder:
             after_row_id,
             limit=limit,
             window_minutes=window_minutes,
+            through_row_id=through_row_id,
         )
         speaker_tokens: Dict[str, str] = {}
         messages: List[Dict[str, Any]] = []

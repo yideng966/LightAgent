@@ -6156,6 +6156,27 @@ class WechatGroupMembersHandler(_WechatGroupWebIdentityMixin):
 
 
 class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
+    _GROUP_MEMORY_CONFIG_KEYS = {
+        "wechat_group_knowledge_enabled",
+        "wechat_group_group_memory_context_limit",
+        "wechat_group_learning_enabled",
+        "wechat_group_learning_batch_message_limit",
+        "wechat_group_learning_group_memory_min_messages",
+        "wechat_group_learning_group_memory_window_minutes",
+        "wechat_group_learning_idle_minutes",
+        "wechat_group_learning_auto_apply_threshold",
+        "wechat_group_learning_max_interval_minutes",
+        "wechat_group_learning_history_max_batches",
+    }
+    _PROFILE_CONFIG_KEYS = {
+        "wechat_group_profile_enabled",
+        "wechat_group_profile_context_limit",
+        "wechat_group_profile_evolution_enabled",
+        "wechat_group_profile_evolution_idle_minutes",
+        "wechat_group_profile_evolution_min_messages",
+        "wechat_group_profile_evolution_max_interval_minutes",
+        "wechat_group_profile_evolution_batch_message_limit",
+    }
     _context_service = None
     _profile_service = None
     _knowledge_service = None
@@ -6165,6 +6186,7 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
     _profile_evolution_store = None
     _profile_evolution_executor = None
     _profile_evolution_rollback_service = None
+    _memory_dream_trigger = None
 
     def GET(self, action=""):
         _require_auth()
@@ -6181,10 +6203,15 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 offset="0",
                 q="",
                 run_id="",
+                min_score="0.2",
             )
             action = (action or "").strip("/")
             limit = self._to_int(params.limit, 20)
             offset = max(self._to_int(params.offset, 0), 0)
+            if action == "config":
+                return self._json({"status": "success", "config": self._memory_config()})
+            if action == "profiles/config":
+                return self._json({"status": "success", "config": self._profiles_config()})
             if action == "profile-evolution/config":
                 return self._json({"status": "success", "config": self._profile_evolution_config()})
             if action == "profile-evolution/status":
@@ -6225,9 +6252,8 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                     "status": "success",
                     "summary": {
                         "room_id": room_id or "",
-                        "group_memory_count": len(
-                            knowledge_service.list_group_memories(room_id, limit=200)
-                        ) if room_id else 0,
+                        "group_memory_count": knowledge_service.count_group_memories(room_id)
+                        if room_id else 0,
                         "profile_count": profile_service.count_profiles(room_id) if room_id else 0,
                     },
                     "identity": self._identity_payload(room_identity) if room_id else {},
@@ -6250,9 +6276,8 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                         {
                             "room_id": item["id"],
                             "room_name": item["name"],
-                            "group_memory_count": len(
-                                knowledge_service.list_group_memories(item["id"], limit=200)
-                            ),
+                            "active_memory_count": knowledge_service.count_group_memories(item["id"]),
+                            "group_memory_count": knowledge_service.count_group_memories(item["id"]),
                             "profile_count": self._get_profile_service().count_profiles(item["id"]),
                         }
                         for item in rooms
@@ -6260,15 +6285,43 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 })
             if action == "group":
                 room_identity = self._resolve_room_identity(params, require=True)
-                room_id = room_identity["effective_room_id"]
-                data = self._get_knowledge_service().list_group_memories(
-                    room_id,
-                    limit=limit,
-                    query=params.q or None,
-                )
+                room_id = self._require_stable_room_identity(room_identity)
+                service = self._get_knowledge_service()
+                query = str(params.q or "").strip()
+                if query:
+                    matches = service.search_group_memories(
+                        room_id,
+                        query=query,
+                        limit=1000,
+                        min_score=self._to_float(getattr(params, "min_score", 0.2), 0.2),
+                    )
+                    total = len(matches)
+                    data = matches[offset:offset + limit]
+                else:
+                    data = service.list_group_memories(room_id, limit=limit, offset=offset)
+                    total = service.count_group_memories(room_id)
                 return self._json({
                     "status": "success",
                     "memories": data,
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "identity": self._identity_payload(room_identity),
+                })
+            if action == "recall":
+                room_identity = self._resolve_room_identity(params, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
+                query = str(params.q or "").strip()
+                memories = self._get_knowledge_service().search_group_memories(
+                    room_id,
+                    query=query,
+                    limit=min(max(limit, 1), 50),
+                    min_score=self._to_float(getattr(params, "min_score", 0.2), 0.2),
+                )
+                return self._json({
+                    "status": "success",
+                    "query": query,
+                    "memories": memories,
                     "identity": self._identity_payload(room_identity),
                 })
             if action == "profiles":
@@ -6292,11 +6345,21 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 })
             if action == "learn/runs":
                 room_identity = self._resolve_room_identity(params, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
                 data = self._get_knowledge_store().list_learning_runs(
-                    room_identity["effective_room_id"],
+                    room_id,
                     limit=limit,
                 )
                 return self._json({"status": "success", "runs": data, "identity": self._identity_payload(room_identity)})
+            if action == "learn/status":
+                room_identity = self._resolve_room_identity(params, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
+                status = self._get_memory_dream_trigger().get_status(room_id)
+                return self._json({
+                    "status": "success",
+                    "learning_status": status,
+                    "identity": self._identity_payload(room_identity),
+                })
             return self._json({"status": "error", "message": f"unknown action: {action}"})
         except Exception as e:
             logger.error(f"[WebChannel] WechatGroupMemories GET error: {e}")
@@ -6307,6 +6370,12 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
         try:
             body = json.loads(web.data() or b"{}")
             action = (action or "").strip("/")
+            if action == "config":
+                applied = self._save_config_subset(body, self._GROUP_MEMORY_CONFIG_KEYS)
+                return self._json({"status": "success", "config": applied})
+            if action in {"profiles/config", "profile-evolution/config"}:
+                applied = self._save_config_subset(body, self._PROFILE_CONFIG_KEYS)
+                return self._json({"status": "success", "config": applied})
             if action == "preview":
                 room_identity = self._resolve_room_identity(body, require=True)
                 member_identity = self._resolve_member_identity(body, room_identity=room_identity, require=True)
@@ -6324,9 +6393,10 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 })
             if action == "group":
                 room_identity = self._resolve_room_identity(body, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
                 self._require_body(body, "content")
                 memory = self._get_knowledge_service().add_group_memory(
-                    room_id=room_identity["effective_room_id"],
+                    room_id=room_id,
                     content=body.get("content"),
                     evidence_message_ids=body.get("source_message_ids") or None,
                     evidence_text=body.get("source_summary") or "",
@@ -6354,12 +6424,13 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                 })
             if action == "disable":
                 room_identity = self._resolve_room_identity(body, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
                 self._require_body(body, "memory_type")
                 memory_type = str(body.get("memory_type") or "").strip()
                 if memory_type in ("group", "group_memory"):
                     self._require_body(body, "memory_id")
                     disabled = self._get_knowledge_service().disable_group_memory(
-                        room_identity["effective_room_id"],
+                        room_id,
                         body.get("memory_id"),
                     )
                 else:
@@ -6381,9 +6452,13 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
             if action == "learn/history":
                 room_identity = self._resolve_room_identity(body, require=True)
                 room_id = self._require_stable_room_identity(room_identity)
+                operation = str(body.get("operation") or "continue").strip().lower()
+                if operation == "restart" and body.get("confirm_restart") is not True:
+                    raise ValueError("confirm_restart is required for restart")
                 run = self._get_learner().run_history(
                     room_id=room_id,
                     max_batches=body.get("max_batches") or None,
+                    operation=operation,
                 )
                 return self._json({
                     "status": run.get("status") or "failed",
@@ -6391,19 +6466,19 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
                     "run": run,
                     "identity": self._identity_payload(room_identity),
                 })
-            if action == "profile-evolution/config":
-                allowed_keys = {
-                    "wechat_group_profile_evolution_enabled",
-                    "wechat_group_profile_evolution_idle_minutes",
-                    "wechat_group_profile_evolution_min_messages",
-                    "wechat_group_profile_evolution_max_interval_minutes",
-                    "wechat_group_profile_evolution_batch_message_limit",
-                }
-                applied = ChannelsHandler._apply_wechat_group_config(
-                    {key: body.get(key) for key in allowed_keys if key in body}
+            if action == "learn/history/preview":
+                room_identity = self._resolve_room_identity(body, require=True)
+                room_id = self._require_stable_room_identity(room_identity)
+                operation = str(body.get("operation") or "continue").strip().lower()
+                preview = self._get_learner().preview_history(
+                    room_id,
+                    operation=operation,
                 )
-                ChannelsHandler._write_channel_config(applied)
-                return self._json({"status": "success", "config": applied})
+                return self._json({
+                    "status": "success",
+                    "preview": preview,
+                    "identity": self._identity_payload(room_identity),
+                })
             if action == "profile-evolution/run":
                 room_identity = self._resolve_room_identity(body, require=True)
                 run = self._get_profile_evolution_executor().run_once(
@@ -6466,7 +6541,10 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
     def _get_knowledge_service(cls):
         if cls._knowledge_service is None:
             from channel.wechat_group.wechat_group_knowledge_service import WechatGroupKnowledgeService
-            cls._knowledge_service = WechatGroupKnowledgeService(cls._get_knowledge_store())
+            cls._knowledge_service = WechatGroupKnowledgeService(
+                cls._get_knowledge_store(),
+                archive=cls._get_archive(),
+            )
         return cls._knowledge_service
 
     @classmethod
@@ -6479,11 +6557,10 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
     @classmethod
     def _get_learner(cls):
         if cls._learner is None:
-            from channel.wechat_group.wechat_group_archive import WechatGroupArchive
             from channel.wechat_group.wechat_group_learner import WechatGroupLearner
 
             cls._learner = WechatGroupLearner(
-                archive=WechatGroupArchive(),
+                archive=cls._get_archive(),
                 profile_service=cls._get_profile_service(),
                 knowledge_service=cls._get_knowledge_service(),
                 knowledge_store=cls._get_knowledge_store(),
@@ -6497,6 +6574,16 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
             from channel.wechat_group.wechat_group_archive import WechatGroupArchive
             cls._archive = WechatGroupArchive()
         return cls._archive
+
+    @classmethod
+    def _get_memory_dream_trigger(cls):
+        if cls._memory_dream_trigger is None:
+            from channel.wechat_group.wechat_group_memory_dream_trigger import (
+                get_wechat_group_memory_dream_trigger,
+            )
+
+            cls._memory_dream_trigger = get_wechat_group_memory_dream_trigger()
+        return cls._memory_dream_trigger
 
     @classmethod
     def _get_profile_evolution_store(cls):
@@ -6555,6 +6642,21 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
             "wechat_group_profile_evolution_batch_message_limit": conf().get("wechat_group_profile_evolution_batch_message_limit", 200),
         }
 
+    @classmethod
+    def _memory_config(cls):
+        return {key: conf().get(key) for key in sorted(cls._GROUP_MEMORY_CONFIG_KEYS)}
+
+    @classmethod
+    def _profiles_config(cls):
+        return {key: conf().get(key) for key in sorted(cls._PROFILE_CONFIG_KEYS)}
+
+    @staticmethod
+    def _save_config_subset(body, allowed_keys):
+        updates = {key: body.get(key) for key in allowed_keys if key in body}
+        applied = ChannelsHandler._apply_wechat_group_config(updates)
+        ChannelsHandler._write_channel_config(applied)
+        return applied
+
     @staticmethod
     def _json(payload):
         web.header("Content-Type", "application/json; charset=utf-8")
@@ -6564,6 +6666,13 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
     def _to_int(value, default):
         try:
             return int(value)
+        except Exception:
+            return default
+
+    @staticmethod
+    def _to_float(value, default):
+        try:
+            return float(value)
         except Exception:
             return default
 

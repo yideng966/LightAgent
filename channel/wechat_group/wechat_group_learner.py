@@ -1,4 +1,4 @@
-"""Heuristic learner for room-scoped profiles and group knowledge."""
+"""Learner for room-scoped profiles and permanent group memory."""
 
 from __future__ import annotations
 
@@ -89,8 +89,24 @@ class WechatGroupLearner:
                 result[key] = memory_result[key]
         return result
 
-    def run_history(self, room_id: str, max_batches: Optional[int] = None) -> Dict[str, Any]:
-        return self.memory_dream_service.run_history(room_id, max_batches=max_batches)
+    def preview_history(
+        self,
+        room_id: str,
+        operation: str = "continue",
+    ) -> Dict[str, Any]:
+        return self.memory_dream_service.preview_history(room_id, operation=operation)
+
+    def run_history(
+        self,
+        room_id: str,
+        max_batches: Optional[int] = None,
+        operation: str = "continue",
+    ) -> Dict[str, Any]:
+        return self.memory_dream_service.run_history(
+            room_id,
+            max_batches=max_batches,
+            operation=operation,
+        )
 
     def _run_profile_pipeline(self, room_id: str) -> Dict[str, Any]:
         state = self.profile_store.get_learning_state(room_id, pipeline="heuristic")

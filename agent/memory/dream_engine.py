@@ -27,6 +27,7 @@ class MemoryDreamEngine:
 
             text_model_router = Bridge().get_text_model_router()
         self.text_model_router = text_model_router
+        self.last_completion_metadata = {"fallback_used": False, "attempt_count": 0}
 
     def complete(
         self,
@@ -37,6 +38,7 @@ class MemoryDreamEngine:
         temperature: float = 0.2,
         max_tokens: Optional[int] = None,
     ) -> str:
+        self.last_completion_metadata = {"fallback_used": False, "attempt_count": 1}
         complete = getattr(self.text_model_router, "complete", None)
         if not callable(complete):
             raise MemoryDreamError("shared text model router does not support complete()")
@@ -48,9 +50,11 @@ class MemoryDreamEngine:
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-        except MemoryDreamError:
+        except MemoryDreamError as exc:
+            self._set_exception_route_metadata(exc)
             raise
         except Exception as exc:
+            self._set_exception_route_metadata(exc)
             status_code = _status_code_from_value(exc)
             transient = status_code in _TRANSIENT_STATUS_CODES or bool(
                 _TRANSIENT_TEXT_PATTERN.search(str(exc or ""))
@@ -64,6 +68,10 @@ class MemoryDreamEngine:
         raw = {}
         if isinstance(response, dict):
             raw = response.get("raw") if isinstance(response.get("raw"), dict) else {}
+            self.last_completion_metadata = {
+                "fallback_used": raw.get("_lightagent_route_source") == "fallback",
+                "attempt_count": max(int(raw.get("_lightagent_route_attempt_count") or 1), 1),
+            }
             status_code = _first_status_code(response, raw)
             success = response.get("success") is not False and not response.get("error")
             if raw.get("error"):
@@ -94,6 +102,20 @@ class MemoryDreamEngine:
         if not content:
             raise MemoryDreamError(_empty_completion_reason(raw))
         return content
+
+    def _set_exception_route_metadata(self, exc: Exception) -> None:
+        source = str(getattr(exc, "_lightagent_route_source", "") or "primary")
+        try:
+            attempt_count = max(
+                int(getattr(exc, "_lightagent_route_attempt_count", 1) or 1),
+                1,
+            )
+        except Exception:
+            attempt_count = 1
+        self.last_completion_metadata = {
+            "fallback_used": source == "fallback",
+            "attempt_count": attempt_count,
+        }
 
 
 def _first_status_code(*values: Any) -> int:

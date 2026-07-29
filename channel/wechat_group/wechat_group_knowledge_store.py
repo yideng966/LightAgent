@@ -123,9 +123,11 @@ class WechatGroupKnowledgeStore:
         query: str = "",
         limit: int = 20,
         status: str = "active",
+        offset: int = 0,
     ) -> List[Dict[str, Any]]:
         room_id = _require_text("room_id", room_id)
-        max_limit = min(max(int(limit or 20), 1), 200)
+        max_limit = min(max(int(limit or 20), 1), 1000)
+        safe_offset = max(int(offset or 0), 0)
         params: List[Any] = [room_id, status]
         clauses = ["room_id = ?", "status = ?"]
         q = str(query or "").strip()
@@ -133,7 +135,7 @@ class WechatGroupKnowledgeStore:
             clauses.append("(content LIKE ? OR evidence_text LIKE ?)")
             like = f"%{q}%"
             params.extend([like, like])
-        params.append(max_limit)
+        params.extend([max_limit, safe_offset])
         with self._lock, closing(self._connect()) as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
@@ -142,11 +144,36 @@ class WechatGroupKnowledgeStore:
                 FROM wechat_group_group_memories
                 WHERE {' AND '.join(clauses)}
                 ORDER BY updated_at DESC, memory_id DESC
-                LIMIT ?
+                LIMIT ? OFFSET ?
                 """,
                 params,
             ).fetchall()
         return [self._memory_row_to_dict(row) for row in rows]
+
+    def count_group_memories(
+        self,
+        room_id: str,
+        query: str = "",
+        status: str = "active",
+    ) -> int:
+        room_id = _require_text("room_id", room_id)
+        params: List[Any] = [room_id, status]
+        clauses = ["room_id = ?", "status = ?"]
+        q = str(query or "").strip()
+        if q:
+            clauses.append("(content LIKE ? OR evidence_text LIKE ?)")
+            like = f"%{q}%"
+            params.extend([like, like])
+        with self._lock, closing(self._connect()) as conn:
+            row = conn.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM wechat_group_group_memories
+                WHERE {' AND '.join(clauses)}
+                """,
+                params,
+            ).fetchone()
+        return int(row[0] or 0) if row else 0
 
     def update_group_memory_status(self, room_id: str, memory_id: str, status: str) -> bool:
         room_id = _require_text("room_id", room_id)
@@ -198,6 +225,155 @@ class WechatGroupKnowledgeStore:
                     (room_id, int(last_archive_row_id or 0), now),
                 )
 
+    def get_scheduler_state(self, room_id: str) -> Dict[str, Any]:
+        room_id = _require_text("room_id", room_id)
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT * FROM wechat_group_memory_scheduler_state
+                WHERE room_id = ?
+                LIMIT 1
+                """,
+                (room_id,),
+            ).fetchone()
+        if row:
+            return dict(row)
+        return _empty_scheduler_state(room_id)
+
+    def update_scheduler_state(self, room_id: str, **changes) -> Dict[str, Any]:
+        room_id = _require_text("room_id", room_id)
+        allowed = {
+            "latest_observed_row_id",
+            "last_signal_at",
+            "last_attempt_at",
+            "last_success_at",
+            "next_retry_at",
+            "consecutive_failures",
+            "last_failed_reason_code",
+            "initialized_at",
+            "initialization_mode",
+        }
+        unexpected = set(changes) - allowed
+        if unexpected:
+            raise ValueError(f"unsupported scheduler state fields: {sorted(unexpected)}")
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM wechat_group_memory_scheduler_state WHERE room_id = ?",
+                (room_id,),
+            ).fetchone()
+            state = dict(row) if row else _empty_scheduler_state(room_id)
+            state.update(changes)
+            state["updated_at"] = int(time.time())
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO wechat_group_memory_scheduler_state (
+                        room_id, latest_observed_row_id, last_signal_at,
+                        last_attempt_at, last_success_at, next_retry_at,
+                        consecutive_failures, last_failed_reason_code,
+                        initialized_at, initialization_mode, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(room_id) DO UPDATE SET
+                        latest_observed_row_id = excluded.latest_observed_row_id,
+                        last_signal_at = excluded.last_signal_at,
+                        last_attempt_at = excluded.last_attempt_at,
+                        last_success_at = excluded.last_success_at,
+                        next_retry_at = excluded.next_retry_at,
+                        consecutive_failures = excluded.consecutive_failures,
+                        last_failed_reason_code = excluded.last_failed_reason_code,
+                        initialized_at = excluded.initialized_at,
+                        initialization_mode = excluded.initialization_mode,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        room_id,
+                        int(state.get("latest_observed_row_id") or 0),
+                        int(state.get("last_signal_at") or 0),
+                        int(state.get("last_attempt_at") or 0),
+                        int(state.get("last_success_at") or 0),
+                        int(state.get("next_retry_at") or 0),
+                        int(state.get("consecutive_failures") or 0),
+                        str(state.get("last_failed_reason_code") or ""),
+                        int(state.get("initialized_at") or 0),
+                        str(state.get("initialization_mode") or ""),
+                        int(state.get("updated_at") or 0),
+                    ),
+                )
+        return state
+
+    def get_backfill_state(self, room_id: str) -> Dict[str, Any]:
+        room_id = _require_text("room_id", room_id)
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT * FROM wechat_group_memory_backfill_state
+                WHERE room_id = ?
+                LIMIT 1
+                """,
+                (room_id,),
+            ).fetchone()
+        if row:
+            return dict(row)
+        return _empty_backfill_state(room_id)
+
+    def update_backfill_state(self, room_id: str, **changes) -> Dict[str, Any]:
+        room_id = _require_text("room_id", room_id)
+        allowed = {
+            "cursor_row_id",
+            "target_row_id",
+            "status",
+            "completed_batches",
+            "last_failed_reason_code",
+            "started_at",
+            "finished_at",
+        }
+        unexpected = set(changes) - allowed
+        if unexpected:
+            raise ValueError(f"unsupported backfill state fields: {sorted(unexpected)}")
+        with self._lock, closing(self._connect()) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                "SELECT * FROM wechat_group_memory_backfill_state WHERE room_id = ?",
+                (room_id,),
+            ).fetchone()
+            state = dict(row) if row else _empty_backfill_state(room_id)
+            state.update(changes)
+            state["updated_at"] = int(time.time())
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO wechat_group_memory_backfill_state (
+                        room_id, cursor_row_id, target_row_id, status,
+                        completed_batches, last_failed_reason_code,
+                        started_at, updated_at, finished_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(room_id) DO UPDATE SET
+                        cursor_row_id = excluded.cursor_row_id,
+                        target_row_id = excluded.target_row_id,
+                        status = excluded.status,
+                        completed_batches = excluded.completed_batches,
+                        last_failed_reason_code = excluded.last_failed_reason_code,
+                        started_at = excluded.started_at,
+                        updated_at = excluded.updated_at,
+                        finished_at = excluded.finished_at
+                    """,
+                    (
+                        room_id,
+                        int(state.get("cursor_row_id") or 0),
+                        int(state.get("target_row_id") or 0),
+                        str(state.get("status") or "idle"),
+                        int(state.get("completed_batches") or 0),
+                        str(state.get("last_failed_reason_code") or ""),
+                        int(state.get("started_at") or 0),
+                        int(state.get("updated_at") or 0),
+                        int(state.get("finished_at") or 0),
+                    ),
+                )
+        return state
+
     def create_learning_run(
         self,
         room_id: str,
@@ -246,6 +422,18 @@ class WechatGroupKnowledgeStore:
         skipped_count: int = 0,
         dream_summary: str = "",
         llm_status_code: int = 0,
+        batch_eligible_count: int = 0,
+        batch_filtered_count: int = 0,
+        pending_before_count: int = 0,
+        pending_after_count: int = 0,
+        cursor_before: int = 0,
+        cursor_after: int = 0,
+        summary_duration_ms: int = 0,
+        dream_duration_ms: int = 0,
+        total_duration_ms: int = 0,
+        failure_code: str = "",
+        fallback_used: bool = False,
+        attempt_count: int = 0,
     ) -> None:
         with self._lock, closing(self._connect()) as conn:
             with conn:
@@ -263,6 +451,18 @@ class WechatGroupKnowledgeStore:
                         skipped_count = ?,
                         dream_summary = ?,
                         llm_status_code = ?,
+                        batch_eligible_count = ?,
+                        batch_filtered_count = ?,
+                        pending_before_count = ?,
+                        pending_after_count = ?,
+                        cursor_before = ?,
+                        cursor_after = ?,
+                        summary_duration_ms = ?,
+                        dream_duration_ms = ?,
+                        total_duration_ms = ?,
+                        failure_code = ?,
+                        fallback_used = ?,
+                        attempt_count = ?,
                         finished_at = ?
                     WHERE run_id = ?
                     """,
@@ -278,6 +478,18 @@ class WechatGroupKnowledgeStore:
                         int(skipped_count or 0),
                         str(dream_summary or ""),
                         int(llm_status_code or 0),
+                        int(batch_eligible_count or 0),
+                        int(batch_filtered_count or 0),
+                        int(pending_before_count or 0),
+                        int(pending_after_count or 0),
+                        int(cursor_before or 0),
+                        int(cursor_after or 0),
+                        int(summary_duration_ms or 0),
+                        int(dream_duration_ms or 0),
+                        int(total_duration_ms or 0),
+                        str(failure_code or "")[:120],
+                        1 if fallback_used else 0,
+                        int(attempt_count or 0),
                         int(time.time()),
                         str(run_id),
                     ),
@@ -298,6 +510,30 @@ class WechatGroupKnowledgeStore:
                 (room_id, min(max(int(limit or 20), 1), 100)),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def interrupt_running_learning_runs(self, reason: str = "process_restarted") -> int:
+        now = int(time.time())
+        with self._lock, closing(self._connect()) as conn:
+            with conn:
+                cursor = conn.execute(
+                    """
+                    UPDATE wechat_group_learning_runs
+                    SET status = 'interrupted',
+                        interrupted_reason = ?,
+                        finished_at = ?
+                    WHERE status = 'running'
+                    """,
+                    (str(reason or "process_restarted")[:120], now),
+                )
+                conn.execute(
+                    """
+                    UPDATE wechat_group_memory_backfill_state
+                    SET status = 'interrupted', updated_at = ?
+                    WHERE status = 'running'
+                    """,
+                    (now,),
+                )
+        return int(cursor.rowcount or 0)
 
     def _init_schema(self) -> None:
         with closing(self._connect()) as conn:
@@ -329,6 +565,38 @@ class WechatGroupKnowledgeStore:
                 )
                 conn.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS wechat_group_memory_scheduler_state (
+                        room_id TEXT PRIMARY KEY,
+                        latest_observed_row_id INTEGER NOT NULL DEFAULT 0,
+                        last_signal_at INTEGER NOT NULL DEFAULT 0,
+                        last_attempt_at INTEGER NOT NULL DEFAULT 0,
+                        last_success_at INTEGER NOT NULL DEFAULT 0,
+                        next_retry_at INTEGER NOT NULL DEFAULT 0,
+                        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+                        last_failed_reason_code TEXT NOT NULL DEFAULT '',
+                        initialized_at INTEGER NOT NULL DEFAULT 0,
+                        initialization_mode TEXT NOT NULL DEFAULT '',
+                        updated_at INTEGER NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS wechat_group_memory_backfill_state (
+                        room_id TEXT PRIMARY KEY,
+                        cursor_row_id INTEGER NOT NULL DEFAULT 0,
+                        target_row_id INTEGER NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'idle',
+                        completed_batches INTEGER NOT NULL DEFAULT 0,
+                        last_failed_reason_code TEXT NOT NULL DEFAULT '',
+                        started_at INTEGER NOT NULL DEFAULT 0,
+                        updated_at INTEGER NOT NULL DEFAULT 0,
+                        finished_at INTEGER NOT NULL DEFAULT 0
+                    )
+                    """
+                )
+                conn.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS wechat_group_learning_cursors (
                         room_id TEXT PRIMARY KEY,
                         last_archive_row_id INTEGER NOT NULL DEFAULT 0,
@@ -355,6 +623,19 @@ class WechatGroupKnowledgeStore:
                         skipped_count INTEGER NOT NULL DEFAULT 0,
                         dream_summary TEXT NOT NULL DEFAULT '',
                         llm_status_code INTEGER NOT NULL DEFAULT 0,
+                        interrupted_reason TEXT NOT NULL DEFAULT '',
+                        batch_eligible_count INTEGER NOT NULL DEFAULT 0,
+                        batch_filtered_count INTEGER NOT NULL DEFAULT 0,
+                        pending_before_count INTEGER NOT NULL DEFAULT 0,
+                        pending_after_count INTEGER NOT NULL DEFAULT 0,
+                        cursor_before INTEGER NOT NULL DEFAULT 0,
+                        cursor_after INTEGER NOT NULL DEFAULT 0,
+                        summary_duration_ms INTEGER NOT NULL DEFAULT 0,
+                        dream_duration_ms INTEGER NOT NULL DEFAULT 0,
+                        total_duration_ms INTEGER NOT NULL DEFAULT 0,
+                        failure_code TEXT NOT NULL DEFAULT '',
+                        fallback_used INTEGER NOT NULL DEFAULT 0,
+                        attempt_count INTEGER NOT NULL DEFAULT 0,
                         started_at INTEGER NOT NULL,
                         finished_at INTEGER NOT NULL DEFAULT 0
                     )
@@ -366,6 +647,19 @@ class WechatGroupKnowledgeStore:
                 _ensure_column(conn, "wechat_group_learning_runs", "skipped_count", "INTEGER NOT NULL DEFAULT 0")
                 _ensure_column(conn, "wechat_group_learning_runs", "dream_summary", "TEXT NOT NULL DEFAULT ''")
                 _ensure_column(conn, "wechat_group_learning_runs", "llm_status_code", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "interrupted_reason", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_learning_runs", "batch_eligible_count", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "batch_filtered_count", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "pending_before_count", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "pending_after_count", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "cursor_before", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "cursor_after", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "summary_duration_ms", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "dream_duration_ms", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "total_duration_ms", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "failure_code", "TEXT NOT NULL DEFAULT ''")
+                _ensure_column(conn, "wechat_group_learning_runs", "fallback_used", "INTEGER NOT NULL DEFAULT 0")
+                _ensure_column(conn, "wechat_group_learning_runs", "attempt_count", "INTEGER NOT NULL DEFAULT 0")
                 conn.execute(
                     """
                     CREATE INDEX IF NOT EXISTS idx_wechat_group_learning_runs_room_time
@@ -419,3 +713,33 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) 
     columns = {str(row[1]) for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
     if column not in columns:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def _empty_scheduler_state(room_id: str) -> Dict[str, Any]:
+    return {
+        "room_id": room_id,
+        "latest_observed_row_id": 0,
+        "last_signal_at": 0,
+        "last_attempt_at": 0,
+        "last_success_at": 0,
+        "next_retry_at": 0,
+        "consecutive_failures": 0,
+        "last_failed_reason_code": "",
+        "initialized_at": 0,
+        "initialization_mode": "",
+        "updated_at": 0,
+    }
+
+
+def _empty_backfill_state(room_id: str) -> Dict[str, Any]:
+    return {
+        "room_id": room_id,
+        "cursor_row_id": 0,
+        "target_row_id": 0,
+        "status": "idle",
+        "completed_batches": 0,
+        "last_failed_reason_code": "",
+        "started_at": 0,
+        "updated_at": 0,
+        "finished_at": 0,
+    }
