@@ -91,6 +91,34 @@ class WechatGroupMemoryDreamTest(unittest.TestCase):
         self.assertEqual(self.archive.get_max_row_id("wgr_a"), self.store.get_cursor("wgr_a")["last_archive_row_id"])
         self.assertEqual("", self.store.list_learning_runs("wgr_a", limit=1)[0]["dream_summary"])
 
+    def test_two_stage_prompts_require_simplified_chinese_output(self):
+        self._record("a1", "wgr_a", "Deployments happen every Friday")
+        engine = FakeDreamEngine([
+            json.dumps({"summary": "每周五部署", "evidence_message_ids": ["a1"]}, ensure_ascii=False),
+            json.dumps({
+                "memories": [{
+                    "action": "add",
+                    "target_memory_token": "",
+                    "content": "本群约定每周五部署。",
+                    "confidence": 0.98,
+                    "evidence_message_ids": ["a1"],
+                }],
+                "dream_summary": "新增一条长期约定",
+            }, ensure_ascii=False),
+        ])
+
+        result = self._dream_service(engine).run_once("wgr_a")
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual(2, len(engine.calls))
+        for call in engine.calls:
+            self.assertIn("Simplified Chinese", call["system_prompt"])
+            self.assertEqual("zh-CN", json.loads(call["user_prompt"])["output_language"])
+        self.assertEqual(
+            "本群约定每周五部署。",
+            self.store.list_group_memories("wgr_a")[0]["content"],
+        )
+
     def test_cross_room_evidence_is_rejected_without_advancing_cursor(self):
         self._record("a1", "wgr_a", "A room agreement")
         self._record("b1", "wgr_b", "B room secret")
@@ -200,6 +228,8 @@ class WechatGroupMemoryDreamTest(unittest.TestCase):
             engine.calls[1]["purpose"],
         )
         repair_payload = json.loads(engine.calls[1]["user_prompt"])
+        self.assertIn("Simplified Chinese", engine.calls[1]["system_prompt"])
+        self.assertEqual("zh-CN", repair_payload["output_language"])
         self.assertEqual(["a1"], repair_payload["allowed_evidence_message_ids"])
         self.assertNotIn("not-json", engine.calls[1]["user_prompt"])
         run = self.store.list_learning_runs("wgr_a", limit=1)[0]

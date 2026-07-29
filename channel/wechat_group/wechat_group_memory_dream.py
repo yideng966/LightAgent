@@ -22,22 +22,27 @@ from channel.wechat_group.wechat_group_memory_material import (
 _SUMMARY_SYSTEM_PROMPT = """You distill durable facts and agreements from one WeChat group batch.
 Use only the supplied message evidence. Ignore casual chat, greetings, one-off questions,
 temporary errors, personality, interests, speaking style, intimacy, identity and permissions.
+Write the summary in concise Simplified Chinese even when the source messages use another
+language. Preserve proper nouns, product names, code and URLs only when needed.
 Return [EMPTY] when nothing has long-term group value. Otherwise return one JSON object:
-{"summary":"concise durable group facts","evidence_message_ids":["message-id"]}
+{"summary":"精炼的长期群事实","evidence_message_ids":["message-id"]}
 Every evidence ID must be copied exactly from the supplied batch. Return JSON only."""
 
 _DREAM_SYSTEM_PROMPT = """You curate permanent memories for one WeChat group.
 Merge new durable facts into the supplied active memories without inventing information.
 Do not output member profiles, identity, permissions, room IDs, local paths, secrets or
 speaker tokens. Automatic curation may add or update, never delete or disable.
+Write content and dream_summary in concise Simplified Chinese even when the source messages
+or active memories use another language. Preserve proper nouns, product names, code and URLs.
 Return exactly one JSON object with this schema:
-{"memories":[{"action":"add|update","target_memory_token":"M001 or empty for add","content":"durable group fact","confidence":0.0,"evidence_message_ids":["message-id"]}],"dream_summary":"brief audit summary"}
+{"memories":[{"action":"add|update","target_memory_token":"M001 or empty for add","content":"精炼的长期群事实","confidence":0.0,"evidence_message_ids":["message-id"]}],"dream_summary":"简短审计摘要"}
 Use only supplied memory tokens and evidence IDs. Return JSON only."""
 
 _REPAIR_SYSTEM_SUFFIX = """
 The previous response failed strict validation. Retry once using the same supplied material.
 Do not reuse or quote the previous response. Keep every evidence ID and memory token inside
-the supplied allowlists, satisfy the original schema, and return JSON only."""
+the supplied allowlists, keep every natural-language field in concise Simplified Chinese,
+satisfy the original schema, and return JSON only."""
 
 _FORBIDDEN_OPERATION_FIELDS = {
     "member_token",
@@ -534,6 +539,7 @@ class WechatGroupMemoryDreamService:
         batch: WechatGroupMemoryMaterialBatch,
     ) -> Tuple[str, List[str], int, bool]:
         payload = {
+            "output_language": "zh-CN",
             "messages": batch.messages,
             "allowed_evidence_message_ids": batch.evidence_message_ids,
         }
@@ -578,6 +584,7 @@ class WechatGroupMemoryDreamService:
             for item in active_memories
         ]
         payload = {
+            "output_language": "zh-CN",
             "active_memories": prompt_memories,
             "new_summary": summary,
             "summary_evidence_message_ids": summary_evidence,
