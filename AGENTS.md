@@ -275,6 +275,7 @@ docker push yideng966/lightagent:latest
 - 修改 `config.py` 默认配置时，同步检查 `config-template.json`、Web 设置页、文档和相关测试。
 - 修改模型路由时，同步检查 `Bridge`、`models/bot_factory.py`、`common/const.py`、Web 模型管理接口和测试。
 - 通用文本推理必须通过共享 `TextModelRouter` 使用同一主备顺序与熔断状态；视觉、生图、Embedding、ASR、TTS 保持独立路由，新增标题、总结、判断、画像等无状态文本任务时使用统一 `complete()` 入口；同步无工具请求的空正文必须在当前候选链内故障转移，不得将 `reasoning_content` 当作最终正文，也不得通过备用 Provider 绕过安全拒绝或把空正文计入临时故障熔断。
+- Agent 流式 `content` 中的 `<think>...</think>` 必须跨 SSE 分片有状态解析；IM 渠道不得发送或持久化块内思考及残余标签，Web 仅按思考开关保留块内正文；标准 `reasoning_content` 必须继续与最终正文隔离。
 - 修改语音路由时，同步检查 `voice/factory.py`、`Bridge`、Web ASR/TTS 能力接口、控制台选择器和语音测试；`custom:<id>` 必须按显式能力复用对应自定义 Provider 的 Key/Base，不能隐式回退到当前聊天 Provider。
 - 确定性生图等需要跨容器重建保留的用户产物必须默认写入 `agent_workspace`；Docker 生图目录固定在 `/home/agent/lightagent/images`（宿主机 `./data/images`），不得回退到随镜像更新且不挂载的 `/app/images`。Web SSE 发送本地生图时必须同时产生可访问的 `image` 事件和结束请求的 `done` 事件。
 - 修改 Agent 工具时，同步检查工具注册、工具 schema、异常返回格式、文档和安全测试。

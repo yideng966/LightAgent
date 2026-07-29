@@ -37,6 +37,66 @@ MAX_STORED_REASONING_CHARS = 4 * 1024  # 4 KB
 _REASONING_TRUNCATE_MARKER = "\n\n... [reasoning truncated, {omitted} chars omitted] ...\n\n"
 
 
+class _ThinkTagStreamFilter:
+    """跨流式分片解析内嵌的 ``<think>...</think>`` 块。"""
+
+    _OPEN_TAG = "<think>"
+    _CLOSE_TAG = "</think>"
+    _TAGS = (_OPEN_TAG, _CLOSE_TAG)
+
+    def __init__(self, keep_thinking: bool):
+        self.keep_thinking = keep_thinking
+        self.inside_thinking = False
+        self.pending = ""
+
+    @classmethod
+    def _pending_tag_prefix_length(cls, text: str) -> int:
+        max_length = min(len(text), max(len(tag) for tag in cls._TAGS) - 1)
+        for length in range(max_length, 0, -1):
+            suffix = text[-length:]
+            if any(tag.startswith(suffix) for tag in cls._TAGS):
+                return length
+        return 0
+
+    def feed(self, text: str) -> str:
+        if not text:
+            return ""
+
+        data = self.pending + text
+        self.pending = ""
+        visible = []
+
+        while data:
+            matches = []
+            for tag in self._TAGS:
+                index = data.find(tag)
+                if index >= 0:
+                    matches.append((index, tag))
+
+            if not matches:
+                pending_length = self._pending_tag_prefix_length(data)
+                body = data[:-pending_length] if pending_length else data
+                if self.keep_thinking or not self.inside_thinking:
+                    visible.append(body)
+                self.pending = data[-pending_length:] if pending_length else ""
+                break
+
+            index, tag = min(matches, key=lambda item: item[0])
+            if self.keep_thinking or not self.inside_thinking:
+                visible.append(data[:index])
+            self.inside_thinking = tag == self._OPEN_TAG
+            data = data[index + len(tag):]
+
+        return "".join(visible)
+
+    def finish(self) -> str:
+        pending = self.pending
+        self.pending = ""
+        if self.keep_thinking or not self.inside_thinking:
+            return pending
+        return ""
+
+
 def _truncate_reasoning_for_storage(text: str) -> str:
     """Trim long reasoning to head + tail with an omission marker.
 
@@ -528,15 +588,8 @@ class AgentStreamExecutor:
         """
         if not text:
             return text
-        import re
-        if self._should_render_thinking_inline():
-            text = re.sub(r'<think>', '', text)
-            text = re.sub(r'</think>', '', text)
-        else:
-            text = re.sub(r'<think>[\s\S]*?</think>', '', text)
-            # Also strip unclosed <think> tag at the end (streaming partial)
-            text = re.sub(r'<think>[\s\S]*$', '', text)
-        return text
+        stream_filter = _ThinkTagStreamFilter(self._should_render_thinking_inline())
+        return stream_filter.feed(text) + stream_filter.finish()
 
     def _hash_args(self, args: dict) -> str:
         """Generate a simple hash for tool arguments"""
@@ -1114,7 +1167,9 @@ class AgentStreamExecutor:
 
         # Streaming response
         full_content = ""
+        raw_content = ""
         full_reasoning = ""
+        think_tag_filter = _ThinkTagStreamFilter(self._should_render_thinking_inline())
         tool_calls_buffer = {}  # {index: {id, name, arguments}}
         gemini_raw_parts = None  # Preserve Gemini thoughtSignature for round-trip
         stop_reason = None  # Track why the stream stopped
@@ -1135,6 +1190,11 @@ class AgentStreamExecutor:
                         # Persist partial text only; tool_use args may be
                         # truncated mid-stream and would fail validation.
                         logger.info("[Agent] cancel detected mid-stream, aborting LLM call")
+                        filtered_tail = think_tag_filter.finish()
+                        if filtered_tail:
+                            full_content += filtered_tail
+                            self._emit_event("message_update", {"delta": filtered_tail})
+                        full_content = self._filter_think_tags(raw_content)
                         if full_content:
                             partial_msg = {
                                 "role": "assistant",
@@ -1212,8 +1272,8 @@ class AgentStreamExecutor:
                     # Handle text content
                     content_delta = delta.get("content") or ""
                     if content_delta:
-                        # Filter out <think> tags from content
-                        filtered_delta = self._filter_think_tags(content_delta)
+                        raw_content += content_delta
+                        filtered_delta = think_tag_filter.feed(content_delta)
                         full_content += filtered_delta
                         if filtered_delta:  # Only emit if there's content after filtering
                             self._emit_event("message_update", {"delta": filtered_delta})
@@ -1375,6 +1435,20 @@ class AgentStreamExecutor:
                     logger.error(f"❌ LLM call error (non-retryable): {e}", exc_info=True)
                 raise
 
+        filtered_tail = think_tag_filter.finish()
+        if filtered_tail:
+            full_content += filtered_tail
+            self._emit_event("message_update", {"delta": filtered_tail})
+
+        # 使用完整原始正文再次净化，避免发送或持久化分片解析残留。
+        sanitized_content = self._filter_think_tags(raw_content)
+        if sanitized_content != full_content:
+            logger.warning(
+                "[Agent] inline think stream filter mismatch; "
+                "using finalized sanitized content"
+            )
+        full_content = sanitized_content
+
         # Parse tool calls
         tool_calls = []
         for idx in sorted(tool_calls_buffer.keys()):
@@ -1422,9 +1496,6 @@ class AgentStreamExecutor:
                 max_retries=max_retries
             )
 
-        # Filter full_content one more time (in case tags were split across chunks)
-        full_content = self._filter_think_tags(full_content)
-        
         # Add assistant message to history (Claude format uses content blocks)
         assistant_msg = {"role": "assistant", "content": []}
 
