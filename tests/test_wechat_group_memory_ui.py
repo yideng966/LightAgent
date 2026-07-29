@@ -12,6 +12,20 @@ class WechatGroupMemoryUiTest(unittest.TestCase):
         cls.console_js = (ROOT / "channel/web/static/js/console.js").read_text(encoding="utf-8")
         cls.console_css = (ROOT / "channel/web/static/css/console.css").read_text(encoding="utf-8")
 
+    def _function_source(self, name, next_name=None):
+        marker = f"function {name}("
+        start = self.console_js.index(marker)
+        if next_name:
+            candidates = [
+                self.console_js.find(f"\nfunction {next_name}(", start),
+                self.console_js.find(f"\nasync function {next_name}(", start),
+            ]
+            end = min(index for index in candidates if index >= 0)
+        else:
+            end = self.console_js.find("\nfunction ", start + len(marker))
+            self.assertNotEqual(-1, end, f"could not isolate JavaScript function: {name}")
+        return self.console_js[start:end]
+
     def test_memory_view_is_the_only_group_memory_management_entry(self):
         self.assertIn('id="memory-scope-global"', self.chat_html)
         self.assertIn('id="memory-scope-group"', self.chat_html)
@@ -78,6 +92,71 @@ class WechatGroupMemoryUiTest(unittest.TestCase):
         self.assertIn("/api/wechat-group/memories/profile-evolution/rollback", self.console_js)
         self.assertIn("evolutionRequestId", self.console_js)
         self.assertIn("resetGroupsProfileEvolutionRoomState", self.console_js)
+
+    def test_profile_autonomous_learning_uses_main_scroll_flow(self):
+        body = self._function_source("buildGroupsProfilesPanel", "buildGroupsProfileEvolutionPanel")
+
+        self.assertIn('return `<div class="w-full min-w-0 pb-1">', body)
+        self.assertIn("xl:h-[clamp(360px,46vh,560px)]", body)
+        self.assertIn("min-h-[320px] xl:min-h-0", body)
+        self.assertNotIn('return `<div class="h-full w-full flex flex-col min-h-0">', body)
+        self.assertNotIn("flex-1 min-h-0 grid", body)
+
+        panel = self._function_source("buildGroupsProfileEvolutionPanel", "renderGroupsProfileEvolutionMetric")
+        self.assertIn('id="groups-profile-evolution-panel"', panel)
+        self.assertIn('id="groups-profile-evolution-content"', panel)
+        self.assertIn('ontoggle="setGroupsProfileEvolutionExpanded(this)"', panel)
+        self.assertIn("groupsProfilesState.evolutionExpanded", panel)
+
+    def test_profile_autonomous_learning_preserves_draft_and_action_state(self):
+        for field in (
+            "evolutionExpanded",
+            "evolutionDraft",
+            "evolutionDirty",
+            "evolutionAction",
+        ):
+            self.assertIn(field, self.console_js)
+
+        self.assertIn("function setGroupsProfileEvolutionExpanded(", self.console_js)
+        self.assertIn("function updateGroupsProfileEvolutionDraft(", self.console_js)
+        self.assertIn('oninput="updateGroupsProfileEvolutionDraft()"', self.console_js)
+        self.assertIn('onchange="updateGroupsProfileEvolutionDraft()"', self.console_js)
+        self.assertIn("groupsProfilesState.evolutionDraft || {}", self.console_js)
+        self.assertIn("groupsProfilesState.evolutionDirty", self.console_js)
+
+        ensure = self._function_source("ensureGroupsProfilesLoaded", "buildGroupsProfilesPanel")
+        self.assertIn("groupsProfilesState.evolutionExpanded", ensure)
+        self.assertIn("loadGroupsProfileEvolutionData()", ensure)
+
+    def test_profile_autonomous_learning_refreshes_once_and_updates_profiles(self):
+        run = self._function_source("runGroupsProfileEvolution", "refreshGroupsProfilesAfterEvolution")
+        rollback = self._function_source("rollbackGroupsProfileEvolutionRun", "formatGroupsProfileTimestamp")
+        refresh = self._function_source("refreshGroupsProfilesAfterEvolution", "loadGroupsProfileEvolutionRun")
+
+        self.assertEqual(1, run.count("loadGroupsProfileEvolutionData(true)"))
+        self.assertEqual(1, rollback.count("loadGroupsProfileEvolutionData(true)"))
+        self.assertNotIn("evolutionLoadedRoom = ''", run)
+        self.assertNotIn("evolutionLoadedRoom = ''", rollback)
+        self.assertIn("refreshGroupsProfilesAfterEvolution(roomId)", run)
+        self.assertIn("refreshGroupsProfilesAfterEvolution(roomId)", rollback)
+        self.assertIn("groupsProfilesState.loadedRoomFilter = null", refresh)
+        self.assertIn("refreshGroupsProfilesData()", refresh)
+        self.assertIn("runStatus === 'skipped'", run)
+
+    def test_profile_requests_drop_stale_room_responses(self):
+        body = self._function_source("refreshGroupsProfilesData", "startGroupsProfileCreate")
+
+        self.assertIn("const requestId = ++groupsProfilesState.requestId", body)
+        self.assertIn("requestId !== groupsProfilesState.requestId", body)
+        self.assertIn("roomId !== groupsProfilesState.roomFilter", body)
+        self.assertIn("query !== groupsProfilesState.query", body)
+
+    def test_profile_rollback_is_only_offered_for_the_latest_eligible_run(self):
+        body = self._function_source("getGroupsProfileEvolutionRollbackRunId", "renderGroupsProfileEvolutionRun")
+
+        self.assertIn("status === 'running'", body)
+        self.assertIn("status !== 'success'", body)
+        self.assertIn("Number(run.profile_update_count || 0) > 0", body)
 
     def test_humanization_keeps_full_context_preview(self):
         start = self.console_js.index("function buildGroupsContextPreviewPanel")

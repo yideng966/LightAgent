@@ -1495,8 +1495,9 @@ class WechatGroupWebTest(unittest.TestCase):
         end = console_js.index("function saveGroupsProfileDetail()", start)
         refresh_profiles_js = console_js[start:end]
 
+        self.assertIn("const roomId = groupsProfilesState.roomFilter", refresh_profiles_js)
         self.assertIn(
-            "params.set('stable_room_id', groupsProfilesState.roomFilter)",
+            "params.set('stable_room_id', roomId)",
             refresh_profiles_js,
         )
         self.assertNotIn(

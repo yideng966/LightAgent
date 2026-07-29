@@ -826,6 +826,45 @@ const I18N = {
         groups_profiles_metric_messages: '消息数',
         groups_profiles_metric_activity: '活跃度',
         groups_profiles_metric_intimacy: '熟悉度',
+        groups_profiles_evolution_title: '自主学习',
+        groups_profiles_evolution_desc: '按当前稳定群查看画像学习状态、运行记录和差异。',
+        groups_profiles_evolution_scope_hint: '画像策略适用于全部已选群；状态和记录仅属于当前群。',
+        groups_profiles_evolution_enabled: '启用画像自主学习',
+        groups_profiles_evolution_cursor: '学习游标',
+        groups_profiles_evolution_observed: '最新归档',
+        groups_profiles_evolution_running: '运行中',
+        groups_profiles_evolution_yes: '是',
+        groups_profiles_evolution_no: '否',
+        groups_profiles_evolution_last_error: '最近失败',
+        groups_profiles_evolution_retry: '重试',
+        groups_profiles_evolution_save: '保存画像策略',
+        groups_profiles_evolution_run: '执行当前群学习',
+        groups_profiles_evolution_dirty: '策略有未保存修改',
+        groups_profiles_evolution_history: '最近运行',
+        groups_profiles_evolution_empty: '当前群暂无画像学习记录',
+        groups_profiles_evolution_messages: '消息',
+        groups_profiles_evolution_updates: '画像更新',
+        groups_profiles_evolution_detail: '查看差异',
+        groups_profiles_evolution_diff_title: '运行差异详情',
+        groups_profiles_evolution_rollback: '回滚',
+        groups_profiles_evolution_rollback_title: '回滚画像学习',
+        groups_profiles_evolution_rollback_message: '将恢复这次学习前的群友画像，此操作不影响群记忆。',
+        groups_profiles_evolution_rollback_confirm: '确认回滚',
+        groups_profiles_evolution_loading: '正在加载自主学习状态...',
+        groups_profiles_evolution_saving: '正在保存画像策略...',
+        groups_profiles_evolution_executing: '正在执行当前群学习...',
+        groups_profiles_evolution_detail_loading: '正在加载运行差异...',
+        groups_profiles_evolution_rolling_back: '正在回滚群友画像...',
+        groups_profiles_evolution_saved: '画像策略已保存',
+        groups_profiles_evolution_completed: '当前群画像学习已完成',
+        groups_profiles_evolution_skipped: '当前群没有需要学习的新消息',
+        groups_profiles_evolution_rolled_back: '群友画像已回滚',
+        groups_profiles_evolution_run_not_found: '未找到这次画像学习记录',
+        groups_profiles_evolution_status_running: '执行中',
+        groups_profiles_evolution_status_success: '成功',
+        groups_profiles_evolution_status_skipped: '无新消息',
+        groups_profiles_evolution_status_failed: '失败',
+        groups_profiles_evolution_status_rolled_back: '已回滚',
         groups_memory_no_room: '请先在“群聊开关”中选择至少一个群 ID。',
         groups_memory_group_title: '群记忆',
         groups_memory_group_hint: '保存当前群长期稳定信息，例如群规、偏好、长期项目和约定。',
@@ -1824,6 +1863,45 @@ const I18N = {
         groups_profiles_metric_messages: 'Messages',
         groups_profiles_metric_activity: 'Activity',
         groups_profiles_metric_intimacy: 'Familiarity',
+        groups_profiles_evolution_title: 'Autonomous learning',
+        groups_profiles_evolution_desc: 'Inspect profile learning status, runs, and diffs for the current stable room.',
+        groups_profiles_evolution_scope_hint: 'Profile policy applies to all selected rooms; status and runs belong only to the current room.',
+        groups_profiles_evolution_enabled: 'Enable profile evolution',
+        groups_profiles_evolution_cursor: 'Learning cursor',
+        groups_profiles_evolution_observed: 'Latest archive',
+        groups_profiles_evolution_running: 'Running',
+        groups_profiles_evolution_yes: 'Yes',
+        groups_profiles_evolution_no: 'No',
+        groups_profiles_evolution_last_error: 'Latest failure',
+        groups_profiles_evolution_retry: 'Retry',
+        groups_profiles_evolution_save: 'Save profile policy',
+        groups_profiles_evolution_run: 'Run current room',
+        groups_profiles_evolution_dirty: 'Policy has unsaved changes',
+        groups_profiles_evolution_history: 'Recent runs',
+        groups_profiles_evolution_empty: 'No profile learning runs for this room',
+        groups_profiles_evolution_messages: 'Messages',
+        groups_profiles_evolution_updates: 'Profile updates',
+        groups_profiles_evolution_detail: 'View diff',
+        groups_profiles_evolution_diff_title: 'Run diff details',
+        groups_profiles_evolution_rollback: 'Rollback',
+        groups_profiles_evolution_rollback_title: 'Rollback profile learning',
+        groups_profiles_evolution_rollback_message: 'This restores member profiles from before this run and does not change group memories.',
+        groups_profiles_evolution_rollback_confirm: 'Confirm rollback',
+        groups_profiles_evolution_loading: 'Loading autonomous learning status...',
+        groups_profiles_evolution_saving: 'Saving profile policy...',
+        groups_profiles_evolution_executing: 'Running profile learning for this room...',
+        groups_profiles_evolution_detail_loading: 'Loading run differences...',
+        groups_profiles_evolution_rolling_back: 'Rolling back member profiles...',
+        groups_profiles_evolution_saved: 'Profile policy saved',
+        groups_profiles_evolution_completed: 'Profile learning completed for this room',
+        groups_profiles_evolution_skipped: 'There are no new messages to learn from in this room',
+        groups_profiles_evolution_rolled_back: 'Member profiles rolled back',
+        groups_profiles_evolution_run_not_found: 'This profile learning run was not found',
+        groups_profiles_evolution_status_running: 'Running',
+        groups_profiles_evolution_status_success: 'Success',
+        groups_profiles_evolution_status_skipped: 'No new messages',
+        groups_profiles_evolution_status_failed: 'Failed',
+        groups_profiles_evolution_status_rolled_back: 'Rolled back',
         groups_memory_no_room: 'Select at least one room ID in Group switches first.',
         groups_memory_group_title: 'Group memory',
         groups_memory_group_hint: 'Save stable long-term facts for the current group, such as rules, preferences, projects, and agreements.',
@@ -10377,6 +10455,7 @@ let groupsMembershipState = {
 };
 let groupsProfilesState = {
     loading: false,
+    requestId: 0,
     profiles: [],
     members: [],
     total: 0,
@@ -10394,6 +10473,10 @@ let groupsProfilesState = {
     evolutionLoading: false,
     evolutionError: '',
     evolutionRequestId: 0,
+    evolutionExpanded: false,
+    evolutionDraft: null,
+    evolutionDirty: false,
+    evolutionAction: '',
 };
 let groupsContextPreviewState = {
     roomId: '',
@@ -14806,6 +14889,7 @@ function resetGroupsProfileEvolutionRoomState() {
     groupsProfilesState.evolutionLoadedRoom = '';
     groupsProfilesState.evolutionLoading = false;
     groupsProfilesState.evolutionError = '';
+    groupsProfilesState.evolutionAction = '';
 }
 
 function ensureGroupsProfilesLoaded(extra) {
@@ -14832,7 +14916,9 @@ function ensureGroupsProfilesLoaded(extra) {
     if (needsLoad) {
         refreshGroupsProfilesData();
     }
-    if (groupsProfilesState.evolutionLoadedRoom !== groupsProfilesState.roomFilter && !groupsProfilesState.evolutionLoading) {
+    if (groupsProfilesState.evolutionExpanded
+            && groupsProfilesState.evolutionLoadedRoom !== groupsProfilesState.roomFilter
+            && !groupsProfilesState.evolutionLoading) {
         loadGroupsProfileEvolutionData();
     }
 }
@@ -14854,13 +14940,13 @@ function buildGroupsProfilesPanel(extra) {
         return memberId && !profileMemberIds.has(memberId);
     });
     const selectedProfile = getGroupsProfilesSelectedProfile();
-    return `<div class="h-full w-full flex flex-col min-h-0">
+    return `<div class="w-full min-w-0 pb-1">
         ${buildGroupsPanelTitle('fa-id-card', 'groups_profiles_title', 'groups_profiles_desc')}
         <div class="flex flex-wrap items-end gap-3 mb-4">
             <label class="block min-w-[220px]">
                 <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('groups_profiles_room_filter')}</span>
-                <select id="groups-profiles-room-filter" onchange="refreshGroupsProfilesData(true)"
-                    class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors">
+                <select id="groups-profiles-room-filter" onchange="refreshGroupsProfilesData(true)" ${groupsProfilesState.evolutionLoading ? 'disabled' : ''}
+                    class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors disabled:cursor-not-allowed disabled:opacity-50">
                     ${rooms.map(room => `<option value="${escapeHtml(room.id)}" ${groupsProfilesState.roomFilter === room.id ? 'selected' : ''}>${escapeHtml(room.name || room.id)}</option>`).join('')}
                 </select>
             </label>
@@ -14893,8 +14979,8 @@ function buildGroupsProfilesPanel(extra) {
             </button>
             <span class="ml-auto text-xs text-slate-500 dark:text-slate-400">${t('groups_profiles_result_count').replace('{count}', String(groupsProfilesState.total || 0))}</span>
         </div>
-        <div class="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)] gap-4">
-            <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 min-h-0 flex flex-col">
+        <div class="grid grid-cols-1 xl:grid-cols-[minmax(320px,0.9fr)_minmax(0,1.4fr)] gap-4 xl:h-[clamp(360px,46vh,560px)]">
+            <section class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 min-h-[320px] xl:min-h-0 flex flex-col">
                 <div class="flex items-center justify-between gap-3 mb-3">
                     <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_profiles_list_title')}</h4>
                     ${groupsProfilesState.loading ? `<span class="text-xs text-slate-500 dark:text-slate-400"><i class="fas fa-spinner fa-spin mr-1"></i>${t('groups_loading')}</span>` : ''}
@@ -14903,7 +14989,7 @@ function buildGroupsProfilesPanel(extra) {
                     ${buildGroupsProfilesList(profiles, selectedProfile?.sender_id || '')}
                 </div>
             </section>
-            <section id="groups-profiles-detail" class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 min-h-0 overflow-y-auto">
+            <section id="groups-profiles-detail" class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 min-h-[320px] xl:min-h-0 overflow-y-auto">
                 ${buildGroupsProfilesDetail(selectedProfile)}
             </section>
         </div>
@@ -14912,33 +14998,153 @@ function buildGroupsProfilesPanel(extra) {
 }
 
 function buildGroupsProfileEvolutionPanel() {
-    const config = groupsProfilesState.evolutionConfig || {};
+    const config = {
+        ...(groupsProfilesState.evolutionConfig || {}),
+        ...(groupsProfilesState.evolutionDraft || {}),
+    };
     const status = groupsProfilesState.evolutionStatus || {};
     const runs = groupsProfilesState.evolutionRuns || [];
-    return `<details class="mt-6 border-t border-slate-200 dark:border-white/10 pt-4" ${groupsProfilesState.evolutionError ? 'open' : ''}>
-        <summary class="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800 dark:text-slate-100"><i class="fas fa-wand-magic-sparkles mr-2 text-primary-500"></i>${currentLang === 'zh' ? '自主学习' : 'Autonomous learning'}</summary>
-        <div class="pt-3 space-y-4"><p class="text-xs text-slate-500 dark:text-slate-400">${currentLang === 'zh' ? '画像配置适用于全部已选群；运行状态与记录严格按当前稳定群展示。' : 'Profile policy applies to all selected groups; status and runs are scoped to the current stable group.'}</p>
-            ${groupsProfilesState.evolutionLoading ? '<p class="text-sm text-slate-500"><i class="fas fa-spinner fa-spin mr-1.5"></i>Loading...</p>' : ''}
-            ${groupsProfilesState.evolutionError ? `<div class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-red-600 dark:text-red-400" role="alert"><span class="min-w-0 flex-1 break-words">${escapeHtml(groupsProfilesState.evolutionError)}</span><button type="button" onclick="loadGroupsProfileEvolutionData(true)" class="min-h-11 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">${currentLang === 'zh' ? '重试' : 'Retry'}</button></div>` : ''}
-            <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-slate-500 dark:text-slate-400"><span>Cursor <b class="font-mono tabular-nums text-slate-800 dark:text-slate-100">${Number(status.last_archive_row_id || 0)}</b></span><span>Observed <b class="font-mono tabular-nums text-slate-800 dark:text-slate-100">${Number(status.latest_observed_row_id || 0)}</b></span><span>${currentLang === 'zh' ? '运行中' : 'Running'} <b>${status.running ? (currentLang === 'zh' ? '是' : 'Yes') : (currentLang === 'zh' ? '否' : 'No')}</b></span><span class="break-words text-red-600 dark:text-red-400">${escapeHtml(status.last_failed_reason || '')}</span></div>
+    const expanded = groupsProfilesState.evolutionExpanded || !!groupsProfilesState.evolutionError;
+    const busy = !!groupsProfilesState.evolutionAction;
+    const configReady = groupsProfilesState.evolutionConfig !== null;
+    const inputsDisabled = busy || !configReady;
+    const runDisabled = busy || !!status.running || groupsProfilesState.evolutionDirty || !configReady;
+    const rollbackRunId = getGroupsProfileEvolutionRollbackRunId(runs);
+    return `<details id="groups-profile-evolution-panel" class="mt-6 min-w-0 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111]" ${expanded ? 'open' : ''} ontoggle="setGroupsProfileEvolutionExpanded(this)">
+        <summary class="list-none min-h-11 cursor-pointer px-4 py-3 text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500">
+            <span class="flex items-center gap-3">
+                <i class="fas fa-wand-magic-sparkles w-4 text-center text-primary-500" aria-hidden="true"></i>
+                <span class="min-w-0 flex-1"><span class="block text-sm font-semibold">${t('groups_profiles_evolution_title')}</span><span class="mt-0.5 block text-xs font-normal text-slate-500 dark:text-slate-400">${t('groups_profiles_evolution_desc')}</span></span>
+                <i id="groups-profile-evolution-chevron" class="fas fa-chevron-down text-xs text-slate-400 ${expanded ? 'rotate-180' : ''}" aria-hidden="true"></i>
+            </span>
+        </summary>
+        <div id="groups-profile-evolution-content" class="min-w-0 space-y-4 border-t border-slate-200 dark:border-white/10 px-4 py-4">
+            <p class="text-xs text-slate-500 dark:text-slate-400">${t('groups_profiles_evolution_scope_hint')}</p>
+            ${busy ? `<p class="flex min-h-11 items-center text-sm text-slate-600 dark:text-slate-300" role="status" aria-live="polite"><i class="fas fa-spinner fa-spin mr-2 text-primary-500" aria-hidden="true"></i>${escapeHtml(getGroupsProfileEvolutionActionLabel(groupsProfilesState.evolutionAction))}</p>` : ''}
+            ${groupsProfilesState.evolutionError ? `<div class="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-red-600 dark:text-red-400" role="alert"><span class="min-w-0 flex-1 break-words">${escapeHtml(groupsProfilesState.evolutionError)}</span><button type="button" onclick="loadGroupsProfileEvolutionData(true)" ${busy ? 'disabled' : ''} class="min-h-11 px-3 py-2 rounded-lg border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/30 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">${t('groups_profiles_evolution_retry')}</button></div>` : ''}
+            <dl class="grid grid-cols-2 lg:grid-cols-3 gap-3 border-y border-slate-200 dark:border-white/10 py-3 text-xs">
+                ${renderGroupsProfileEvolutionMetric('groups_profiles_evolution_cursor', Number(status.last_archive_row_id || 0))}
+                ${renderGroupsProfileEvolutionMetric('groups_profiles_evolution_observed', Number(status.latest_observed_row_id || 0))}
+                ${renderGroupsProfileEvolutionMetric('groups_profiles_evolution_running', status.running ? t('groups_profiles_evolution_yes') : t('groups_profiles_evolution_no'))}
+            </dl>
+            ${status.last_failed_reason ? `<p class="break-words text-xs text-red-600 dark:text-red-400" role="alert"><span class="font-medium">${t('groups_profiles_evolution_last_error')}：</span>${escapeHtml(status.last_failed_reason)}</p>` : ''}
             <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                ${renderGroupMemoryConfigToggle('profile-enabled', currentLang === 'zh' ? '启用群友画像' : 'Enable member profiles', config.wechat_group_profile_enabled !== false).replace('group-memory-config-profile-enabled', 'groups-profile-config-enabled')}
-                ${renderGroupMemoryConfigToggle('profile-evolution-enabled', currentLang === 'zh' ? '启用画像自主学习' : 'Enable profile evolution', !!config.wechat_group_profile_evolution_enabled).replace('group-memory-config-profile-evolution-enabled', 'groups-profile-config-evolution-enabled')}
-                ${renderGroupsProfileEvolutionNumber('context-limit', currentLang === 'zh' ? '画像注入条数' : 'Profile context limit', config.wechat_group_profile_context_limit ?? 2, 1, 20)}
-                ${renderGroupsProfileEvolutionNumber('idle-minutes', currentLang === 'zh' ? '空闲分钟' : 'Idle minutes', config.wechat_group_profile_evolution_idle_minutes ?? 10, 1, 1440)}
-                ${renderGroupsProfileEvolutionNumber('min-messages', currentLang === 'zh' ? '最少新消息数' : 'Minimum messages', config.wechat_group_profile_evolution_min_messages ?? 10, 1, 500)}
-                ${renderGroupsProfileEvolutionNumber('max-interval', currentLang === 'zh' ? '最大间隔分钟' : 'Max interval minutes', config.wechat_group_profile_evolution_max_interval_minutes ?? 120, 1, 10080)}
-                ${renderGroupsProfileEvolutionNumber('batch-limit', currentLang === 'zh' ? '每批消息数' : 'Batch messages', config.wechat_group_profile_evolution_batch_message_limit ?? 200, 1, 1000)}
+                ${renderGroupsProfileEvolutionToggle('enabled', t('groups_memory_profile_enabled'), config.wechat_group_profile_enabled !== false, inputsDisabled)}
+                ${renderGroupsProfileEvolutionToggle('evolution-enabled', t('groups_profiles_evolution_enabled'), !!config.wechat_group_profile_evolution_enabled, inputsDisabled)}
+                ${renderGroupsProfileEvolutionNumber('context-limit', t('groups_memory_profile_context_limit'), config.wechat_group_profile_context_limit ?? 2, 1, 20, inputsDisabled)}
+                ${renderGroupsProfileEvolutionNumber('idle-minutes', t('groups_memory_learning_idle_minutes'), config.wechat_group_profile_evolution_idle_minutes ?? 10, 1, 1440, inputsDisabled)}
+                ${renderGroupsProfileEvolutionNumber('min-messages', t('groups_memory_learning_profile_min_messages'), config.wechat_group_profile_evolution_min_messages ?? 10, 1, 500, inputsDisabled)}
+                ${renderGroupsProfileEvolutionNumber('max-interval', t('groups_memory_learning_max_interval_minutes'), config.wechat_group_profile_evolution_max_interval_minutes ?? 120, 1, 10080, inputsDisabled)}
+                ${renderGroupsProfileEvolutionNumber('batch-limit', t('groups_memory_learning_batch_limit'), config.wechat_group_profile_evolution_batch_message_limit ?? 200, 1, 1000, inputsDisabled)}
             </div>
-            <div class="flex flex-col sm:flex-row sm:justify-end gap-2"><button id="groups-profile-evolution-save" type="button" onclick="saveGroupsProfileEvolutionConfig()" ${groupsProfilesState.evolutionLoading ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-sm hover:bg-slate-50 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"><i class="fas fa-floppy-disk mr-1.5"></i>${currentLang === 'zh' ? '保存画像策略' : 'Save profile policy'}</button><button id="groups-profile-evolution-run" type="button" onclick="runGroupsProfileEvolution()" ${status.running || groupsProfilesState.evolutionLoading ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"><i class="fas fa-play mr-1.5"></i>${currentLang === 'zh' ? '执行当前群学习' : 'Run current group'}</button></div>
-            <div class="divide-y divide-slate-200 dark:divide-white/10">${runs.length ? runs.map(run => `<article class="py-3 text-xs"><div class="flex flex-wrap items-center gap-2"><button type="button" onclick="loadGroupsProfileEvolutionRun('${escapeJs(run.run_id || '')}')" class="min-h-11 max-w-full break-all font-mono text-left text-primary-700 dark:text-primary-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">${escapeHtml(run.run_id || '')}</button><span>${escapeHtml(run.status || '')}</span><time class="sm:ml-auto tabular-nums text-slate-500">${escapeHtml(formatGroupMemoryTimestamp(run.started_at))}</time></div><div class="mt-2 flex flex-wrap items-center gap-4 text-slate-500 dark:text-slate-400"><span>${currentLang === 'zh' ? '消息' : 'Messages'} ${Number(run.batch_message_count || 0)}</span><span>${currentLang === 'zh' ? '画像更新' : 'Profile updates'} ${Number(run.profile_update_count || 0)}</span><button type="button" onclick="rollbackGroupsProfileEvolutionRun('${escapeJs(run.run_id || '')}')" class="min-h-11 px-2 text-red-600 dark:text-red-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">${currentLang === 'zh' ? '回滚' : 'Rollback'}</button></div></article>`).join('') : `<p class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">${currentLang === 'zh' ? '当前群暂无画像学习记录' : 'No profile learning runs for this group'}</p>`}</div>
-            ${groupsProfilesState.evolutionDetail ? `<details open class="rounded-lg border border-slate-200 dark:border-white/10"><summary class="min-h-11 cursor-pointer px-3 py-2 text-sm">${currentLang === 'zh' ? '运行差异详情' : 'Run diff details'}</summary><pre class="overflow-auto border-t border-slate-200 dark:border-white/10 p-3 text-xs whitespace-pre-wrap break-words">${escapeHtml(JSON.stringify(groupsProfilesState.evolutionDetail.diffs || [], null, 2))}</pre></details>` : ''}
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                <span id="groups-profile-evolution-dirty" class="text-xs text-amber-600 dark:text-amber-400 ${groupsProfilesState.evolutionDirty ? '' : 'hidden'}" aria-live="polite">${t('groups_profiles_evolution_dirty')}</span>
+                <button id="groups-profile-evolution-save" type="button" onclick="saveGroupsProfileEvolutionConfig()" ${busy || !configReady ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg border border-slate-200 dark:border-white/10 text-sm hover:bg-slate-50 dark:hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"><i class="fas fa-floppy-disk mr-1.5" aria-hidden="true"></i>${t('groups_profiles_evolution_save')}</button>
+                <button id="groups-profile-evolution-run" type="button" onclick="runGroupsProfileEvolution()" ${runDisabled ? 'disabled' : ''} ${groupsProfilesState.evolutionDirty ? `title="${escapeHtml(t('groups_profiles_evolution_dirty'))}"` : ''} class="min-h-11 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"><i class="fas fa-play mr-1.5" aria-hidden="true"></i>${t('groups_profiles_evolution_run')}</button>
+            </div>
+            <section class="min-w-0" aria-labelledby="groups-profile-evolution-history-title">
+                <h4 id="groups-profile-evolution-history-title" class="text-sm font-semibold text-slate-800 dark:text-slate-100">${t('groups_profiles_evolution_history')}</h4>
+                <div class="mt-2 divide-y divide-slate-200 dark:divide-white/10">${runs.length ? runs.map(run => renderGroupsProfileEvolutionRun(run, run.run_id === rollbackRunId)).join('') : `<p class="py-6 text-center text-sm text-slate-500 dark:text-slate-400">${t('groups_profiles_evolution_empty')}</p>`}</div>
+            </section>
+            ${groupsProfilesState.evolutionDetail ? `<details open class="min-w-0 border-t border-slate-200 dark:border-white/10 pt-3"><summary class="min-h-11 cursor-pointer py-2 text-sm font-medium text-slate-700 dark:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">${t('groups_profiles_evolution_diff_title')}</summary><pre class="mt-2 max-w-full overflow-x-auto bg-slate-50 dark:bg-white/5 p-3 text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap break-words">${escapeHtml(JSON.stringify(groupsProfilesState.evolutionDetail.diffs || [], null, 2))}</pre></details>` : ''}
         </div>
     </details>`;
 }
 
-function renderGroupsProfileEvolutionNumber(id, label, value, min, max) {
-    return `<label><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">${label}</span><input id="groups-profile-config-${id}" type="number" min="${min}" max="${max}" value="${escapeHtml(String(value))}" class="w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-base text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"></label>`;
+function renderGroupsProfileEvolutionMetric(labelKey, value) {
+    return `<div class="min-w-0"><dt class="text-slate-500 dark:text-slate-400">${t(labelKey)}</dt><dd class="mt-1 break-words font-mono font-semibold tabular-nums text-slate-800 dark:text-slate-100">${escapeHtml(String(value))}</dd></div>`;
+}
+
+function renderGroupsProfileEvolutionToggle(id, label, checked, disabled) {
+    return `<label class="flex min-h-11 items-center gap-3 rounded-lg border border-slate-200 dark:border-white/10 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 ${disabled ? 'opacity-50' : ''}"><input id="groups-profile-config-${id}" type="checkbox" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="updateGroupsProfileEvolutionDraft()" class="h-5 w-5 accent-primary-600 disabled:cursor-not-allowed"><span>${label}</span></label>`;
+}
+
+function renderGroupsProfileEvolutionNumber(id, label, value, min, max, disabled = false) {
+    return `<label><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">${label}</span><input id="groups-profile-config-${id}" type="number" min="${min}" max="${max}" value="${escapeHtml(String(value))}" ${disabled ? 'disabled' : ''} oninput="updateGroupsProfileEvolutionDraft()" class="w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-base text-slate-800 dark:text-slate-100 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"></label>`;
+}
+
+function setGroupsProfileEvolutionExpanded(details) {
+    const expanded = !!details?.open;
+    groupsProfilesState.evolutionExpanded = expanded;
+    document.getElementById('groups-profile-evolution-chevron')?.classList.toggle('rotate-180', expanded);
+    if (expanded
+            && groupsProfilesState.evolutionLoadedRoom !== groupsProfilesState.roomFilter
+            && !groupsProfilesState.evolutionLoading) {
+        loadGroupsProfileEvolutionData();
+    }
+}
+
+function updateGroupsProfileEvolutionDraft() {
+    if (!document.getElementById('groups-profile-evolution-panel')) return;
+    const value = id => document.getElementById(`groups-profile-config-${id}`)?.value ?? '';
+    groupsProfilesState.evolutionDraft = {
+        wechat_group_profile_enabled: !!document.getElementById('groups-profile-config-enabled')?.checked,
+        wechat_group_profile_context_limit: value('context-limit'),
+        wechat_group_profile_evolution_enabled: !!document.getElementById('groups-profile-config-evolution-enabled')?.checked,
+        wechat_group_profile_evolution_idle_minutes: value('idle-minutes'),
+        wechat_group_profile_evolution_min_messages: value('min-messages'),
+        wechat_group_profile_evolution_max_interval_minutes: value('max-interval'),
+        wechat_group_profile_evolution_batch_message_limit: value('batch-limit'),
+    };
+    groupsProfilesState.evolutionDirty = true;
+    document.getElementById('groups-profile-evolution-dirty')?.classList.remove('hidden');
+    const runButton = document.getElementById('groups-profile-evolution-run');
+    if (runButton) {
+        runButton.disabled = true;
+        runButton.title = t('groups_profiles_evolution_dirty');
+    }
+}
+
+function getGroupsProfileEvolutionActionLabel(action) {
+    const keys = {
+        load: 'groups_profiles_evolution_loading',
+        save: 'groups_profiles_evolution_saving',
+        run: 'groups_profiles_evolution_executing',
+        detail: 'groups_profiles_evolution_detail_loading',
+        rollback: 'groups_profiles_evolution_rolling_back',
+    };
+    return t(keys[action] || 'groups_profiles_evolution_loading');
+}
+
+function getGroupsProfileEvolutionRunStatusLabel(status) {
+    const key = `groups_profiles_evolution_status_${String(status || '').toLowerCase()}`;
+    return (I18N[currentLang] && I18N[currentLang][key]) || I18N.en[key] || String(status || '');
+}
+
+function getGroupsProfileEvolutionRollbackRunId(runs) {
+    let blocked = false;
+    for (const run of runs || []) {
+        const status = String(run.status || '').toLowerCase();
+        if (status === 'running') {
+            blocked = true;
+            continue;
+        }
+        if (status !== 'success') continue;
+        if (!blocked && Number(run.profile_update_count || 0) > 0) return String(run.run_id || '');
+        blocked = true;
+    }
+    return '';
+}
+
+function renderGroupsProfileEvolutionRun(run, rollbackAvailable) {
+    const runId = String(run.run_id || '');
+    const failedReason = String(run.failed_reason || '');
+    return `<article class="min-w-0 py-3 text-xs">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <span class="min-w-0 flex-1 break-all font-mono text-slate-600 dark:text-slate-300">${escapeHtml(runId)}</span>
+            <span class="w-fit rounded border border-slate-200 dark:border-white/10 px-2 py-1 text-slate-600 dark:text-slate-300">${escapeHtml(getGroupsProfileEvolutionRunStatusLabel(run.status))}</span>
+            <time class="tabular-nums text-slate-500 dark:text-slate-400">${escapeHtml(formatGroupMemoryTimestamp(run.started_at))}</time>
+        </div>
+        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-slate-500 dark:text-slate-400">
+            <span>${t('groups_profiles_evolution_messages')} <b class="font-mono tabular-nums text-slate-700 dark:text-slate-200">${Number(run.batch_message_count || 0)}</b></span>
+            <span>${t('groups_profiles_evolution_updates')} <b class="font-mono tabular-nums text-slate-700 dark:text-slate-200">${Number(run.profile_update_count || 0)}</b></span>
+            <span class="sm:ml-auto flex flex-wrap gap-2">
+                <button type="button" onclick="loadGroupsProfileEvolutionRun('${escapeJs(runId)}')" class="min-h-11 px-2 text-primary-700 dark:text-primary-300 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500"><i class="fas fa-eye mr-1.5" aria-hidden="true"></i>${t('groups_profiles_evolution_detail')}</button>
+                ${rollbackAvailable ? `<button type="button" onclick="rollbackGroupsProfileEvolutionRun('${escapeJs(runId)}')" class="min-h-11 px-2 text-red-600 dark:text-red-400 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"><i class="fas fa-rotate-left mr-1.5" aria-hidden="true"></i>${t('groups_profiles_evolution_rollback')}</button>` : ''}
+            </span>
+        </div>
+        ${failedReason ? `<p class="mt-1 break-words text-red-600 dark:text-red-400">${escapeHtml(failedReason)}</p>` : ''}
+    </article>`;
 }
 
 function buildGroupsProfileInput(id, labelKey, value, extraClass, readonly = false) {
@@ -15075,6 +15281,7 @@ function refreshGroupsProfilesData(fromInputs = false) {
         if (groupsProfilesState.roomFilter !== previousRoom) resetGroupsProfileEvolutionRoomState();
     }
     if (!groupsProfilesState.roomFilter) {
+        groupsProfilesState.requestId += 1;
         groupsProfilesState.loading = false;
         groupsProfilesState.profiles = [];
         groupsProfilesState.members = [];
@@ -15082,38 +15289,46 @@ function refreshGroupsProfilesData(fromInputs = false) {
         renderGroupsView();
         return;
     }
+    const roomId = groupsProfilesState.roomFilter;
+    const query = groupsProfilesState.query;
+    const requestId = ++groupsProfilesState.requestId;
     groupsProfilesState.loading = true;
     renderGroupsView();
     const params = new URLSearchParams();
-    if (groupsProfilesState.query) params.set('q', groupsProfilesState.query);
-    params.set('stable_room_id', groupsProfilesState.roomFilter);
+    if (query) params.set('q', query);
+    params.set('stable_room_id', roomId);
     params.set('limit', '200');
-    const membersRequest = groupsProfilesState.loadedMembersRoom === groupsProfilesState.roomFilter
+    const membersRequest = groupsProfilesState.loadedMembersRoom === roomId
         ? Promise.resolve({ status: 'success', members: groupsProfilesState.members })
-        : fetch(`/api/wechat-group/members?stable_room_id=${encodeURIComponent(groupsProfilesState.roomFilter)}&limit=500`).then(r => r.json());
+        : fetch(`/api/wechat-group/members?stable_room_id=${encodeURIComponent(roomId)}&limit=500`).then(r => r.json());
     Promise.all([
         fetch(`/api/wechat-group/memories/profiles?${params.toString()}`).then(r => r.json()),
         membersRequest,
     ]).then(([profileData, memberData]) => {
+            if (requestId !== groupsProfilesState.requestId
+                    || roomId !== groupsProfilesState.roomFilter
+                    || query !== groupsProfilesState.query) return;
             if (profileData.status !== 'success') throw new Error(profileData.message || 'profile load failed');
             if (memberData.status !== 'success') throw new Error(memberData.message || 'member load failed');
             groupsProfilesState.profiles = profileData.profiles || [];
             groupsProfilesState.members = memberData.members || [];
             groupsProfilesState.total = Number(profileData.total || groupsProfilesState.profiles.length);
-            groupsProfilesState.loadedQuery = groupsProfilesState.query;
-            groupsProfilesState.loadedRoomFilter = groupsProfilesState.roomFilter;
-            groupsProfilesState.loadedMembersRoom = groupsProfilesState.roomFilter;
+            groupsProfilesState.loadedQuery = query;
+            groupsProfilesState.loadedRoomFilter = roomId;
+            groupsProfilesState.loadedMembersRoom = roomId;
             if (!groupsProfilesState.profiles.some(item => item.sender_id === groupsProfilesState.selectedSenderId)) {
                 groupsProfilesState.selectedSenderId = groupsProfilesState.profiles[0]?.sender_id || '';
             }
         })
         .catch(err => {
+            if (requestId !== groupsProfilesState.requestId || roomId !== groupsProfilesState.roomFilter) return;
             groupsProfilesState.profiles = [];
             groupsProfilesState.total = 0;
             groupsProfilesState.selectedSenderId = '';
             showGroupsStatus(err.message || 'groups_load_failed', true);
         })
         .finally(() => {
+            if (requestId !== groupsProfilesState.requestId || roomId !== groupsProfilesState.roomFilter) return;
             groupsProfilesState.loading = false;
             renderGroupsView();
         });
@@ -15190,9 +15405,11 @@ function saveGroupsProfileDetail() {
 
 async function loadGroupsProfileEvolutionData(force = false) {
     const roomId = String(groupsProfilesState.roomFilter || '').trim();
-    if (!roomId || (groupsProfilesState.evolutionLoading && !force)) return;
+    if (!roomId || groupsProfilesState.evolutionLoading) return;
+    if (!force && groupsProfilesState.evolutionLoadedRoom === roomId) return;
     const requestId = ++groupsProfilesState.evolutionRequestId;
     groupsProfilesState.evolutionLoading = true;
+    groupsProfilesState.evolutionAction = 'load';
     groupsProfilesState.evolutionError = '';
     renderGroupsView({ preserveScroll: true });
     const roomParams = new URLSearchParams({ stable_room_id: roomId });
@@ -15205,17 +15422,20 @@ async function loadGroupsProfileEvolutionData(force = false) {
         ]);
         if (requestId !== groupsProfilesState.evolutionRequestId || roomId !== groupsProfilesState.roomFilter) return;
         groupsProfilesState.evolutionConfig = configData.config || {};
+        if (!groupsProfilesState.evolutionDirty) groupsProfilesState.evolutionDraft = null;
         groupsProfilesState.evolutionStatus = statusData.evolution_status || {};
         groupsProfilesState.evolutionRuns = Array.isArray(runsData.runs) ? runsData.runs : [];
         groupsProfilesState.evolutionLoadedRoom = roomId;
     } catch (error) {
         if (requestId === groupsProfilesState.evolutionRequestId && roomId === groupsProfilesState.roomFilter) {
             groupsProfilesState.evolutionError = error.message;
+            groupsProfilesState.evolutionExpanded = true;
             groupsProfilesState.evolutionLoadedRoom = roomId;
         }
     } finally {
         if (requestId !== groupsProfilesState.evolutionRequestId) return;
         groupsProfilesState.evolutionLoading = false;
+        groupsProfilesState.evolutionAction = '';
         if (roomId !== groupsProfilesState.roomFilter) groupsProfilesState.evolutionLoadedRoom = '';
         renderGroupsView({ preserveScroll: true });
     }
@@ -15228,8 +15448,8 @@ function getGroupsProfileConfigNumber(id, fallback, min, max) {
 }
 
 async function saveGroupsProfileEvolutionConfig() {
-    const button = document.getElementById('groups-profile-evolution-save');
-    if (button) button.disabled = true;
+    const roomId = String(groupsProfilesState.roomFilter || '').trim();
+    if (!roomId || groupsProfilesState.evolutionLoading) return;
     groupsProfilesState.evolutionError = '';
     const payload = {
         wechat_group_profile_enabled: !!document.getElementById('groups-profile-config-enabled')?.checked,
@@ -15240,52 +15460,91 @@ async function saveGroupsProfileEvolutionConfig() {
         wechat_group_profile_evolution_max_interval_minutes: getGroupsProfileConfigNumber('max-interval', 120, 1, 10080),
         wechat_group_profile_evolution_batch_message_limit: getGroupsProfileConfigNumber('batch-limit', 200, 1, 1000),
     };
+    const requestId = ++groupsProfilesState.evolutionRequestId;
+    groupsProfilesState.evolutionLoading = true;
+    groupsProfilesState.evolutionAction = 'save';
+    groupsProfilesState.evolutionExpanded = true;
+    renderGroupsView({ preserveScroll: true });
     try {
         const data = await fetchGroupMemoryJson('/api/wechat-group/memories/profiles/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
         });
+        if (requestId !== groupsProfilesState.evolutionRequestId || roomId !== groupsProfilesState.roomFilter) return;
         groupsProfilesState.evolutionConfig = { ...(groupsProfilesState.evolutionConfig || {}), ...(data.config || payload) };
-        showGroupsStatus(currentLang === 'zh' ? '画像策略已保存' : 'Profile policy saved', false);
-        renderGroupsView({ preserveScroll: true });
+        groupsProfilesState.evolutionDraft = null;
+        groupsProfilesState.evolutionDirty = false;
+        showGroupsStatus(t('groups_profiles_evolution_saved'), false);
     } catch (error) {
-        groupsProfilesState.evolutionError = error.message;
-        renderGroupsView({ preserveScroll: true });
+        if (requestId === groupsProfilesState.evolutionRequestId && roomId === groupsProfilesState.roomFilter) {
+            groupsProfilesState.evolutionError = error.message;
+            groupsProfilesState.evolutionExpanded = true;
+        }
     } finally {
-        if (button?.isConnected) button.disabled = false;
+        if (requestId !== groupsProfilesState.evolutionRequestId) return;
+        groupsProfilesState.evolutionLoading = false;
+        groupsProfilesState.evolutionAction = '';
+        renderGroupsView({ preserveScroll: true });
     }
 }
 
 async function runGroupsProfileEvolution() {
     const roomId = String(groupsProfilesState.roomFilter || '').trim();
     if (!roomId || groupsProfilesState.evolutionLoading) return;
+    if (groupsProfilesState.evolutionDirty) {
+        showGroupsStatus(t('groups_profiles_evolution_dirty'), true);
+        return;
+    }
     const requestId = ++groupsProfilesState.evolutionRequestId;
     groupsProfilesState.evolutionLoading = true;
+    groupsProfilesState.evolutionAction = 'run';
+    groupsProfilesState.evolutionExpanded = true;
     groupsProfilesState.evolutionError = '';
     renderGroupsView({ preserveScroll: true });
+    let refreshEvolution = false;
+    let refreshProfiles = false;
     try {
-        await fetchGroupMemoryJson('/api/wechat-group/memories/profile-evolution/run', {
+        const data = await fetchGroupMemoryJson('/api/wechat-group/memories/profile-evolution/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ stable_room_id: roomId }),
         });
         if (requestId !== groupsProfilesState.evolutionRequestId || roomId !== groupsProfilesState.roomFilter) return;
+        const run = data.run || {};
+        const runStatus = String(run.status || '').toLowerCase();
+        if (!['success', 'skipped'].includes(runStatus)) {
+            throw new Error(run.failed_reason || getGroupsProfileEvolutionRunStatusLabel(runStatus));
+        }
         groupsProfilesState.evolutionDetail = null;
-        groupsProfilesState.evolutionLoadedRoom = '';
-        showGroupsStatus(currentLang === 'zh' ? '当前群画像学习已完成' : 'Profile learning completed', false);
+        refreshEvolution = true;
+        refreshProfiles = runStatus === 'success' && Number(run.profile_update_count || 0) > 0;
+        showGroupsStatus(t(runStatus === 'skipped'
+            ? 'groups_profiles_evolution_skipped'
+            : 'groups_profiles_evolution_completed'), false);
     } catch (error) {
         if (requestId === groupsProfilesState.evolutionRequestId && roomId === groupsProfilesState.roomFilter) {
             groupsProfilesState.evolutionError = error.message;
+            groupsProfilesState.evolutionExpanded = true;
         }
     } finally {
         if (requestId !== groupsProfilesState.evolutionRequestId) return;
         groupsProfilesState.evolutionLoading = false;
-        renderGroupsView({ preserveScroll: true });
-        if (roomId === groupsProfilesState.roomFilter && !groupsProfilesState.evolutionError) {
-            loadGroupsProfileEvolutionData(true);
+        groupsProfilesState.evolutionAction = '';
+        if (refreshEvolution && roomId === groupsProfilesState.roomFilter) {
+            await loadGroupsProfileEvolutionData(true);
+            if (refreshProfiles) refreshGroupsProfilesAfterEvolution(roomId);
+        } else {
+            renderGroupsView({ preserveScroll: true });
         }
     }
+}
+
+function refreshGroupsProfilesAfterEvolution(roomId) {
+    if (roomId !== groupsProfilesState.roomFilter) return;
+    groupsProfilesState.loadedQuery = null;
+    groupsProfilesState.loadedRoomFilter = null;
+    refreshGroupsProfilesData();
 }
 
 async function loadGroupsProfileEvolutionRun(runId) {
@@ -15293,18 +15552,25 @@ async function loadGroupsProfileEvolutionRun(runId) {
     if (!roomId || !runId || groupsProfilesState.evolutionLoading) return;
     const requestId = ++groupsProfilesState.evolutionRequestId;
     groupsProfilesState.evolutionLoading = true;
+    groupsProfilesState.evolutionAction = 'detail';
+    groupsProfilesState.evolutionExpanded = true;
     groupsProfilesState.evolutionError = '';
     renderGroupsView({ preserveScroll: true });
     const params = new URLSearchParams({ stable_room_id: roomId, run_id: String(runId) });
     try {
         const data = await fetchGroupMemoryJson(`/api/wechat-group/memories/profile-evolution/run?${params}`);
         if (requestId !== groupsProfilesState.evolutionRequestId || roomId !== groupsProfilesState.roomFilter) return;
+        if (!data.run) throw new Error(t('groups_profiles_evolution_run_not_found'));
         groupsProfilesState.evolutionDetail = { run: data.run || {}, diffs: data.diffs || [] };
     } catch (error) {
-        if (requestId === groupsProfilesState.evolutionRequestId) groupsProfilesState.evolutionError = error.message;
+        if (requestId === groupsProfilesState.evolutionRequestId && roomId === groupsProfilesState.roomFilter) {
+            groupsProfilesState.evolutionError = error.message;
+            groupsProfilesState.evolutionExpanded = true;
+        }
     } finally {
         if (requestId !== groupsProfilesState.evolutionRequestId) return;
         groupsProfilesState.evolutionLoading = false;
+        groupsProfilesState.evolutionAction = '';
         renderGroupsView({ preserveScroll: true });
     }
 }
@@ -15313,33 +15579,45 @@ function rollbackGroupsProfileEvolutionRun(runId) {
     const roomId = String(groupsProfilesState.roomFilter || '').trim();
     if (!roomId || !runId || groupsProfilesState.evolutionLoading) return;
     showConfirmDialog({
-        title: currentLang === 'zh' ? '回滚画像学习' : 'Rollback profile learning',
-        message: currentLang === 'zh' ? '将恢复这次学习前的群友画像，此操作不影响群记忆。' : 'This restores member profiles from before this run and does not change group memories.',
-        okText: currentLang === 'zh' ? '确认回滚' : 'Rollback',
+        title: t('groups_profiles_evolution_rollback_title'),
+        message: t('groups_profiles_evolution_rollback_message'),
+        okText: t('groups_profiles_evolution_rollback_confirm'),
         cancelText: t('cancel'),
         onConfirm: async () => {
+            if (roomId !== groupsProfilesState.roomFilter || groupsProfilesState.evolutionLoading) return;
             const requestId = ++groupsProfilesState.evolutionRequestId;
             groupsProfilesState.evolutionLoading = true;
+            groupsProfilesState.evolutionAction = 'rollback';
+            groupsProfilesState.evolutionExpanded = true;
             groupsProfilesState.evolutionError = '';
             renderGroupsView({ preserveScroll: true });
+            let refreshEvolution = false;
+            let refreshProfiles = false;
             try {
-                await fetchGroupMemoryJson('/api/wechat-group/memories/profile-evolution/rollback', {
+                const data = await fetchGroupMemoryJson('/api/wechat-group/memories/profile-evolution/rollback', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ stable_room_id: roomId, run_id: runId }),
                 });
                 if (requestId !== groupsProfilesState.evolutionRequestId || roomId !== groupsProfilesState.roomFilter) return;
                 groupsProfilesState.evolutionDetail = null;
-                groupsProfilesState.evolutionLoadedRoom = '';
-                showGroupsStatus(currentLang === 'zh' ? '群友画像已回滚' : 'Member profiles rolled back', false);
+                refreshEvolution = true;
+                refreshProfiles = Number(data.rollback?.rolled_back || 0) > 0;
+                showGroupsStatus(t('groups_profiles_evolution_rolled_back'), false);
             } catch (error) {
-                if (requestId === groupsProfilesState.evolutionRequestId) groupsProfilesState.evolutionError = error.message;
+                if (requestId === groupsProfilesState.evolutionRequestId && roomId === groupsProfilesState.roomFilter) {
+                    groupsProfilesState.evolutionError = error.message;
+                    groupsProfilesState.evolutionExpanded = true;
+                }
             } finally {
                 if (requestId !== groupsProfilesState.evolutionRequestId) return;
                 groupsProfilesState.evolutionLoading = false;
-                renderGroupsView({ preserveScroll: true });
-                if (roomId === groupsProfilesState.roomFilter && !groupsProfilesState.evolutionError) {
-                    loadGroupsProfileEvolutionData(true);
+                groupsProfilesState.evolutionAction = '';
+                if (refreshEvolution && roomId === groupsProfilesState.roomFilter) {
+                    await loadGroupsProfileEvolutionData(true);
+                    if (refreshProfiles) refreshGroupsProfilesAfterEvolution(roomId);
+                } else {
+                    renderGroupsView({ preserveScroll: true });
                 }
             }
         },
