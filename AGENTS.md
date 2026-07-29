@@ -275,8 +275,8 @@ docker push yideng966/lightagent:latest
 - 修改跨渠道逻辑时，评估 Web、IM 和 CLI 是否都会受影响；归档的 `desktop/` 不再作为兼容目标。
 - 修改 `config.py` 默认配置时，同步检查 `config-template.json`、Web 设置页、文档和相关测试。
 - 修改模型路由时，同步检查 `Bridge`、`models/bot_factory.py`、`common/const.py`、Web 模型管理接口和测试。
-- 通用文本推理必须通过共享 `TextModelRouter` 使用同一主备顺序与熔断状态；视觉、生图、Embedding、ASR、TTS 保持独立路由，新增标题、总结、判断、画像等无状态文本任务时使用统一 `complete()` 入口；同步无工具请求的空正文必须在当前候选链内故障转移，不得将 `reasoning_content` 当作最终正文，也不得通过备用 Provider 绕过安全拒绝或把空正文计入临时故障熔断。
-- Agent 流式 `content` 中的 `<think>...</think>` 必须跨 SSE 分片有状态解析；IM 渠道不得发送或持久化块内思考及残余标签，Web 仅按思考开关保留块内正文；标准 `reasoning_content` 必须继续与最终正文隔离。模型把内部分析直接写入无标签 `content` 时，微信群必须按当前请求的 `channel_type` 延迟正文事件并在完整净化后发送和持久化；只能过滤高置信度内部分析前言，不得截断正常多段答复。
+- 通用文本推理必须通过共享 `TextModelRouter` 使用同一主备顺序与熔断状态；视觉、生图、Embedding、ASR、TTS 保持独立路由，新增标题、总结、判断、画像等无状态文本任务时使用统一 `complete()` 入口；同步无工具请求的空正文必须在当前候选链内故障转移，不得将 `reasoning_content` 当作最终正文，也不得通过备用 Provider 绕过安全拒绝或把空正文计入临时故障熔断。每个候选必须从路由前的规范化请求快照独立构造请求，不得共享可被前一候选或 Provider 适配器修改的 `messages`、工具 schema 或请求选项。
+- Agent 流式 `content` 中的 `<think>...</think>` 必须跨 SSE 分片有状态解析并归一到独立思考流；IM 渠道不得发送或持久化块内思考及残余标签，Web 仅按思考开关展示思考流；标准 `reasoning_content` 必须继续与最终正文隔离。微信群必须按当前请求的 `channel_type` 延迟正文事件，工具调用轮次的中间正文不得发送或回放；不得再用自然语言正则猜测并截取无标签思考。微信群的主模型和备用模型使用同一请求源头约束，统一禁用思考并要求只输出最终答复。
 - 修改语音路由时，同步检查 `voice/factory.py`、`Bridge`、Web ASR/TTS 能力接口、控制台选择器和语音测试；`custom:<id>` 必须按显式能力复用对应自定义 Provider 的 Key/Base，不能隐式回退到当前聊天 Provider。
 - 确定性生图等需要跨容器重建保留的用户产物必须默认写入 `agent_workspace`；Docker 生图目录固定在 `/home/agent/lightagent/images`（宿主机 `./data/images`），不得回退到随镜像更新且不挂载的 `/app/images`。Web SSE 发送本地生图时必须同时产生可访问的 `image` 事件和结束请求的 `done` 事件。
 - 修改 Agent 工具时，同步检查工具注册、工具 schema、异常返回格式、文档和安全测试。

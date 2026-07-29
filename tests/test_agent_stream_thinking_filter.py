@@ -122,8 +122,11 @@ class TestAgentStreamThinkingFilter(unittest.TestCase):
             {"content": "</think>最终答复"},
         ], channel_type="web")
 
-        self.assertEqual("分析过程最终答复", content)
-        self.assertEqual("分析过程最终答复", self._event_text(events, "message_update"))
+        self.assertEqual("最终答复", content)
+        self.assertEqual("最终答复", self._event_text(events, "message_update"))
+        self.assertEqual("分析过程", self._event_text(events, "reasoning_update"))
+        self.assertEqual("thinking", messages[-1]["content"][0]["type"])
+        self.assertEqual("分析过程", messages[-1]["content"][0]["thinking"])
         self.assertNotIn("<think>", str(messages))
         self.assertNotIn("</think>", str(messages))
 
@@ -161,23 +164,6 @@ class TestAgentStreamThinkingFilter(unittest.TestCase):
         self.assertEqual("text", messages[-1]["content"][1]["type"])
         self.assertEqual("最终答复", messages[-1]["content"][1]["text"])
 
-    def test_wechat_group_strips_untagged_reasoning_preamble_before_events_and_history(self):
-        leaked_reasoning = (
-            "用户@我说话了，先看看上下文。一灯发了个图让我找番号，但群内敏感内容识别容易触发热词拦截。\n\n"
-            "我应该用自然接话的方式回应“镜像拉了好久了还不行”，不用太严肃。\n\n"
-            "镜像拉这么久还不行啊，是网络慢还是源有问题啊？[捂脸]"
-        )
-        content, _, events, messages = self._run([
-            {"content": leaked_reasoning[:42]},
-            {"content": leaked_reasoning[42:96]},
-            {"content": leaked_reasoning[96:]},
-        ], context_channel_type="wechat_group")
-
-        self.assertEqual("镜像拉这么久还不行啊，是网络慢还是源有问题啊？[捂脸]", content)
-        self.assertEqual(content, self._event_text(events, "message_update"))
-        self.assertNotIn("先看看上下文", str(messages))
-        self.assertNotIn("我应该用自然接话", str(messages))
-
     def test_wechat_group_context_overrides_stale_web_model_channel(self):
         private_reasoning = "CONTEXT_SCOPED_PRIVATE_REASONING"
         content, _, events, messages = self._run([
@@ -190,27 +176,11 @@ class TestAgentStreamThinkingFilter(unittest.TestCase):
         self.assertEqual("最终答复", self._event_text(events, "message_update"))
         self.assertNotIn(private_reasoning, str(messages))
 
-    def test_wechat_group_strips_single_newline_untagged_reasoning(self):
-        leaked_reasoning = (
-            "用户@小灯说话了，先看看上下文。\n"
-            "我看看聊天记录，再决定怎么接话。\n"
-            "不过需要保持简短自然。\n"
-            "最终答复第一行。\n最终答复第二行。"
-        )
-        content, _, events, messages = self._run([
-            {"content": leaked_reasoning},
-        ], context_channel_type="wechat_group")
-
-        self.assertEqual("最终答复第一行。\n最终答复第二行。", content)
-        self.assertEqual(content, self._event_text(events, "message_update"))
-        self.assertNotIn("先看看上下文", str(messages))
-        self.assertNotIn("我看看聊天记录", str(messages))
-
     def test_wechat_group_preserves_normal_multi_paragraph_reply(self):
         normal_reply = (
-            "用户可以先检查镜像源和网络连接。\n\n"
-            "我建议再运行 docker stats 看看资源占用。\n\n"
-            "如果下载进度仍然不动，再检查代理配置。"
+            "用户请求中的“上下文”是发送给模型的系统提示和历史消息。\n\n"
+            "我需要先区分请求上下文与持久化会话。\n\n"
+            "请求上下文在每次调用时组装，会话历史按 session_id 保存。"
         )
         content, _, events, messages = self._run([
             {"content": normal_reply},
@@ -219,6 +189,27 @@ class TestAgentStreamThinkingFilter(unittest.TestCase):
         self.assertEqual(normal_reply, content)
         self.assertEqual(normal_reply, self._event_text(events, "message_update"))
         self.assertEqual(normal_reply, messages[-1]["content"][-1]["text"])
+
+    def test_wechat_group_tool_turn_drops_intermediate_content_from_events_and_history(self):
+        content, tool_calls, events, messages = self._run([
+            {"content": "我先看看项目文件。"},
+            {
+                "tool_calls": [{
+                    "index": 0,
+                    "id": "call_read",
+                    "function": {
+                        "name": "read",
+                        "arguments": '{"path":"README.md"}',
+                    },
+                }],
+            },
+        ], context_channel_type="wechat_group")
+
+        self.assertEqual("", content)
+        self.assertEqual("", self._event_text(events, "message_update"))
+        self.assertEqual("read", tool_calls[0]["name"])
+        self.assertNotIn("我先看看项目文件", str(messages))
+        self.assertEqual(["tool_use"], [block["type"] for block in messages[-1]["content"]])
 
 
 if __name__ == "__main__":

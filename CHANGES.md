@@ -2,6 +2,29 @@
 
 ## 2026-07-29
 
+### 重构微信群思考隔离与备用模型请求边界
+
+- 删除 `v2.1.20` 引入的无标签自然语言正则，不再根据“用户要求我”“我应该”等句式猜测并截断模型正文；显式 `<think>...</think>` 改由单一有状态解析器跨 SSE 分片归一，Web 思考流与最终正文分离，IM 继续丢弃思考块和标签。
+- 文本路由在进入候选循环前保存规范化请求快照，每个主模型或备用模型都获得独立深拷贝；前一候选或 Provider 适配器即使原地修改消息、工具 schema 或请求选项，也不会污染后续候选和调用方原请求。
+- 微信群的主模型与所有已配置备用模型统一禁用思考并追加只输出最终答复的系统约束，不新增“微信群兼容”配置字段，也不改变备用顺序；只有候选尚未输出任何分片时才允许故障转移。
+- 微信群正文继续缓冲到当前模型轮次完成后发送；存在工具调用时丢弃该轮中间自然语言正文，不发送、不写入下一轮 Agent 历史，避免过程说明在工具后续轮次被回放为最终答复。
+
+关键文件：
+
+- `agent/protocol/agent_stream.py`
+- `bridge/agent_bridge.py`
+- `tests/test_agent_stream_thinking_filter.py`
+- `tests/test_agent_model_fallback.py`
+- `plans/20260729_重构思考隔离与故障转移请求.md`
+- `AGENTS.md`
+
+验证记录：
+
+- Agent 流式、事件、故障转移、文本路由、微信群持久化与 Web 模型配置关联回归 135 项通过。
+- `python -X utf8 -m unittest discover -s tests`：共运行 1228 项，结果 OK，1 项按条件跳过。
+- Python 语法检查、`node --check channel/web/static/js/console.js` 与 `git diff --check` 通过。
+- 未修改、部署或重启远端 Docker；真实微信群行为需在后续发布部署后验收。
+
 ### 修复 Docker 多架构清单发布清理竞态并发布 2.1.21
 
 - 修复基础版与完整技能版并行创建 GHCR 多架构清单时，基础版任务提前清理未标记 canonical digest，导致完整技能版 OCI 子 manifest 被删除并发布失败的问题。

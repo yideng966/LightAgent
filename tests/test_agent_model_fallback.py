@@ -25,6 +25,19 @@ class FakeBot:
         return self.sync_response
 
 
+class MutatingBot(FakeBot):
+    def call_with_tools(self, **kwargs):
+        self.calls.append(kwargs)
+        kwargs["messages"][0]["content"] = "mutated-by-primary"
+        if kwargs.get("tools"):
+            kwargs["tools"][0]["name"] = "mutated-tool"
+        if kwargs.get("request_options"):
+            kwargs["request_options"]["mode"] = "mutated-option"
+        if kwargs.get("stream"):
+            return iter(self.stream_chunks)
+        return self.sync_response
+
+
 class MutableClock:
     def __init__(self, value=0):
         self.value = value
@@ -78,6 +91,209 @@ class TestAgentModelFallback(unittest.TestCase):
         self.assertEqual("backup ok", chunks[0]["choices"][0]["delta"]["content"])
         self.assertEqual("primary-model", primary.calls[0]["model"])
         self.assertEqual("backup-model", backup.calls[0]["model"])
+
+    def test_stream_fallback_uses_an_immutable_request_snapshot(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        primary = MutatingBot(stream_chunks=[{
+            "error": True,
+            "message": "Rate limit exceeded",
+            "status_code": 429,
+        }])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{"delta": {"content": "backup ok"}, "finish_reason": "stop"}],
+        }])
+        request = self._request()
+        request.tools = [{"name": "read", "input_schema": {}}]
+        request.request_options = {"mode": "original-option"}
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+                chunks = list(AgentLLMModel(bridge=None).call_stream(request))
+
+        self.assertEqual("backup ok", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertEqual("hello", backup.calls[0]["messages"][0]["content"])
+        self.assertEqual("read", backup.calls[0]["tools"][0]["name"])
+        self.assertEqual("original-option", backup.calls[0]["request_options"]["mode"])
+        self.assertEqual("hello", request.messages[0]["content"])
+        self.assertEqual("read", request.tools[0]["name"])
+        self.assertEqual("original-option", request.request_options["mode"])
+
+    def test_sync_fallback_uses_an_immutable_request_snapshot(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        primary = MutatingBot(sync_response={
+            "error": True,
+            "message": "Rate limit exceeded",
+            "status_code": 429,
+        })
+        backup_response = {
+            "choices": [{"message": {"content": "backup ok"}, "finish_reason": "stop"}],
+        }
+        backup = FakeBot(sync_response=backup_response)
+        request = self._request()
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+                response = AgentLLMModel(bridge=None).call(request)
+
+        self.assertEqual(backup_response, response)
+        self.assertEqual("hello", backup.calls[0]["messages"][0]["content"])
+        self.assertEqual("hello", request.messages[0]["content"])
+
+    def test_wechat_group_uses_configured_fallback_and_disables_thinking(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": True,
+            "reasoning_effort": "high",
+        })
+        primary = FakeBot(stream_chunks=[{
+            "error": True,
+            "message": "Rate limit exceeded",
+            "status_code": 429,
+        }])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{"delta": {"content": "backup ok"}, "finish_reason": "stop"}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]) as create_bot:
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertEqual("backup ok", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertEqual(2, create_bot.call_count)
+        self.assertEqual("backup-model", backup.calls[0]["model"])
+        self.assertEqual({"type": "disabled"}, backup.calls[0]["thinking"])
+        self.assertNotIn("reasoning_effort", backup.calls[0])
+        self.assertIn("只输出面向用户的最终答复", backup.calls[0]["system"])
+
+    def test_open_primary_circuit_starts_with_wechat_group_fallback(self):
+        from bridge.agent_bridge import AgentLLMModel, _ModelFailoverState
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [{
+                "bot_type": "deepseek",
+                "model": "backup-model",
+            }],
+            "model_failover_failure_threshold": 1,
+            "model_failover_cooldown_seconds": 300,
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": True,
+        })
+        failover_state = _ModelFailoverState(clock=MutableClock())
+        failover_state.record_transient_failure(
+            ("openai", "primary-model"), threshold=1, cooldown_seconds=300
+        )
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{"delta": {"content": "backup ok"}, "finish_reason": "stop"}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", return_value=backup) as create_bot:
+                model = AgentLLMModel(bridge=None, failover_state=failover_state)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertEqual("backup ok", chunks[0]["choices"][0]["delta"]["content"])
+        create_bot.assert_called_once_with("deepseek")
+        self.assertEqual("hello", backup.calls[0]["messages"][0]["content"])
+        self.assertEqual({"type": "disabled"}, backup.calls[0]["thinking"])
+
+    def test_non_wechat_channel_keeps_all_fallback_candidates(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": True,
+            "reasoning_effort": "high",
+        })
+        primary = FakeBot(stream_chunks=[{
+            "error": True,
+            "message": "Rate limit exceeded",
+            "status_code": 429,
+        }])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{"delta": {"content": "backup ok"}, "finish_reason": "stop"}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "web"
+                list(model.call_stream(self._request()))
+
+        self.assertEqual("backup-model", backup.calls[0]["model"])
+        self.assertEqual({"type": "enabled"}, backup.calls[0]["thinking"])
+        self.assertEqual("high", backup.calls[0]["reasoning_effort"])
+
+    def test_stream_does_not_switch_candidates_after_visible_output(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        primary = FakeBot(stream_chunks=[
+            {"choices": [{"delta": {"content": "partial"}, "finish_reason": None}]},
+            {"error": True, "message": "Rate limit exceeded", "status_code": 429},
+        ])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{"delta": {"content": "must not run"}, "finish_reason": "stop"}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]) as create_bot:
+                chunks = list(AgentLLMModel(bridge=None).call_stream(self._request()))
+
+        self.assertEqual("partial", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertTrue(chunks[1]["error"])
+        self.assertEqual(1, create_bot.call_count)
+        self.assertEqual([], backup.calls)
 
     def test_call_stream_does_not_fallback_for_non_transient_error(self):
         from bridge.agent_bridge import AgentLLMModel

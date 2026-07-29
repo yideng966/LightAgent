@@ -36,63 +36,15 @@ MAX_STORED_REASONING_CHARS = 4 * 1024  # 4 KB
 # Marker inserted between head and tail when reasoning is truncated.
 _REASONING_TRUNCATE_MARKER = "\n\n... [reasoning truncated, {omitted} chars omitted] ...\n\n"
 
-_UNTAGGED_REASONING_START_RE = re.compile(
-    r"^(?:"
-    r"用户(?:@[^，,\n]{1,80}|[说发问](?:了|道)?|(?:消息|请求|问题))"
-    r"[\s\S]{0,500}(?:先看看|焦点事件|上下文|聊天记录|这条请求|明确了)"
-    r"|(?:the\s+user|user(?:@|\s*:))[\s\S]{0,500}"
-    r"(?:context|conversation|request|focus)"
-    r")",
-    re.IGNORECASE,
-)
-_UNTAGGED_REASONING_DECISION_RE = re.compile(
-    r"^(?:"
-    r"我(?:应该|需要|得|要先|先|看看|注意到|打算|准备|会先|就)"
-    r"|不过|等等|那我(?:就)?|这(?:明显|看起来)|考虑到|从(?:上下文|聊天记录)"
-    r"|i\s+(?:should|need|will|am\s+going\s+to)|however|wait|so\s+i"
-    r")",
-    re.IGNORECASE,
-)
-
-
-def _strip_untagged_reasoning_preamble(text: str) -> str:
-    """移除高置信度的无标签内部分析前言，保留后续最终答复。"""
-
-    value = str(text or "").strip()
-    if not value:
-        return ""
-    lines = [
-        (match.start(), match.group(0).strip())
-        for match in re.finditer(r"[^\r\n]+", value)
-        if match.group(0).strip()
-    ]
-    if len(lines) < 2 or not _UNTAGGED_REASONING_START_RE.match(lines[0][1]):
-        return value
-
-    index = 1
-    while (
-        index < len(lines)
-        and _UNTAGGED_REASONING_DECISION_RE.match(lines[index][1])
-    ):
-        index += 1
-
-    # 至少需要一个明确的自我决策块，避免误删普通的用户说明或引用。
-    if index == 1:
-        return value
-    if index >= len(lines):
-        return ""
-    return value[lines[index][0]:].strip()
-
-
-class _ThinkTagStreamFilter:
-    """跨流式分片解析内嵌的 ``<think>...</think>`` 块。"""
+class _StructuredContentStream:
+    """将显式 ``<think>`` 块归一为独立思考流。"""
 
     _OPEN_TAG = "<think>"
     _CLOSE_TAG = "</think>"
     _TAGS = (_OPEN_TAG, _CLOSE_TAG)
 
-    def __init__(self, keep_thinking: bool):
-        self.keep_thinking = keep_thinking
+    def __init__(self, preserve_thinking: bool):
+        self.preserve_thinking = preserve_thinking
         self.inside_thinking = False
         self.pending = ""
 
@@ -105,13 +57,23 @@ class _ThinkTagStreamFilter:
                 return length
         return 0
 
-    def feed(self, text: str) -> str:
+    def _append(self, visible: list, reasoning: list, text: str) -> None:
         if not text:
-            return ""
+            return
+        if self.inside_thinking:
+            if self.preserve_thinking:
+                reasoning.append(text)
+        else:
+            visible.append(text)
+
+    def feed(self, text: str) -> Tuple[str, str]:
+        if not text:
+            return "", ""
 
         data = self.pending + text
         self.pending = ""
         visible = []
+        reasoning = []
 
         while data:
             matches = []
@@ -123,25 +85,24 @@ class _ThinkTagStreamFilter:
             if not matches:
                 pending_length = self._pending_tag_prefix_length(data)
                 body = data[:-pending_length] if pending_length else data
-                if self.keep_thinking or not self.inside_thinking:
-                    visible.append(body)
+                self._append(visible, reasoning, body)
                 self.pending = data[-pending_length:] if pending_length else ""
                 break
 
             index, tag = min(matches, key=lambda item: item[0])
-            if self.keep_thinking or not self.inside_thinking:
-                visible.append(data[:index])
+            self._append(visible, reasoning, data[:index])
             self.inside_thinking = tag == self._OPEN_TAG
             data = data[index + len(tag):]
 
-        return "".join(visible)
+        return "".join(visible), "".join(reasoning)
 
-    def finish(self) -> str:
+    def finish(self) -> Tuple[str, str]:
         pending = self.pending
         self.pending = ""
-        if self.keep_thinking or not self.inside_thinking:
-            return pending
-        return ""
+        visible = []
+        reasoning = []
+        self._append(visible, reasoning, pending)
+        return "".join(visible), "".join(reasoning)
 
 
 def _truncate_reasoning_for_storage(text: str) -> str:
@@ -624,14 +585,8 @@ class AgentStreamExecutor:
                 return str(channel_type)
         return str(getattr(self.model, "channel_type", "") or "")
 
-    def _should_render_thinking_inline(self) -> bool:
-        """Whether ``<think>...</think>`` blocks embedded directly in ``content``
-        (MiniMax, some third-party proxies) should be surfaced to the channel.
-
-        Only the Web console can render them in a collapsible panel. IM channels
-        (WeChat/WeCom/DingTalk/Feishu) must strip them, otherwise users see raw
-        XML tags in their chat.
-        """
+    def _should_preserve_inline_thinking(self) -> bool:
+        """Web 开启思考时将显式思考块保留到独立 reasoning 流。"""
         from config import conf
         return (
             conf().get("enable_thinking", False)
@@ -640,27 +595,6 @@ class AgentStreamExecutor:
 
     def _should_defer_message_updates(self) -> bool:
         return self._current_channel_type() == "wechat_group"
-
-    def _filter_think_tags(self, text: str) -> str:
-        """
-        Handle <think>...</think> blocks in content returned by some LLM providers
-        (e.g., MiniMax).
-
-        - When inline thinking rendering is allowed (Web + thinking enabled):
-          remove only the tags, keep the content inside.
-        - Otherwise (IM channels, or thinking disabled globally): remove both
-          the tags and the content entirely.
-        """
-        if not text:
-            return text
-        stream_filter = _ThinkTagStreamFilter(self._should_render_thinking_inline())
-        return stream_filter.feed(text) + stream_filter.finish()
-
-    def _sanitize_response_content(self, text: str) -> str:
-        value = self._filter_think_tags(text)
-        if self._current_channel_type() == "wechat_group":
-            value = _strip_untagged_reasoning_preamble(value)
-        return value
 
     def _hash_args(self, args: dict) -> str:
         """Generate a simple hash for tool arguments"""
@@ -1238,10 +1172,11 @@ class AgentStreamExecutor:
 
         # Streaming response
         full_content = ""
-        raw_content = ""
         full_reasoning = ""
         defer_message_updates = self._should_defer_message_updates()
-        think_tag_filter = _ThinkTagStreamFilter(self._should_render_thinking_inline())
+        content_stream = _StructuredContentStream(
+            self._should_preserve_inline_thinking()
+        )
         tool_calls_buffer = {}  # {index: {id, name, arguments}}
         gemini_raw_parts = None  # Preserve Gemini thoughtSignature for round-trip
         stop_reason = None  # Track why the stream stopped
@@ -1262,22 +1197,28 @@ class AgentStreamExecutor:
                         # Persist partial text only; tool_use args may be
                         # truncated mid-stream and would fail validation.
                         logger.info("[Agent] cancel detected mid-stream, aborting LLM call")
-                        filtered_tail = think_tag_filter.finish()
-                        if filtered_tail:
-                            full_content += filtered_tail
+                        visible_tail, reasoning_tail = content_stream.finish()
+                        if visible_tail:
+                            full_content += visible_tail
                             if not defer_message_updates:
-                                self._emit_event("message_update", {"delta": filtered_tail})
-                        full_content = self._sanitize_response_content(raw_content)
-                        if defer_message_updates and full_content:
-                            self._emit_event("message_update", {"delta": full_content})
-                        if full_content:
+                                self._emit_event("message_update", {"delta": visible_tail})
+                        if reasoning_tail:
+                            full_reasoning += reasoning_tail
+                            self._emit_event("reasoning_update", {"delta": reasoning_tail})
+                        partial_content = (
+                            "" if defer_message_updates and tool_calls_buffer
+                            else full_content
+                        )
+                        if defer_message_updates and partial_content:
+                            self._emit_event("message_update", {"delta": partial_content})
+                        if partial_content:
                             partial_msg = {
                                 "role": "assistant",
-                                "content": [{"type": "text", "text": full_content}],
+                                "content": [{"type": "text", "text": partial_content}],
                             }
                             self.messages.append(partial_msg)
                         self._emit_event("message_end", {
-                            "content": full_content,
+                            "content": partial_content,
                             "tool_calls": [],
                             "cancelled": True,
                         })
@@ -1347,11 +1288,18 @@ class AgentStreamExecutor:
                     # Handle text content
                     content_delta = delta.get("content") or ""
                     if content_delta:
-                        raw_content += content_delta
-                        filtered_delta = think_tag_filter.feed(content_delta)
-                        full_content += filtered_delta
-                        if filtered_delta and not defer_message_updates:
-                            self._emit_event("message_update", {"delta": filtered_delta})
+                        visible_delta, inline_reasoning_delta = content_stream.feed(
+                            content_delta
+                        )
+                        if visible_delta:
+                            full_content += visible_delta
+                            if not defer_message_updates:
+                                self._emit_event("message_update", {"delta": visible_delta})
+                        if inline_reasoning_delta:
+                            full_reasoning += inline_reasoning_delta
+                            self._emit_event(
+                                "reasoning_update", {"delta": inline_reasoning_delta}
+                            )
 
                     # Handle tool calls
                     if "tool_calls" in delta and delta["tool_calls"]:
@@ -1510,19 +1458,14 @@ class AgentStreamExecutor:
                     logger.error(f"❌ LLM call error (non-retryable): {e}", exc_info=True)
                 raise
 
-        filtered_tail = think_tag_filter.finish()
-        if filtered_tail:
-            full_content += filtered_tail
+        visible_tail, reasoning_tail = content_stream.finish()
+        if visible_tail:
+            full_content += visible_tail
             if not defer_message_updates:
-                self._emit_event("message_update", {"delta": filtered_tail})
-
-        # 使用完整原始正文再次净化，避免发送或持久化分片解析残留。
-        sanitized_content = self._sanitize_response_content(raw_content)
-        if sanitized_content != full_content:
-            logger.info("[Agent] hidden internal reasoning removed from IM response")
-        full_content = sanitized_content
-        if defer_message_updates and full_content:
-            self._emit_event("message_update", {"delta": full_content})
+                self._emit_event("message_update", {"delta": visible_tail})
+        if reasoning_tail:
+            full_reasoning += reasoning_tail
+            self._emit_event("reasoning_update", {"delta": reasoning_tail})
 
         # Parse tool calls
         tool_calls = []
@@ -1554,6 +1497,15 @@ class AgentStreamExecutor:
                 "name": tc["name"],
                 "arguments": arguments
             })
+
+        if defer_message_updates and tool_calls:
+            if full_content.strip():
+                logger.info(
+                    "[Agent] dropped WeChat group intermediate content before tool call"
+                )
+            full_content = ""
+        elif defer_message_updates and full_content:
+            self._emit_event("message_update", {"delta": full_content})
 
         # Check for empty response and retry once if enabled
         if retry_on_empty and not full_content and not tool_calls:

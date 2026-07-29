@@ -24,6 +24,11 @@ from config import conf, load_config
 from models.openai_compatible_bot import OpenAICompatibleBot
 
 
+_WECHAT_GROUP_FINAL_ONLY_PROMPT = """
+这是即时通讯群聊请求。不要输出、解释或复述内部分析、思考步骤或回答计划，只输出面向用户的最终答复。需要调用工具时直接调用工具，不要先输出过程说明。
+""".strip()
+
+
 def add_openai_compatible_support(bot_instance):
     """
     Dynamically add OpenAI-compatible tool calling support to a bot instance.
@@ -555,11 +560,16 @@ class TextModelRouter(LLMModel):
         if request_options:
             kwargs['request_options'] = dict(request_options)
 
+        channel_type = getattr(self, 'channel_type', None) or ''
         system_prompt = getattr(request, 'system', None)
+        if channel_type == const.WECHAT_GROUP:
+            system_prompt = "{}\n\n{}".format(
+                str(system_prompt or "").strip(),
+                _WECHAT_GROUP_FINAL_ONLY_PROMPT,
+            ).strip()
         if system_prompt:
             kwargs['system'] = system_prompt
 
-        channel_type = getattr(self, 'channel_type', None) or ''
         if channel_type:
             kwargs['channel_type'] = channel_type
         session_id = getattr(self, 'session_id', None)
@@ -567,11 +577,9 @@ class TextModelRouter(LLMModel):
             kwargs['session_id'] = session_id
 
         request_disables_thinking = request_options.get("reasoning_effort") == "none"
-        thinking_enabled = (
-            False
-            if request_disables_thinking
-            else bool(conf().get("enable_thinking", False))
-        )
+        thinking_enabled = bool(conf().get("enable_thinking", False))
+        if request_disables_thinking or channel_type == const.WECHAT_GROUP:
+            thinking_enabled = False
         kwargs['thinking'] = (
             {"type": "enabled"} if thinking_enabled
             else {"type": "disabled"}
@@ -588,6 +596,16 @@ class TextModelRouter(LLMModel):
             bot_type = type(bot).__name__
             raise NotImplementedError(f"Bot {bot_type} does not support call_with_tools. Please add the method.")
         return bot.call_with_tools(**self._build_call_kwargs(request, candidate, stream))
+
+    @staticmethod
+    def _request_snapshot(request: LLMRequest) -> LLMRequest:
+        """为一次路由保留不受候选适配器修改的规范化请求。"""
+        return copy.deepcopy(request)
+
+    @classmethod
+    def _candidate_request(cls, request_snapshot: LLMRequest) -> LLMRequest:
+        """每个候选都从同一快照获得独立请求对象。"""
+        return copy.deepcopy(request_snapshot)
 
     def _is_transient_model_error_text(self, text) -> bool:
         error_text = str(text or "").lower()
@@ -766,6 +784,7 @@ class TextModelRouter(LLMModel):
         Call the model using LightAgent's bot infrastructure
         """
         try:
+            request_snapshot = self._request_snapshot(request)
             candidates = (
                 self._build_override_candidates(provider, model)
                 or self._build_model_candidates()
@@ -773,13 +792,14 @@ class TextModelRouter(LLMModel):
             last_response = None
             for index, candidate in enumerate(candidates):
                 try:
-                    response = self._call_candidate(request, candidate, stream=False)
+                    candidate_request = self._candidate_request(request_snapshot)
+                    response = self._call_candidate(candidate_request, candidate, stream=False)
                     response = self._format_response(response)
                     is_transient = self._is_transient_model_error_payload(response)
                     unusable_reason = (
                         ""
                         if is_transient
-                        else self._unusable_sync_text_reason(request, response)
+                        else self._unusable_sync_text_reason(request_snapshot, response)
                     )
                     if is_transient:
                         self._record_primary_transient_failure(candidate, candidates)
@@ -839,6 +859,7 @@ class TextModelRouter(LLMModel):
         Call the model with streaming using LightAgent's bot infrastructure
         """
         try:
+            request_snapshot = self._request_snapshot(request)
             candidates = self._build_model_candidates()
             last_error_chunk = None
             for index, candidate in enumerate(candidates):
@@ -846,7 +867,8 @@ class TextModelRouter(LLMModel):
                 retry_next = False
                 primary_health_recorded = False
                 try:
-                    stream = self._call_candidate(request, candidate, stream=True)
+                    candidate_request = self._candidate_request(request_snapshot)
+                    stream = self._call_candidate(candidate_request, candidate, stream=True)
                     for chunk in stream:
                         is_error = isinstance(chunk, dict) and bool(chunk.get("error"))
                         is_transient = is_error and self._is_transient_model_error_payload(chunk)
