@@ -36,6 +36,53 @@ MAX_STORED_REASONING_CHARS = 4 * 1024  # 4 KB
 # Marker inserted between head and tail when reasoning is truncated.
 _REASONING_TRUNCATE_MARKER = "\n\n... [reasoning truncated, {omitted} chars omitted] ...\n\n"
 
+_UNTAGGED_REASONING_START_RE = re.compile(
+    r"^(?:"
+    r"用户(?:@[^，,\n]{1,80}|[说发问](?:了|道)?|(?:消息|请求|问题))"
+    r"[\s\S]{0,500}(?:先看看|焦点事件|上下文|聊天记录|这条请求|明确了)"
+    r"|(?:the\s+user|user(?:@|\s*:))[\s\S]{0,500}"
+    r"(?:context|conversation|request|focus)"
+    r")",
+    re.IGNORECASE,
+)
+_UNTAGGED_REASONING_DECISION_RE = re.compile(
+    r"^(?:"
+    r"我(?:应该|需要|得|要先|先|看看|注意到|打算|准备|会先|就)"
+    r"|不过|等等|那我(?:就)?|这(?:明显|看起来)|考虑到|从(?:上下文|聊天记录)"
+    r"|i\s+(?:should|need|will|am\s+going\s+to)|however|wait|so\s+i"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _strip_untagged_reasoning_preamble(text: str) -> str:
+    """移除高置信度的无标签内部分析前言，保留后续最终答复。"""
+
+    value = str(text or "").strip()
+    if not value:
+        return ""
+    lines = [
+        (match.start(), match.group(0).strip())
+        for match in re.finditer(r"[^\r\n]+", value)
+        if match.group(0).strip()
+    ]
+    if len(lines) < 2 or not _UNTAGGED_REASONING_START_RE.match(lines[0][1]):
+        return value
+
+    index = 1
+    while (
+        index < len(lines)
+        and _UNTAGGED_REASONING_DECISION_RE.match(lines[index][1])
+    ):
+        index += 1
+
+    # 至少需要一个明确的自我决策块，避免误删普通的用户说明或引用。
+    if index == 1:
+        return value
+    if index >= len(lines):
+        return ""
+    return value[lines[index][0]:].strip()
+
 
 class _ThinkTagStreamFilter:
     """跨流式分片解析内嵌的 ``<think>...</think>`` 块。"""
@@ -564,6 +611,19 @@ class AgentStreamExecutor:
         from config import conf
         return bool(conf().get("enable_thinking", False))
 
+    def _current_channel_type(self) -> str:
+        context = self.context
+        if context is not None:
+            try:
+                channel_type = context.get("channel_type", "") or ""
+            except Exception:
+                channel_type = ""
+            if not channel_type and hasattr(context, "kwargs"):
+                channel_type = context.kwargs.get("channel_type", "") or ""
+            if channel_type:
+                return str(channel_type)
+        return str(getattr(self.model, "channel_type", "") or "")
+
     def _should_render_thinking_inline(self) -> bool:
         """Whether ``<think>...</think>`` blocks embedded directly in ``content``
         (MiniMax, some third-party proxies) should be surfaced to the channel.
@@ -573,8 +633,13 @@ class AgentStreamExecutor:
         XML tags in their chat.
         """
         from config import conf
-        channel_type = getattr(self.model, 'channel_type', '') or ''
-        return conf().get("enable_thinking", False) and channel_type == 'web'
+        return (
+            conf().get("enable_thinking", False)
+            and self._current_channel_type() == "web"
+        )
+
+    def _should_defer_message_updates(self) -> bool:
+        return self._current_channel_type() == "wechat_group"
 
     def _filter_think_tags(self, text: str) -> str:
         """
@@ -590,6 +655,12 @@ class AgentStreamExecutor:
             return text
         stream_filter = _ThinkTagStreamFilter(self._should_render_thinking_inline())
         return stream_filter.feed(text) + stream_filter.finish()
+
+    def _sanitize_response_content(self, text: str) -> str:
+        value = self._filter_think_tags(text)
+        if self._current_channel_type() == "wechat_group":
+            value = _strip_untagged_reasoning_preamble(value)
+        return value
 
     def _hash_args(self, args: dict) -> str:
         """Generate a simple hash for tool arguments"""
@@ -1169,6 +1240,7 @@ class AgentStreamExecutor:
         full_content = ""
         raw_content = ""
         full_reasoning = ""
+        defer_message_updates = self._should_defer_message_updates()
         think_tag_filter = _ThinkTagStreamFilter(self._should_render_thinking_inline())
         tool_calls_buffer = {}  # {index: {id, name, arguments}}
         gemini_raw_parts = None  # Preserve Gemini thoughtSignature for round-trip
@@ -1193,8 +1265,11 @@ class AgentStreamExecutor:
                         filtered_tail = think_tag_filter.finish()
                         if filtered_tail:
                             full_content += filtered_tail
-                            self._emit_event("message_update", {"delta": filtered_tail})
-                        full_content = self._filter_think_tags(raw_content)
+                            if not defer_message_updates:
+                                self._emit_event("message_update", {"delta": filtered_tail})
+                        full_content = self._sanitize_response_content(raw_content)
+                        if defer_message_updates and full_content:
+                            self._emit_event("message_update", {"delta": full_content})
                         if full_content:
                             partial_msg = {
                                 "role": "assistant",
@@ -1275,7 +1350,7 @@ class AgentStreamExecutor:
                         raw_content += content_delta
                         filtered_delta = think_tag_filter.feed(content_delta)
                         full_content += filtered_delta
-                        if filtered_delta:  # Only emit if there's content after filtering
+                        if filtered_delta and not defer_message_updates:
                             self._emit_event("message_update", {"delta": filtered_delta})
 
                     # Handle tool calls
@@ -1438,16 +1513,16 @@ class AgentStreamExecutor:
         filtered_tail = think_tag_filter.finish()
         if filtered_tail:
             full_content += filtered_tail
-            self._emit_event("message_update", {"delta": filtered_tail})
+            if not defer_message_updates:
+                self._emit_event("message_update", {"delta": filtered_tail})
 
         # 使用完整原始正文再次净化，避免发送或持久化分片解析残留。
-        sanitized_content = self._filter_think_tags(raw_content)
+        sanitized_content = self._sanitize_response_content(raw_content)
         if sanitized_content != full_content:
-            logger.warning(
-                "[Agent] inline think stream filter mismatch; "
-                "using finalized sanitized content"
-            )
+            logger.info("[Agent] hidden internal reasoning removed from IM response")
         full_content = sanitized_content
+        if defer_message_updates and full_content:
+            self._emit_event("message_update", {"delta": full_content})
 
         # Parse tool calls
         tool_calls = []
