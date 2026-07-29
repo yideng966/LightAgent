@@ -170,3 +170,16 @@ test('sidecar listens to raw puppet membership events before high-level contact 
   assert.match(source, /puppet\.on\(['"]room-leave['"],\s*handlePuppetRoomLeave\)/)
   assert.match(source, /if\s*\(state\.usesPuppetMembershipEvents\)\s*return/)
 })
+
+test('sidecar converts unmatched wechat4u QR join system messages before normal messages', async () => {
+  const source = await readFile(
+    new URL('./wechaty-sidecar.mjs', import.meta.url),
+    'utf8',
+  )
+
+  assert.match(source, /buildWechat4uOtherQrRoomJoinFallbackEvent/)
+  assert.match(
+    source,
+    /if\s*\(fallbackRoomJoinEvent\)\s*{\s*await handlePuppetRoomJoin\(fallbackRoomJoinEvent\)\s*return\s*}/,
+  )
+})

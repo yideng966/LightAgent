@@ -5,6 +5,9 @@ import xml2js from 'xml2js'
 const { parseStringPromise } = xml2js
 
 const APP_MESSAGE_TYPE_REFER = 57
+const WECHAT4U_SYS_MESSAGE_TYPE = '10000'
+const WECHAT4U_OTHER_QR_ROOM_JOIN_FALLBACK_REGEX =
+  /^"([^\s"][^"]*)"通过扫描"([^"]+)"分享的二维码加入群聊\s*$/u
 const MESSAGE_TYPE_NAMES = {
   1: 'file',
   2: 'audio',
@@ -507,6 +510,70 @@ function normalizeMembershipEventTimestamp(date, now = Date.now) {
     timestampMs = Number(fallback)
   }
   return Math.floor(timestampMs / 1000)
+}
+
+export function parseWechat4uOtherQrRoomJoinFallback(rawPayload = {}, expectedRoomId = '') {
+  const roomId = stringValue(rawPayload?.FromUserName).trim()
+  const trustedRoomId = stringValue(expectedRoomId).trim()
+  if (
+    rawPayloadType(rawPayload?.MsgType) !== WECHAT4U_SYS_MESSAGE_TYPE
+    || !trustedRoomId
+    || roomId !== trustedRoomId
+  ) {
+    return null
+  }
+
+  // wechat4u 1.14.14 对该文案误要求开引号后带空格，这里仅补齐实际无空格格式。
+  const matches = stringValue(rawPayload?.Content).match(
+    WECHAT4U_OTHER_QR_ROOM_JOIN_FALLBACK_REGEX,
+  )
+  if (!matches) return null
+
+  const inviteeName = stringValue(matches[1]).trim()
+  const inviterName = stringValue(matches[2]).trim()
+  if (!inviteeName || !inviterName) return null
+  return {
+    roomId,
+    inviteeName,
+    inviterName,
+    timestamp: normalizeMembershipEventTimestamp(rawPayload?.CreateTime),
+  }
+}
+
+async function resolveWechat4uRoomMemberId(roomMemberSearch, roomId, memberName) {
+  if (typeof roomMemberSearch !== 'function') return ''
+  try {
+    const memberIds = await roomMemberSearch(roomId, memberName)
+    if (!Array.isArray(memberIds)) return ''
+    return memberIds.map(memberId => stringValue(memberId).trim()).find(Boolean) || ''
+  } catch {
+    return ''
+  }
+}
+
+export async function buildWechat4uOtherQrRoomJoinFallbackEvent(rawPayload = {}, {
+  roomId = '',
+  roomMemberSearch = null,
+} = {}) {
+  const parsed = parseWechat4uOtherQrRoomJoinFallback(rawPayload, roomId)
+  if (!parsed) return null
+
+  const inviteeId = await resolveWechat4uRoomMemberId(
+    roomMemberSearch,
+    parsed.roomId,
+    parsed.inviteeName,
+  )
+  const inviterId = await resolveWechat4uRoomMemberId(
+    roomMemberSearch,
+    parsed.roomId,
+    parsed.inviterName,
+  )
+  return {
+    roomId: parsed.roomId,
+    inviteeIdList: inviteeId ? [inviteeId] : [],
+    inviterId,
+    timestamp: parsed.timestamp,
+  }
 }
 
 async function resolveRoomTopic(room) {

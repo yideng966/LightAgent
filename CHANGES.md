@@ -1,5 +1,29 @@
 # CHANGES
 
+## 2026-07-29
+
+### 修复微信群扫描他人二维码入群未欢迎
+
+- 修复 `wechaty-puppet-wechat4u 1.14.14` 未识别无前导空格文案 `"成员"通过扫描"分享人"分享的二维码加入群聊` 的问题；sidecar 现在会把可信原始系统消息补充转换为既有 `room_join` 事件，不再误入普通消息和自由回复链路。
+- 兼容解析仅接受 `MsgType=10000`、原始群 ID 与当前房间一致的精确文案；普通成员发送相同文本、跨群载荷和上游已经支持的带空格格式均不能触发欢迎。
+- 成员与分享人 ID 查询成功时继续使用真实成员信息；缓存尚未就绪或查询失败时复用现有 `member_info_missing` 降级流程，不绕过稳定群选择、身份确认或欢迎配置门禁。
+
+关键文件：
+
+- `channel/wechat_group/sidecar/wechaty-sidecar-core.mjs`
+- `channel/wechat_group/sidecar/wechaty-sidecar.mjs`
+- `channel/wechat_group/sidecar/wechaty-sidecar-core.test.mjs`
+- `channel/wechat_group/sidecar/wechaty-sidecar-lifecycle.test.mjs`
+- `plans/20260729_修复微信群扫码入群识别.md`
+
+验证记录：
+
+- 微信群 sidecar Node 全量测试 61 项通过，其中新增实际无空格文案、普通文本伪造、跨群载荷、带空格格式、成员 ID 解析与缺失降级测试。
+- `python -X utf8 -m unittest tests.test_wechat_group_channel tests.test_wechat_group_membership_notice`：156 项通过，现有入群欢迎、离群通知、稳定群门禁和缺成员降级行为保持正常。
+- `node --check channel/wechat_group/sidecar/wechaty-sidecar-core.mjs` 与 `node --check channel/wechat_group/sidecar/wechaty-sidecar.mjs` 通过。
+- `git diff --check` 通过，仅输出仓库现有的 Windows 换行符转换提示。
+- 本次未修改或重启远端 Docker；真实扫码入群验收需在新代码部署后执行。
+
 ## 2026-07-28
 
 ### 默认开启进退群消息开关

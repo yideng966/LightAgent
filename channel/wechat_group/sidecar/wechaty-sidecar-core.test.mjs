@@ -20,7 +20,9 @@ import {
   buildRoomJoinPayloadFromPuppetEvent,
   buildRoomLeavePayload,
   buildRoomLeavePayloadFromPuppetEvent,
+  buildWechat4uOtherQrRoomJoinFallbackEvent,
   memberPayloadMatchesQuery,
+  parseWechat4uOtherQrRoomJoinFallback,
 } from './wechaty-sidecar-core.mjs'
 
 function buildReferMsgContent({ fromusr = '@bot', displayname = 'LightBot', content = 'previous answer', title = 'current reply', type = 1, messageId = '123456' } = {}) {
@@ -546,6 +548,81 @@ test('buildRoomJoinPayloadFromPuppetEvent keeps the room when member ids are mis
   assert.deepEqual(payload.members, [])
   assert.deepEqual(payload.inviter, {})
   assert.deepEqual(contactQueries, [])
+})
+
+test('parseWechat4uOtherQrRoomJoinFallback recognizes the observed no-space system message', () => {
+  const result = parseWechat4uOtherQrRoomJoinFallback({
+    MsgType: 10000,
+    FromUserName: '@@lightagent',
+    Content: '"哲理"通过扫描"一灯"分享的二维码加入群聊',
+    CreateTime: 1785288639,
+  }, '@@lightagent')
+
+  assert.deepEqual(result, {
+    roomId: '@@lightagent',
+    inviteeName: '哲理',
+    inviterName: '一灯',
+    timestamp: 1785288639,
+  })
+})
+
+test('parseWechat4uOtherQrRoomJoinFallback rejects spoofed or cross-room messages', () => {
+  const matchingText = '"哲理"通过扫描"一灯"分享的二维码加入群聊'
+
+  assert.equal(parseWechat4uOtherQrRoomJoinFallback({
+    MsgType: 1,
+    FromUserName: '@@lightagent',
+    Content: matchingText,
+  }, '@@lightagent'), null)
+  assert.equal(parseWechat4uOtherQrRoomJoinFallback({
+    MsgType: 10000,
+    FromUserName: '@@other-room',
+    Content: matchingText,
+  }, '@@lightagent'), null)
+  assert.equal(parseWechat4uOtherQrRoomJoinFallback({
+    MsgType: 10000,
+    FromUserName: '@@lightagent',
+    Content: '" 哲理"通过扫描"一灯"分享的二维码加入群聊',
+  }, '@@lightagent'), null)
+})
+
+test('buildWechat4uOtherQrRoomJoinFallbackEvent resolves ids and degrades when lookup fails', async () => {
+  const rawPayload = {
+    MsgType: 10000,
+    FromUserName: '@@lightagent',
+    Content: '"哲理"通过扫描"一灯"分享的二维码加入群聊',
+    CreateTime: 1785288639,
+  }
+  const queries = []
+  const resolved = await buildWechat4uOtherQrRoomJoinFallbackEvent(rawPayload, {
+    roomId: '@@lightagent',
+    roomMemberSearch: async (roomId, memberName) => {
+      queries.push([roomId, memberName])
+      return memberName === '哲理' ? ['wxid_invitee'] : ['wxid_inviter']
+    },
+  })
+
+  assert.deepEqual(resolved, {
+    roomId: '@@lightagent',
+    inviteeIdList: ['wxid_invitee'],
+    inviterId: 'wxid_inviter',
+    timestamp: 1785288639,
+  })
+  assert.deepEqual(queries, [
+    ['@@lightagent', '哲理'],
+    ['@@lightagent', '一灯'],
+  ])
+
+  const degraded = await buildWechat4uOtherQrRoomJoinFallbackEvent(rawPayload, {
+    roomId: '@@lightagent',
+    roomMemberSearch: async () => { throw new Error('member cache not ready') },
+  })
+  assert.deepEqual(degraded, {
+    roomId: '@@lightagent',
+    inviteeIdList: [],
+    inviterId: '',
+    timestamp: 1785288639,
+  })
 })
 
 test('buildRoomLeavePayloadFromPuppetEvent keeps a known leaver when remover id is missing', async () => {

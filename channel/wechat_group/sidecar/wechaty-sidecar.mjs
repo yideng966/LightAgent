@@ -11,6 +11,7 @@ import {
   buildRoomJoinPayloadFromPuppetEvent,
   buildRoomLeavePayload,
   buildRoomLeavePayloadFromPuppetEvent,
+  buildWechat4uOtherQrRoomJoinFallbackEvent,
   detectMessageMediaType,
   downloadStickerMediaWithFallback,
   extractQuotedMessageFromRawPayload,
@@ -240,6 +241,18 @@ async function handleMessage(message) {
   const roomName = await room.topic()
   const rawPayloadResult = await resolveMessageRawPayload(state.bot, message.id)
   const rawPayload = rawPayloadResult.payload
+  const fallbackRoomJoinEvent = isWechat4uBot(state.bot)
+    ? await buildWechat4uOtherQrRoomJoinFallbackEvent(rawPayload, {
+        roomId: room.id,
+        roomMemberSearch: (roomId, memberName) => (
+          state.bot.puppet.roomMemberSearch(roomId, memberName)
+        ),
+      })
+    : null
+  if (fallbackRoomJoinEvent) {
+    await handlePuppetRoomJoin(fallbackRoomJoinEvent)
+    return
+  }
   const talkerInfo = await contactPayload(talker, room, rawPayload)
   const selfInfo = self ? await contactPayload(self) : { id: '', name: '' }
   const mediaType = detectMessageMediaType(message)
