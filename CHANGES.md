@@ -1,5 +1,32 @@
 # CHANGES
 
+## 2026-07-30
+
+### 重构微信群主备模型请求与候选隔离
+
+- 新增不可变 `LLMRequestSourceSnapshot`，在候选路由前冻结 Provider 无关的消息、工具、系统提示和请求选项；主模型、熔断后的首个备用模型及后续备用模型都从同一源重新创建独立请求，不再把深拷贝已组装成品作为唯一隔离边界。
+- 微信群流式候选改为路由层完整缓冲；候选已输出部分正文后再发生 408/429/5xx 等临时错误时，已缓冲分片整体丢弃，下一候选从源快照重新请求。Web 仍保持首个可见分片后不切换模型。
+- 在候选交付给 Agent 前拒绝空/未知工具名、非 JSON object 参数、空响应以及线上已观察到的 `</arg_value>`、`</function_calls_output>`、`<wechat-sticker-copied>` 协议残片；失败候选不写助手历史、不执行工具、不产生 `tool_result` 或微信群正文事件。
+- 明确安全过滤结束原因不通过备用模型绕过；全部候选协议无效时只返回服务端安全错误。标准 `reasoning_content`、显式 `<think>` 状态解析和 V2 发送确认边界保持不变，不恢复自然语言思考正则。
+
+关键文件：
+
+- `agent/protocol/models.py`
+- `agent/protocol/__init__.py`
+- `agent/protocol/agent_stream.py`
+- `bridge/agent_bridge.py`
+- `tests/test_agent_model_fallback.py`
+- `plans/20260730_微信群模型请求重组与输出隔离最终开发计划.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 请求重组、候选缓冲、思考隔离、文本路由、Agent 日志与重试专项 69 项通过。
+- V2 持久化、thread cache、事件与发送确认 20 项通过；微信群工具 9 项、微信群主通道 144 项通过。
+- 排除工作区中与本任务无关且尚未完成的 `tests/test_wechat_group_free_reply_judge.py` 后，全量运行 1256 项，结果 OK，1 项按条件跳过。
+- 原始 `unittest discover` 运行 1272 项，仅上述未提交自由回复测试新增的 2 项失败；本次未修改或提交该文件。
+- Python 编译与 `git diff --check` 在提交前单独校验。
+
 ## 2026-07-29
 
 ### 重构微信群上下文与会话引擎并发布 2.1.22

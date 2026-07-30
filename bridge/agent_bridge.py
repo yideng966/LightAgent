@@ -6,6 +6,7 @@ import os
 import re
 import html
 import copy
+import json
 import threading
 import time
 import types
@@ -13,7 +14,14 @@ from collections import OrderedDict
 from typing import Optional, List
 from uuid import uuid4
 
-from agent.protocol import Agent, LLMModel, LLMRequest, get_cancel_registry
+from agent.protocol import (
+    Agent,
+    AgentCancelledError,
+    LLMModel,
+    LLMRequest,
+    LLMRequestSourceSnapshot,
+    get_cancel_registry,
+)
 from bridge.agent_event_handler import AgentEventHandler
 from bridge.agent_initializer import AgentInitializer
 from bridge.bridge import Bridge
@@ -274,6 +282,14 @@ class TextModelRouter(LLMModel):
         "prohibited",
         "safety",
     }
+    _WECHAT_GROUP_PROTOCOL_MARKERS = (
+        "</arg_value>",
+        "<function_calls_output",
+        "</function_calls_output>",
+        "<wechat-sticker-copied",
+        "</wechat-sticker-copied>",
+    )
+    _WECHAT_GROUP_MAX_BUFFERED_CHUNKS = 8192
 
     def __init__(self, bridge: Bridge, bot_type: str = "chat", failover_state=None):
         super().__init__(model=conf().get("model", const.GPT_41))
@@ -600,14 +616,229 @@ class TextModelRouter(LLMModel):
         return bot.call_with_tools(**self._build_call_kwargs(request, candidate, stream))
 
     @staticmethod
-    def _request_snapshot(request: LLMRequest) -> LLMRequest:
-        """为一次路由保留不受候选适配器修改的规范化请求。"""
-        return copy.deepcopy(request)
+    def _request_source_snapshot(request: LLMRequest) -> LLMRequestSourceSnapshot:
+        """取得候选循环唯一、不可变的规范化请求源。"""
+        source = getattr(request, "_source_snapshot", None)
+        if isinstance(source, LLMRequestSourceSnapshot):
+            return source
+        return LLMRequestSourceSnapshot.from_request(request)
 
     @classmethod
-    def _candidate_request(cls, request_snapshot: LLMRequest) -> LLMRequest:
-        """每个候选都从同一快照获得独立请求对象。"""
-        return copy.deepcopy(request_snapshot)
+    def _candidate_request(cls, request_source: LLMRequestSourceSnapshot) -> LLMRequest:
+        """每个候选都从同一源重新创建完整请求。"""
+        return request_source.build_request()
+
+    @staticmethod
+    def _request_tool_names(request: LLMRequest):
+        names = set()
+        for tool in getattr(request, "tools", None) or []:
+            if not isinstance(tool, dict):
+                continue
+            name = tool.get("name")
+            if not name and isinstance(tool.get("function"), dict):
+                name = tool["function"].get("name")
+            name = str(name or "").strip()
+            if name:
+                names.add(name)
+        return names
+
+    @staticmethod
+    def _stream_delta_text(delta) -> str:
+        if not isinstance(delta, dict):
+            return ""
+        content = delta.get("content")
+        if isinstance(content, str):
+            return content
+        if not isinstance(content, list):
+            return ""
+        return "".join(
+            str(block.get("text") or "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") in (None, "text")
+        )
+
+    @classmethod
+    def _validate_wechat_group_candidate(cls, request, chunks):
+        content_parts = []
+        tool_calls = {}
+        safety_finish_reason = ""
+
+        for chunk in chunks:
+            if not isinstance(chunk, dict):
+                continue
+            choices = chunk.get("choices") or []
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                finish_reason = str(choice.get("finish_reason") or "").lower()
+                if finish_reason in cls._NON_FALLBACK_EMPTY_FINISH_REASONS:
+                    safety_finish_reason = finish_reason
+                delta = choice.get("delta") or choice.get("message") or {}
+                content_parts.append(cls._stream_delta_text(delta))
+                for tool_delta in delta.get("tool_calls") or []:
+                    if not isinstance(tool_delta, dict):
+                        return "invalid tool call payload", ""
+                    index = tool_delta.get("index", 0)
+                    item = tool_calls.setdefault(index, {"name": "", "arguments": ""})
+                    function = tool_delta.get("function") or {}
+                    if not isinstance(function, dict):
+                        return "invalid tool function payload", ""
+                    if function.get("name") is not None:
+                        item["name"] = str(function.get("name") or "")
+                    arguments = function.get("arguments")
+                    if arguments is not None:
+                        if not isinstance(arguments, str):
+                            return "tool arguments must be JSON text", ""
+                        item["arguments"] += arguments
+
+        content = "".join(content_parts)
+        if safety_finish_reason:
+            return "", safety_finish_reason
+        lowered_content = content.lower()
+        for marker in cls._WECHAT_GROUP_PROTOCOL_MARKERS:
+            if marker in lowered_content:
+                return f"reserved provider protocol marker: {marker}", ""
+
+        allowed_tool_names = cls._request_tool_names(request)
+        for item in tool_calls.values():
+            name = str(item.get("name") or "").strip()
+            if not name:
+                return "empty tool name", ""
+            if name not in allowed_tool_names:
+                return f"unknown tool name: {name}", ""
+            arguments_text = str(item.get("arguments") or "").strip() or "{}"
+            try:
+                arguments = json.loads(arguments_text)
+            except (TypeError, ValueError):
+                return f"invalid JSON arguments for tool: {name}", ""
+            if not isinstance(arguments, dict):
+                return f"tool arguments must be an object: {name}", ""
+
+        if not content.strip() and not tool_calls:
+            return "empty response", ""
+        return "", ""
+
+    @staticmethod
+    def _wechat_group_safety_chunk(finish_reason: str):
+        return {
+            "choices": [{
+                "delta": {"content": "抱歉，我无法协助处理这个请求。"},
+                "finish_reason": finish_reason or "content_filter",
+            }],
+        }
+
+    def _wechat_group_protocol_error_chunk(self, candidate, attempt_count, reason):
+        logger.error(
+            "[AgentLLMModel] all available candidates returned invalid protocol: "
+            "candidate=%s/%s reason=%s",
+            candidate.get("bot_type"),
+            candidate.get("model"),
+            reason,
+        )
+        return self._with_route_metadata({
+            "error": True,
+            "message": "模型返回了无法安全处理的响应，请稍后重试。",
+            "status_code": 422,
+            "model_fallback_exhausted": True,
+            "protocol_error": True,
+        }, candidate, attempt_count)
+
+    def _call_wechat_group_stream(self, request_source, candidates, cancel_event=None):
+        for index, candidate in enumerate(candidates):
+            candidate_request = self._candidate_request(request_source)
+            try:
+                if cancel_event is not None and cancel_event.is_set():
+                    raise AgentCancelledError("cancelled before model candidate")
+                stream = self._call_candidate(candidate_request, candidate, stream=True)
+                buffered_chunks = []
+                transient_error = None
+                terminal_error = None
+                protocol_reason = ""
+
+                for chunk in stream:
+                    if cancel_event is not None and cancel_event.is_set():
+                        raise AgentCancelledError("cancelled during model candidate")
+                    if len(buffered_chunks) >= self._WECHAT_GROUP_MAX_BUFFERED_CHUNKS:
+                        protocol_reason = "stream chunk limit exceeded"
+                        break
+                    is_error = isinstance(chunk, dict) and bool(chunk.get("error"))
+                    if is_error:
+                        if self._is_transient_model_error_payload(chunk):
+                            transient_error = chunk
+                        else:
+                            terminal_error = chunk
+                        break
+                    buffered_chunks.append(self._format_stream_chunk(chunk))
+
+                if transient_error is not None:
+                    self._record_primary_transient_failure(candidate, candidates)
+                    if index + 1 < len(candidates):
+                        next_candidate = candidates[index + 1]
+                        self._log_model_fallback(candidate, next_candidate, transient_error)
+                        continue
+                    if candidate.get("source") == "fallback":
+                        transient_error = self._mark_fallback_exhausted(transient_error)
+                    yield self._format_stream_chunk(transient_error)
+                    return
+
+                if terminal_error is not None:
+                    self._record_primary_healthy(candidate)
+                    yield self._format_stream_chunk(terminal_error)
+                    return
+
+                if not protocol_reason:
+                    protocol_reason, safety_reason = self._validate_wechat_group_candidate(
+                        candidate_request,
+                        buffered_chunks,
+                    )
+                    if safety_reason:
+                        self._record_primary_healthy(candidate)
+                        yield self._wechat_group_safety_chunk(safety_reason)
+                        return
+
+                if protocol_reason:
+                    self._record_primary_unusable_probe(candidate, candidates)
+                    if index + 1 < len(candidates):
+                        next_candidate = candidates[index + 1]
+                        self._log_unusable_model_fallback(
+                            candidate,
+                            next_candidate,
+                            protocol_reason,
+                        )
+                        continue
+                    yield self._wechat_group_protocol_error_chunk(
+                        candidate,
+                        index + 1,
+                        protocol_reason,
+                    )
+                    return
+
+                self._record_primary_healthy(candidate)
+                for chunk in buffered_chunks:
+                    yield chunk
+                return
+            except Exception as exc:
+                if isinstance(exc, AgentCancelledError):
+                    raise
+                is_transient = self._is_transient_model_error_text(str(exc))
+                if is_transient:
+                    self._record_primary_transient_failure(candidate, candidates)
+                else:
+                    self._record_primary_healthy(candidate)
+                if is_transient and index + 1 < len(candidates):
+                    next_candidate = candidates[index + 1]
+                    self._log_model_fallback(candidate, next_candidate, exc)
+                    continue
+                if is_transient and candidate.get("source") == "fallback":
+                    exhausted_error = RuntimeError(str(exc))
+                    exhausted_error.model_fallback_exhausted = True
+                    raise self._with_route_exception_metadata(
+                        exhausted_error,
+                        candidate,
+                        index + 1,
+                    ) from exc
+                self._with_route_exception_metadata(exc, candidate, index + 1)
+                raise
 
     def _is_transient_model_error_text(self, text) -> bool:
         error_text = str(text or "").lower()
@@ -786,7 +1017,7 @@ class TextModelRouter(LLMModel):
         Call the model using LightAgent's bot infrastructure
         """
         try:
-            request_snapshot = self._request_snapshot(request)
+            request_source = self._request_source_snapshot(request)
             candidates = (
                 self._build_override_candidates(provider, model)
                 or self._build_model_candidates()
@@ -794,14 +1025,14 @@ class TextModelRouter(LLMModel):
             last_response = None
             for index, candidate in enumerate(candidates):
                 try:
-                    candidate_request = self._candidate_request(request_snapshot)
+                    candidate_request = self._candidate_request(request_source)
                     response = self._call_candidate(candidate_request, candidate, stream=False)
                     response = self._format_response(response)
                     is_transient = self._is_transient_model_error_payload(response)
                     unusable_reason = (
                         ""
                         if is_transient
-                        else self._unusable_sync_text_reason(request_snapshot, response)
+                        else self._unusable_sync_text_reason(candidate_request, response)
                     )
                     if is_transient:
                         self._record_primary_transient_failure(candidate, candidates)
@@ -861,15 +1092,22 @@ class TextModelRouter(LLMModel):
         Call the model with streaming using LightAgent's bot infrastructure
         """
         try:
-            request_snapshot = self._request_snapshot(request)
+            request_source = self._request_source_snapshot(request)
             candidates = self._build_model_candidates()
+            if (getattr(self, "channel_type", None) or "") == const.WECHAT_GROUP:
+                yield from self._call_wechat_group_stream(
+                    request_source,
+                    candidates,
+                    cancel_event=getattr(request, "_cancel_event", None),
+                )
+                return
             last_error_chunk = None
             for index, candidate in enumerate(candidates):
                 yielded_any = False
                 retry_next = False
                 primary_health_recorded = False
                 try:
-                    candidate_request = self._candidate_request(request_snapshot)
+                    candidate_request = self._candidate_request(request_source)
                     stream = self._call_candidate(candidate_request, candidate, stream=True)
                     for chunk in stream:
                         is_error = isinstance(chunk, dict) and bool(chunk.get("error"))
@@ -926,6 +1164,8 @@ class TextModelRouter(LLMModel):
             if last_error_chunk is not None:
                 yield self._format_stream_chunk(last_error_chunk)
                 
+        except AgentCancelledError:
+            raise
         except Exception as e:
             logger.error(f"AgentLLMModel call_stream error: {e}", exc_info=True)
             raise
@@ -987,15 +1227,17 @@ class TextModelRouter(LLMModel):
         request_options=None,
     ):
         """Run a stateless text completion through the shared fallback chain."""
-        request = LLMRequest(
+        request_source = LLMRequestSourceSnapshot(
             messages=[dict(item) for item in (messages or [])],
             tools=[],
             system=system or "",
             max_tokens=max_tokens,
             stream=False,
             request_options=dict(request_options or {}),
+            _explicit_temperature=temperature,
         )
-        request._explicit_temperature = temperature
+        request = request_source.build_request()
+        request._source_snapshot = request_source
         response = self.call(request, model=model, provider=provider)
         text, success = self._extract_text_response(response)
         logger.debug(

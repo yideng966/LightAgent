@@ -10,7 +10,7 @@ import time
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
 from agent.protocol.cancel import AgentCancelledError
-from agent.protocol.models import LLMRequest, LLMModel
+from agent.protocol.models import LLMRequestSourceSnapshot, LLMModel
 from agent.protocol.message_utils import sanitize_claude_messages, compress_turn_to_text_only
 from agent.tools.base_tool import BaseTool, ToolResult
 from common.log import logger
@@ -1159,14 +1159,23 @@ class AgentStreamExecutor:
             "current_message=preview_logged"
         )
 
-        # Create request
-        request = LLMRequest(
+        source_metadata = {}
+        if self._current_channel_type() == "wechat_group" and self.context:
+            raw_user_content = self.context.get("wechat_group_user_content")
+            if isinstance(raw_user_content, str) and raw_user_content:
+                source_metadata["raw_user_content"] = raw_user_content
+
+        request_source = LLMRequestSourceSnapshot(
             messages=messages,
             temperature=0,
             stream=True,
             tools=tools_schema,
-            system=self.system_prompt  # Pass system prompt separately for Claude API
+            system=self.system_prompt,
+            source_metadata=source_metadata,
         )
+        request = request_source.build_request()
+        request._source_snapshot = request_source
+        request._cancel_event = self.cancel_event
 
         self._emit_event("message_start", {"role": "assistant"})
 

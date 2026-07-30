@@ -2,7 +2,7 @@ from .agent import Agent
 from .agent_stream import AgentStreamExecutor
 from .task import Task, TaskType, TaskStatus
 from .result import AgentResult, AgentAction, AgentActionType, ToolResult
-from .models import LLMModel, LLMRequest, ModelFactory
+from .models import LLMModel, LLMRequest, LLMRequestSourceSnapshot, ModelFactory
 from .cancel import (
     AgentCancelledError,
     CancelTokenRegistry,
@@ -20,7 +20,8 @@ __all__ = [
     'AgentActionType', 
     'ToolResult',
     'LLMModel',
-    'LLMRequest', 
+    'LLMRequest',
+    'LLMRequestSourceSnapshot',
     'ModelFactory',
     'AgentCancelledError',
     'CancelTokenRegistry',
