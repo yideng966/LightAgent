@@ -61,6 +61,100 @@ class WechatGroupFreeReplyJudgeTest(unittest.TestCase):
         self.assertIn("不要调用工具", prompt)
         self.assertIn("不要写入记忆", prompt)
 
+    def test_prompt_treats_immediate_bot_followup_as_explicit_bot_target(self):
+        prompt = build_free_reply_judge_prompt({
+            "room_name": "测试群",
+            "sender_name": "Alice",
+            "text": "还有哪里强？",
+            "local_decision": {
+                "triggered": True,
+                "score": 50,
+                "threshold": 50,
+                "reasons": ["group_question"],
+                "suppressions": [],
+                "addressee": {
+                    "target_kind": "bot",
+                    "is_immediate_bot_followup": True,
+                },
+            },
+        })
+
+        self.assertIn("不需要再次 @ 或点名机器人", prompt)
+        self.assertIn("is_immediate_bot_followup=true", prompt)
+
+    def test_immediate_bot_followup_bypasses_legacy_llm_rejection(self):
+        bridge = Mock()
+        bridge.complete_text.return_value = {
+            "success": True,
+            "content": (
+                '{"should_reply": false, "confidence": 0.8, '
+                '"reason": "未明确指向机器人或全群", "tone": "silent"}'
+            ),
+        }
+        judge = WechatGroupFreeReplyJudge(bridge=bridge)
+
+        result = judge.judge(
+            {
+                "room_id": "room@@abc",
+                "room_name": "测试群",
+                "sender_name": "Alice",
+                "text": "还有哪里强？",
+                "local_decision": {
+                    "triggered": True,
+                    "score": 50,
+                    "threshold": 50,
+                    "reasons": ["group_question"],
+                    "suppressions": [],
+                    "addressee": {
+                        "target_kind": "bot",
+                        "is_immediate_bot_followup": True,
+                        "is_followup_to_bot": True,
+                    },
+                },
+            },
+            {
+                "scorer_enabled": False,
+                "llm_judge_enabled": True,
+                "llm_judge_min_confidence": 0.6,
+            },
+        )
+
+        self.assertTrue(result["approved"])
+        self.assertEqual("immediate_bot_followup", result["reason"])
+        self.assertEqual("bot", result["target"])
+        self.assertTrue(result["is_followup_to_bot"])
+        self.assertEqual("local", result["source"])
+        bridge.complete_text.assert_not_called()
+
+    def test_suppressed_bot_followup_still_uses_legacy_judge(self):
+        bridge = Mock()
+        bridge.complete_text.return_value = {
+            "success": True,
+            "content": (
+                '{"should_reply": false, "confidence": 0.9, '
+                '"reason": "仍受本地抑制", "tone": "silent"}'
+            ),
+        }
+        judge = WechatGroupFreeReplyJudge(bridge=bridge)
+
+        result = judge.judge(
+            {
+                "text": "还有哪里强？",
+                "local_decision": {
+                    "triggered": True,
+                    "suppressions": ["muted_by_command"],
+                    "addressee": {
+                        "target_kind": "bot",
+                        "is_immediate_bot_followup": True,
+                    },
+                },
+            },
+            {"llm_judge_enabled": True, "llm_judge_min_confidence": 0.6},
+        )
+
+        self.assertFalse(result["approved"])
+        bridge.complete_text.assert_called_once()
+
     def test_judge_uses_bridge_and_parses_reply(self):
         bridge = Mock()
         bridge.complete_text.return_value = {
