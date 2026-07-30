@@ -1445,6 +1445,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertIsNotNone(context)
         self.assertEqual(ContextType.IMAGE_CREATE, context.type)
         self.assertEqual("\u4e2a\u5154\u5b50", context.content)
+        self.assertEqual("\u4e2a\u5154\u5b50", context["wechat_group_user_content"])
 
     def test_wechat_group_free_reply_text_starting_with_find_does_not_create_image(self):
         conf()["wechat_group_room_ids"] = ["room@@allowed"]
@@ -1942,6 +1943,48 @@ class WechatGroupChannelTest(unittest.TestCase):
         build_reply.assert_not_called()
         self.assertEqual(ReplyType.ERROR, reply.type)
         self.assertIn("生图额度", reply.content)
+
+    def test_image_create_guard_uses_raw_prompt_not_enriched_context(self):
+        channel = WechatGroupChannel(client=FakeClient())
+        prompt = "一张图：呲着大牙的兔子拿着金箍棒"
+        context = Context(
+            ContextType.IMAGE_CREATE,
+            "<wechat-group-rolling-summary>今日群聊日报已更新</wechat-group-rolling-summary>\n"
+            "<wechat-group-persona>不要描述搜索和发送过程</wechat-group-persona>\n"
+            + prompt,
+        )
+        context["channel_type"] = "wechat_group"
+        context["wechat_group_user_content"] = prompt
+        context["wechat_group_stable_room_id"] = "wgr_room"
+        context["wechat_group_stable_member_id"] = "wgm_member"
+
+        with patch(
+            "channel.wechat_group.wechat_group_channel.can_generate_wechat_group_report"
+        ) as report_guard:
+            blocked = channel._check_admin_guard(context)
+
+        report_guard.assert_not_called()
+        self.assertIsNone(blocked)
+
+    def test_image_create_skips_v2_context_refresh_and_keeps_prompt(self):
+        channel = WechatGroupChannel(client=FakeClient())
+        prompt = "一张图：一只兔子拿着金箍棒"
+        context = Context(ContextType.IMAGE_CREATE, prompt)
+        context["channel_type"] = "wechat_group"
+        context["receiver"] = "room@@abc"
+        context["wechat_group_stable_room_id"] = "wgr_room"
+        context["wechat_group_stable_member_id"] = "wgm_member"
+        context["wechat_group_user_content"] = prompt
+        context["msg"] = Mock(is_group=True, other_user_id="room@@abc")
+
+        with patch.object(channel, "_refresh_v2_request_context") as refresh, patch(
+            "channel.chat_channel.ChatChannel._handle"
+        ) as handle:
+            channel._handle(context)
+
+        refresh.assert_not_called()
+        handle.assert_called_once_with(context)
+        self.assertEqual(prompt, context.content)
 
     def test_non_admin_persistent_write_request_is_rejected_before_agent(self):
         conf()["wechat_group_admin_sender_ids"] = []

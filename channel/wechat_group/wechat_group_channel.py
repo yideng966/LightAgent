@@ -349,7 +349,8 @@ class WechatGroupChannel(ChatChannel):
             )
             priority = 10 if context.get("wechat_group_is_free_reply") is True else 0
             with self.reply_coordinator.turn(room_id, priority=priority):
-                self._refresh_v2_request_context(context)
+                if context.type != ContextType.IMAGE_CREATE:
+                    self._refresh_v2_request_context(context)
                 return super()._handle(context)
         finally:
             self._discard_pending_agent_delivery(
@@ -1584,7 +1585,12 @@ class WechatGroupChannel(ChatChannel):
             kwargs = dict(kwargs)
             kwargs.update(identity)
         context = super()._compose_context(ctype, content, **kwargs)
-        if not context or context.type != ContextType.TEXT:
+        if not context:
+            return context
+        if context.type == ContextType.IMAGE_CREATE:
+            context["wechat_group_user_content"] = context.content
+            return context
+        if context.type != ContextType.TEXT:
             return context
         msg = context.get("msg")
         if not msg or not getattr(msg, "is_group", False):

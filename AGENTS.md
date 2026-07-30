@@ -532,6 +532,7 @@ messages:
 - 自由回复 worker 必须按 `room_id` 做短暂防抖和 pending 合并；同一群窗口内只把最新普通候选送入 LLM judge，不同群互不影响。不要在候选入队时提前写入已回复冷却，冷却应在 worker 判定通过并进入回复上下文后记录。
 - worker 判定通过后，通道用 `wechat_group_force_reply = true` 重新走 `_compose_context()` / `produce()`，绕过通用群聊“必须 @ / 前缀 / 关键词”的过滤，但最终回复仍复用 `ChatChannel`、`Bridge` 和 Agent 主链路。
 - 默认生图触发词必须保守；不要使用 `看`、`找` 这类容易命中“看看”“找到”“找不到”等普通群聊文本的单字前缀，避免自由回复候选被误转成 `ContextType.IMAGE_CREATE`。
+- 确定性 `ContextType.IMAGE_CREATE` 请求必须保留去前缀后的 `wechat_group_user_content` 原文并绕过文本型 V2 上下文增强；报告、权限和其他文本门禁只能扫描该原文，不能扫描包含 rolling summary、人设或近期群聊的增强 Prompt，避免生图被误判为群聊报告。
 - 自由回复发送时设置 `suppress_mention = true` 和 `no_need_at = true`，因此默认不真实 mention 原发送者；@ 机器人或引用机器人回复仍走直接回复链路，不进入自由回复 worker。
 - 模型判断当前消息并非在问机器人且无需接话时，相关内部判断只能表示静默，不能作为普通文本发到群里。发送层短文本兜底至少要覆盖“没/未 @ 我、不是在问我”与“不用/无需插嘴、接话、回复、回应”等组合，并保留正常长文本解释不会被误拦截的回归测试。
 - 情绪服务在消息进入主链路前调用 `observe_message()` 更新 `valence / energy / sociability`；在自由回复本地判定后调用 `adjust_free_reply_decision()` 叠加低社交、低能量、负面情绪加阈值和时段规则等修正。
