@@ -35,7 +35,9 @@ from models.openai_compatible_bot import OpenAICompatibleBot
 
 
 _WECHAT_GROUP_FINAL_ONLY_PROMPT = """
-这是即时通讯群聊请求。不要输出、解释或复述内部分析、思考步骤或回答计划，只输出面向用户的最终答复。需要调用工具时直接调用工具，不要先输出过程说明。
+这是即时通讯群聊请求。不要输出、解释或复述内部分析、思考步骤或回答计划，只输出面向用户的最终答复。
+需要调用工具时只返回原生 tool_calls，不要先输出过程说明，也不要把 tool_calls 写成文本标签。
+不需要继续调用工具时，必须把唯一可发送正文放在 <final_response> 与 </final_response> 之间；标签外不得放置面向用户的正文。
 """.strip()
 
 
@@ -288,6 +290,20 @@ class TextModelRouter(LLMModel):
         "</function_calls_output>",
         "<wechat-sticker-copied",
         "</wechat-sticker-copied>",
+        "<tool_calls",
+        "</tool_calls>",
+    )
+    _WECHAT_GROUP_FINAL_PROTOCOL_TOKENS = (
+        "<final_response>",
+        "</final_response>",
+        "<send>",
+        "</send>",
+        "<message>",
+        "</message>",
+        "<think>",
+        "</think>",
+        "<thinking>",
+        "</thinking>",
     )
     _WECHAT_GROUP_MAX_BUFFERED_CHUNKS = 8192
 
@@ -566,6 +582,7 @@ class TextModelRouter(LLMModel):
             'tools': getattr(request, 'tools', None),
             'stream': stream,
             'model': candidate.get("model") or self.model,
+            'provider_type': candidate.get("bot_type") or "",
         }
         if request.max_tokens is not None:
             kwargs['max_tokens'] = request.max_tokens
@@ -940,66 +957,169 @@ class TextModelRouter(LLMModel):
             if isinstance(block, dict) and block.get("type") in (None, "text")
         )
 
+    @staticmethod
+    def _single_protocol_block(text, open_tag, close_tag):
+        open_count = text.count(open_tag)
+        close_count = text.count(close_tag)
+        if open_count == 0 and close_count == 0:
+            return None, ""
+        if open_count != 1 or close_count != 1:
+            return None, "malformed {} protocol block".format(open_tag)
+        start = text.find(open_tag)
+        end = text.find(close_tag, start + len(open_tag))
+        if start < 0 or end < 0:
+            return None, "malformed {} protocol block".format(open_tag)
+        return text[start + len(open_tag):end], ""
+
     @classmethod
-    def _validate_wechat_group_candidate(cls, request, chunks):
+    def _extract_wechat_group_final_content(cls, content):
+        final_payload, final_error = cls._single_protocol_block(
+            content,
+            "<final_response>",
+            "</final_response>",
+        )
+        if final_error:
+            return "", final_error, ""
+        send_payload, send_error = cls._single_protocol_block(
+            content,
+            "<send>",
+            "</send>",
+        )
+        if send_error:
+            return "", send_error, ""
+        if final_payload is not None and send_payload is not None:
+            return "", "multiple final response protocol blocks", ""
+
+        protocol_kind = ""
+        if final_payload is not None:
+            final_text = str(final_payload).strip()
+            protocol_kind = "final_response"
+        elif send_payload is not None:
+            message_payload, message_error = cls._single_protocol_block(
+                send_payload,
+                "<message>",
+                "</message>",
+            )
+            if message_error:
+                return "", message_error, ""
+            if message_payload is not None:
+                message_block = "<message>{}</message>".format(message_payload)
+                if send_payload.replace(message_block, "", 1).strip():
+                    return "", "unexpected content inside send protocol", ""
+                final_text = str(message_payload).strip()
+                protocol_kind = "send_message"
+            else:
+                try:
+                    send_data = json.loads(str(send_payload or "").strip())
+                except (TypeError, ValueError):
+                    return "", "invalid JSON send protocol", ""
+                if not isinstance(send_data, dict):
+                    return "", "JSON send protocol must be an object", ""
+                message = send_data.get("message")
+                if not isinstance(message, str):
+                    return "", "JSON send protocol requires string message", ""
+                final_text = message.strip()
+                protocol_kind = "send_json"
+        else:
+            lowered = content.lower()
+            if any(token in lowered for token in cls._WECHAT_GROUP_FINAL_PROTOCOL_TOKENS):
+                return "", "incomplete final response protocol", ""
+            return "", "missing final response envelope", ""
+
+        if not final_text:
+            return "", "empty final response", ""
+        lowered_final = final_text.lower()
+        for marker in cls._WECHAT_GROUP_PROTOCOL_MARKERS:
+            if marker in lowered_final:
+                return "", "reserved provider protocol marker: {}".format(marker), ""
+        if any(token in lowered_final for token in cls._WECHAT_GROUP_FINAL_PROTOCOL_TOKENS):
+            return "", "nested final response protocol", ""
+        return final_text, "", protocol_kind
+
+    @staticmethod
+    def _normalized_wechat_group_text_chunk(content, finish_reason="stop"):
+        return {
+            "choices": [{
+                "delta": {"content": content},
+                "finish_reason": finish_reason or "stop",
+            }],
+        }
+
+    @classmethod
+    def _normalize_wechat_group_candidate(cls, request, chunks):
         content_parts = []
         tool_calls = {}
         safety_finish_reason = ""
+        final_finish_reason = "stop"
 
         for chunk in chunks:
             if not isinstance(chunk, dict):
                 continue
             choices = chunk.get("choices") or []
+            if not isinstance(choices, list):
+                return "invalid stream choices payload", "", [], ""
+            if len(choices) > 1:
+                return "multiple stream choices are not supported", "", [], ""
             for choice in choices:
                 if not isinstance(choice, dict):
                     continue
                 finish_reason = str(choice.get("finish_reason") or "").lower()
                 if finish_reason in cls._NON_FALLBACK_EMPTY_FINISH_REASONS:
                     safety_finish_reason = finish_reason
+                elif finish_reason:
+                    final_finish_reason = finish_reason
                 delta = choice.get("delta") or choice.get("message") or {}
                 content_parts.append(cls._stream_delta_text(delta))
                 for tool_delta in delta.get("tool_calls") or []:
                     if not isinstance(tool_delta, dict):
-                        return "invalid tool call payload", ""
+                        return "invalid tool call payload", "", [], ""
                     index = tool_delta.get("index", 0)
                     item = tool_calls.setdefault(index, {"name": "", "arguments": ""})
                     function = tool_delta.get("function") or {}
                     if not isinstance(function, dict):
-                        return "invalid tool function payload", ""
+                        return "invalid tool function payload", "", [], ""
                     if function.get("name") is not None:
                         item["name"] = str(function.get("name") or "")
                     arguments = function.get("arguments")
                     if arguments is not None:
                         if not isinstance(arguments, str):
-                            return "tool arguments must be JSON text", ""
+                            return "tool arguments must be JSON text", "", [], ""
                         item["arguments"] += arguments
 
         content = "".join(content_parts)
         if safety_finish_reason:
-            return "", safety_finish_reason
-        lowered_content = content.lower()
-        for marker in cls._WECHAT_GROUP_PROTOCOL_MARKERS:
-            if marker in lowered_content:
-                return f"reserved provider protocol marker: {marker}", ""
+            return "", safety_finish_reason, [], "safety"
 
         allowed_tool_names = cls._request_tool_names(request)
         for item in tool_calls.values():
             name = str(item.get("name") or "").strip()
             if not name:
-                return "empty tool name", ""
+                return "empty tool name", "", [], ""
             if name not in allowed_tool_names:
-                return f"unknown tool name: {name}", ""
+                return f"unknown tool name: {name}", "", [], ""
             arguments_text = str(item.get("arguments") or "").strip() or "{}"
             try:
                 arguments = json.loads(arguments_text)
             except (TypeError, ValueError):
-                return f"invalid JSON arguments for tool: {name}", ""
+                return f"invalid JSON arguments for tool: {name}", "", [], ""
             if not isinstance(arguments, dict):
-                return f"tool arguments must be an object: {name}", ""
+                return f"tool arguments must be an object: {name}", "", [], ""
 
-        if not content.strip() and not tool_calls:
-            return "empty response", ""
-        return "", ""
+        if tool_calls:
+            return "", "", list(chunks), "tool_calls"
+
+        if not content.strip():
+            return "empty response", "", [], ""
+        final_text, protocol_reason, protocol_kind = (
+            cls._extract_wechat_group_final_content(content)
+        )
+        if protocol_reason:
+            return protocol_reason, "", [], ""
+        normalized = cls._normalized_wechat_group_text_chunk(
+            final_text,
+            final_finish_reason,
+        )
+        return "", "", [normalized], protocol_kind
 
     @staticmethod
     def _wechat_group_safety_chunk(finish_reason: str):
@@ -1026,6 +1146,55 @@ class TextModelRouter(LLMModel):
             "protocol_error": True,
         }, candidate, attempt_count)
 
+    @staticmethod
+    def _wechat_group_thinking_control_rejected(candidate, error) -> bool:
+        provider_type = str(candidate.get("bot_type") or "").lower()
+        if not provider_type.startswith("custom"):
+            return False
+
+        status_code = None
+        parts = []
+        if isinstance(error, dict):
+            status_code = error.get("status_code") or error.get("status")
+            parts.extend((error.get("message"), error.get("code"), error.get("type")))
+            error_data = error.get("error")
+            if isinstance(error_data, dict):
+                parts.extend((
+                    error_data.get("message"),
+                    error_data.get("code"),
+                    error_data.get("type"),
+                ))
+            elif error_data is not None:
+                parts.append(error_data)
+        else:
+            status_code = getattr(error, "status_code", None)
+            parts.extend((str(error), getattr(error, "message", None)))
+            body = getattr(error, "body", None)
+            if body is not None:
+                parts.append(body)
+
+        try:
+            if int(status_code) not in (400, 422):
+                return False
+        except (TypeError, ValueError):
+            return False
+
+        message = " ".join(str(part or "") for part in parts).lower()
+        rejection_markers = (
+            "unknown",
+            "unsupported",
+            "unrecognized",
+            "not supported",
+            "not allowed",
+            "unexpected",
+            "extra fields",
+            "additional properties",
+            "invalid parameter",
+        )
+        return "thinking" in message and any(
+            marker in message for marker in rejection_markers
+        )
+
     def _call_wechat_group_stream(self, request_source, candidates, cancel_event=None):
         for index, candidate in enumerate(candidates):
             retry_next = False
@@ -1037,6 +1206,8 @@ class TextModelRouter(LLMModel):
                 transient_error = None
                 terminal_error = None
                 protocol_reason = ""
+                protocol_kind = ""
+                normalized_chunks = []
                 retry_anchor = False
                 try:
                     if cancel_event is not None and cancel_event.is_set():
@@ -1096,13 +1267,24 @@ class TextModelRouter(LLMModel):
                         return
 
                     if terminal_error is not None:
-                        self._record_primary_healthy(candidate)
-                        yield self._format_stream_chunk(terminal_error)
-                        return
+                        if self._wechat_group_thinking_control_rejected(
+                            candidate,
+                            terminal_error,
+                        ):
+                            protocol_reason = "provider rejected thinking control"
+                        else:
+                            self._record_primary_healthy(candidate)
+                            yield self._format_stream_chunk(terminal_error)
+                            return
 
                     if not protocol_reason:
-                        protocol_reason, safety_reason = (
-                            self._validate_wechat_group_candidate(
+                        (
+                            protocol_reason,
+                            safety_reason,
+                            normalized_chunks,
+                            protocol_kind,
+                        ) = (
+                            self._normalize_wechat_group_candidate(
                                 candidate_request,
                                 buffered_chunks,
                             )
@@ -1131,7 +1313,16 @@ class TextModelRouter(LLMModel):
                         return
 
                     self._record_primary_healthy(candidate)
-                    for chunk in buffered_chunks:
+                    logger.info(
+                        "[AgentLLMModel] accepted wechat-group candidate: "
+                        "candidate=%s/%s protocol=%s raw_chunks=%s normalized_chunks=%s",
+                        candidate.get("bot_type"),
+                        candidate.get("model"),
+                        protocol_kind,
+                        len(buffered_chunks),
+                        len(normalized_chunks),
+                    )
+                    for chunk in normalized_chunks:
                         yield chunk
                     self._stage_provider_continuation(candidate_request)
                     return
@@ -1145,6 +1336,24 @@ class TextModelRouter(LLMModel):
                     ):
                         self._expire_provider_anchor(candidate_request)
                         continue
+                    if self._wechat_group_thinking_control_rejected(candidate, exc):
+                        protocol_reason = "provider rejected thinking control"
+                        self._record_primary_unusable_probe(candidate, candidates)
+                        if index + 1 < len(candidates):
+                            next_candidate = candidates[index + 1]
+                            self._log_unusable_model_fallback(
+                                candidate,
+                                next_candidate,
+                                protocol_reason,
+                            )
+                            retry_next = True
+                            break
+                        yield self._wechat_group_protocol_error_chunk(
+                            candidate,
+                            index + 1,
+                            protocol_reason,
+                        )
+                        return
                     is_transient = self._is_transient_model_error_text(str(exc))
                     if is_transient:
                         self._record_primary_transient_failure(candidate, candidates)

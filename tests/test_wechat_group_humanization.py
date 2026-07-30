@@ -555,7 +555,7 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
         self.assertNotIn("<wechat-group-archive-evidence>", result.content)
         self.assertIn("<wechat-group-reply-policy>", result.content)
 
-    def test_free_reply_uses_recent_conversation_only(self):
+    def test_free_reply_uses_recent_member_conversation_only(self):
         class FakeChannel:
             def __init__(self, archive):
                 self.archive = archive
@@ -618,7 +618,7 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
 
         self.assertIn("<recent-wechat-group-transcript", result.content)
         self.assertIn("我弄好了", result.content)
-        self.assertIn("刚才机器人真实发出的消息", result.content)
+        self.assertNotIn("刚才机器人真实发出的消息", result.content)
         self.assertNotIn("旧投屏话题", result.content)
         self.assertNotIn("<wechat-group-archive-evidence>", result.content)
         self.assertNotIn("<local-extractive-summary>", result.content)

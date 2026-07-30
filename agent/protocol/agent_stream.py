@@ -39,9 +39,9 @@ _REASONING_TRUNCATE_MARKER = "\n\n... [reasoning truncated, {omitted} chars omit
 class _StructuredContentStream:
     """将显式 ``<think>`` 块归一为独立思考流。"""
 
-    _OPEN_TAG = "<think>"
-    _CLOSE_TAG = "</think>"
-    _TAGS = (_OPEN_TAG, _CLOSE_TAG)
+    _OPEN_TAGS = ("<think>", "<thinking>")
+    _CLOSE_TAGS = ("</think>", "</thinking>")
+    _TAGS = _OPEN_TAGS + _CLOSE_TAGS
 
     def __init__(self, preserve_thinking: bool):
         self.preserve_thinking = preserve_thinking
@@ -91,7 +91,7 @@ class _StructuredContentStream:
 
             index, tag = min(matches, key=lambda item: item[0])
             self._append(visible, reasoning, data[:index])
-            self.inside_thinking = tag == self._OPEN_TAG
+            self.inside_thinking = tag in self._OPEN_TAGS
             data = data[index + len(tag):]
 
         return "".join(visible), "".join(reasoning)

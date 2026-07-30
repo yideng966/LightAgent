@@ -109,10 +109,11 @@ class WechatGroupContextV2Test(unittest.TestCase):
         block = snapshot.recent_block()
         self.assertEqual("recent", snapshot.context_policy.mode)
         self.assertIn("月卡按自然月计算", block)
-        self.assertIn("我刚才回答过一次", block)
+        self.assertNotIn("我刚才回答过一次", block)
         self.assertNotIn("这个怎么算", block)
         self.assertIn('untrusted="true"', block)
         self.assertEqual(2, snapshot.diagnostics["timeline_event_count"])
+        self.assertEqual(1, snapshot.diagnostics["included_source_event_count"])
 
     def test_request_sees_every_member_in_room_but_rejects_other_room_collision(self):
         self.archive.record_message(
@@ -152,7 +153,7 @@ class WechatGroupContextV2Test(unittest.TestCase):
         self.assertIn("Charlie确认周五晚上发布", block)
         self.assertNotIn("另一个群的机密内容", block)
         self.assertTrue(all(
-            source.startswith(("inbound:", "assistant:"))
+            source.startswith("inbound:")
             for source in snapshot.included_source_event_ids
         ))
 

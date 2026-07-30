@@ -2,6 +2,32 @@
 
 ## 2026-07-30
 
+### 修复微信群思考过程与协议标签泄漏
+
+- 微信群 Agent 流式候选新增严格最终答复边界：无工具正文只接受唯一完整的 `<final_response>`，兼容提取 Provider 的 `<send><message>` 与 JSON `send.message`；标签外分析、裸正文、空文本化 `<tool_calls>` 和损坏协议整体丢弃并切换备用模型，JSON `path` 等字段不会被访问或发送。
+- `<thinking>...</thinking>` 现在与 `<think>...</think>` 一样跨 SSE 分片隔离；自定义 OpenAI 兼容端点会把 `thinking={"type":"disabled"}` 传到实际请求，端点以 400/422 明确拒绝时直接切换候选，不会删除禁思考字段后重试。
+- recent Prompt 与 24 小时 rolling summary 只投影群成员公开消息；旧 assistant 派生摘要不再注入，旧 thread 因缺少 `output_protocol_version=2` 不再续接，阻断已泄漏机器人正文从上下文反复回灌。
+- 不可用技能提示改为直接给出面向用户的能力状态和真实缺失项，禁止描述内部检查、路由或未实际读取的配置文件。
+
+关键文件：
+
+- `bridge/agent_bridge.py`
+- `models/openai_compatible_bot.py`
+- `agent/protocol/agent_stream.py`
+- `agent/skills/formatter.py`
+- `channel/wechat_group/wechat_group_request_snapshot.py`
+- `channel/wechat_group/wechat_group_rolling_summary.py`
+- `channel/wechat_group/wechat_group_session_policy.py`
+- `plans/20260730_微信群思考泄漏根因修复设计方案.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 真实反馈样本、候选主备切换、wire payload、思考分片、上下文、摘要、thread、工具续接和确认发送等定向与关联回归共 112 项通过；共享路由与关联 Agent 回归 43 项通过。
+- 仅包含本次变更的隔离 worktree 执行 `python -X utf8 -m unittest discover -s tests`：运行 1292 项，结果 OK，1 项按条件跳过。
+- 使用隔离数据目录运行当前仓库的 `python -X utf8 app.py`，Web-only 实例在 `127.0.0.1:9947` 返回 HTTP 200，验收后已结束进程并释放端口。
+- Python 编译与 `git diff --check` 通过；未连接、更新或重启远端 Docker，也未操作真实微信群。
+
 ### 修复微信群生图被误判为群聊报告
 
 - 修复 `@小灯 画一张图：...` 已进入确定性生图队列后，因 V2 增强上下文同时包含报告词和“发送”等通用词而错误返回“群聊报告尚未启用”的问题。

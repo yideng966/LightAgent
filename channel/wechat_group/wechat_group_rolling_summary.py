@@ -288,7 +288,11 @@ class WechatGroupRollingSummaryService:
             minutes=24 * 60,
             now=window_end_at,
         )
-        events = list(snapshot.events)
+        events = [
+            event
+            for event in snapshot.events
+            if event.source_type == "inbound" and event.actor_type == "member"
+        ]
         truncated = len(events) > self.batch_limit
         if truncated:
             events = events[-self.batch_limit:]
@@ -381,6 +385,14 @@ class WechatGroupRollingSummaryService:
     ) -> tuple[str, Optional[WechatGroupRollingSummary]]:
         state = self.store.get(stable_room_id)
         if not state or not state.summary:
+            return "", None
+        if (
+            int(state.revision.assistant_cursor or 0) > 0
+            or any(
+                str(source_event_id or "").startswith("assistant:")
+                for source_event_id in state.source_event_ids
+            )
+        ):
             return "", None
         current_time = int(now or time.time())
         if current_time - int(state.updated_at or 0) > SUMMARY_MAX_AGE_SECONDS:

@@ -231,7 +231,10 @@ class TestAgentModelFallback(unittest.TestCase):
             "status_code": 429,
         }])
         backup = FakeBot(stream_chunks=[{
-            "choices": [{"delta": {"content": "backup ok"}, "finish_reason": "stop"}],
+            "choices": [{
+                "delta": {"content": "<final_response>backup ok</final_response>"},
+                "finish_reason": "stop",
+            }],
         }])
 
         with patch("bridge.agent_bridge.conf", return_value=config):
@@ -246,6 +249,303 @@ class TestAgentModelFallback(unittest.TestCase):
         self.assertEqual({"type": "disabled"}, backup.calls[0]["thinking"])
         self.assertNotIn("reasoning_effort", backup.calls[0])
         self.assertIn("只输出面向用户的最终答复", backup.calls[0]["system"])
+
+    def test_wechat_group_extracts_send_message_and_drops_outside_analysis(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        private_prefix = "锐评草稿不应发送"
+        private_suffix = "我直接用了锐评这个梗接上"
+        primary = FakeBot(stream_chunks=[
+            {"choices": [{"delta": {"content": private_prefix + "\n</thinking>\n<send>"}}]},
+            {"choices": [{"delta": {"content": "<message>最终锐评</message>"}}]},
+            {"choices": [{
+                "delta": {"content": "</send>\n" + private_suffix},
+                "finish_reason": "stop",
+            }]},
+        ])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", return_value=primary):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertEqual(1, len(chunks))
+        self.assertEqual("最终锐评", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertNotIn(private_prefix, str(chunks))
+        self.assertNotIn(private_suffix, str(chunks))
+        self.assertNotIn("</thinking>", str(chunks))
+        self.assertNotIn("<send>", str(chunks))
+
+    def test_wechat_group_extracts_json_send_message_without_using_provider_path(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        provider_path = "/mnt/data/tmp/image_2026-07-30-19-39-41.png"
+        primary = FakeBot(stream_chunks=[{
+            "choices": [{
+                "delta": {"content": (
+                    "小米龙甲电池这套路——先分析。\n</thinking>\n<send>\n"
+                    '{"path":"' + provider_path + '",'
+                    '"message":"小米龙甲电池：全程参与，但电芯芯情如何？"}'
+                    "\n</send>"
+                )},
+                "finish_reason": "stop",
+            }],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", return_value=primary):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertEqual(
+            "小米龙甲电池：全程参与，但电芯芯情如何？",
+            chunks[0]["choices"][0]["delta"]["content"],
+        )
+        self.assertNotIn(provider_path, str(chunks))
+        self.assertNotIn("path", str(chunks))
+
+    def test_wechat_group_rejects_json_send_without_message(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        primary = FakeBot(stream_chunks=[{
+            "choices": [{
+                "delta": {"content": '<send>{"path":"/mnt/data/private.png"}</send>'},
+                "finish_reason": "stop",
+            }],
+        }])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{
+                "delta": {"content": "<final_response>备用最终答复</final_response>"},
+                "finish_reason": "stop",
+            }],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertEqual("备用最终答复", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertNotIn("private.png", str(chunks))
+
+    def test_wechat_group_bare_internal_analysis_falls_back(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        samples = (
+            "我看了一下，这个 image-generation 技能需要配置 API 密钥。"
+            "不过我注意到用户需求很清晰，需要我先确认。",
+            "用户要求生成图片。我需要特别注意群聊规范。"
+            "我应该自然回绝。回复控制在50字以内。最终答复。",
+        )
+        for sample in samples:
+            with self.subTest(sample=sample[:20]):
+                config = FakeConfig({
+                    "model": "primary-model",
+                    "bot_type": "openai",
+                    "model_fallbacks": [
+                        {"bot_type": "deepseek", "model": "backup-model"},
+                    ],
+                    "use_linkai": False,
+                    "linkai_api_key": "",
+                    "enable_thinking": False,
+                })
+                primary = FakeBot(stream_chunks=[{
+                    "choices": [{"delta": {"content": sample}, "finish_reason": "stop"}],
+                }])
+                backup = FakeBot(stream_chunks=[{
+                    "choices": [{
+                        "delta": {"content": "<final_response>备用最终答复</final_response>"},
+                        "finish_reason": "stop",
+                    }],
+                }])
+
+                with patch("bridge.agent_bridge.conf", return_value=config):
+                    with patch(
+                        "models.bot_factory.create_bot",
+                        side_effect=[primary, backup],
+                    ):
+                        model = AgentLLMModel(bridge=None)
+                        model.channel_type = "wechat_group"
+                        chunks = list(model.call_stream(self._request()))
+
+                self.assertEqual(
+                    "备用最终答复",
+                    chunks[0]["choices"][0]["delta"]["content"],
+                )
+                self.assertNotIn(sample, str(chunks))
+
+    def test_wechat_group_textual_empty_tool_calls_protocol_falls_back(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        fragment = "@小灯在呢～有事直说！\n</thinking>\n<tool_calls>\n</tool_calls>"
+        primary = FakeBot(stream_chunks=[{
+            "choices": [{"delta": {"content": fragment}, "finish_reason": "stop"}],
+        }])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{
+                "delta": {"content": "<final_response>在呢，有事直说。</final_response>"},
+                "finish_reason": "stop",
+            }],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertEqual("在呢，有事直说。", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertNotIn("tool_calls", str(chunks))
+        self.assertNotIn("</thinking>", str(chunks))
+
+    def test_wechat_group_multiple_choices_cannot_bypass_final_protocol(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        primary = FakeBot(stream_chunks=[{
+            "choices": [
+                {
+                    "delta": {"content": "第一项裸分析不应发送"},
+                    "finish_reason": "stop",
+                },
+                {
+                    "delta": {"tool_calls": [{
+                        "index": 0,
+                        "id": "call-read",
+                        "function": {"name": "read", "arguments": "{}"},
+                    }]},
+                    "finish_reason": "tool_calls",
+                },
+            ],
+        }])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{
+                "delta": {"content": "<final_response>备用最终答复</final_response>"},
+                "finish_reason": "stop",
+            }],
+        }])
+        request = self._request()
+        request.tools = [{"name": "read", "input_schema": {"type": "object"}}]
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(request))
+
+        self.assertEqual("备用最终答复", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertNotIn("第一项裸分析", str(chunks))
+        self.assertNotIn("tool_calls", str(chunks))
+
+    def test_wechat_group_plain_final_without_envelope_fails_closed(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "openai",
+            "model_fallbacks": [],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        primary = FakeBot(stream_chunks=[{
+            "choices": [{"delta": {"content": "看起来正常的裸答复"}, "finish_reason": "stop"}],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", return_value=primary):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertTrue(chunks[0]["protocol_error"])
+        self.assertNotIn("看起来正常的裸答复", str(chunks))
+
+    def test_wechat_group_rejected_thinking_control_uses_fallback(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "custom:primary",
+            "model_fallbacks": [
+                {"bot_type": "deepseek", "model": "backup-model"},
+            ],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": False,
+        })
+        primary = FakeBot(stream_chunks=[{
+            "error": True,
+            "message": "Unknown parameter: thinking",
+            "status_code": 400,
+        }])
+        backup = FakeBot(stream_chunks=[{
+            "choices": [{
+                "delta": {"content": "<final_response>备用最终答复</final_response>"},
+                "finish_reason": "stop",
+            }],
+        }])
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]), patch.object(
+                AgentLLMModel,
+                "_configure_custom_candidate_bot",
+                side_effect=lambda bot, candidate: bot,
+            ):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(self._request()))
+
+        self.assertEqual("备用最终答复", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertEqual(1, len(backup.calls))
 
     def test_open_primary_circuit_starts_with_wechat_group_fallback(self):
         from bridge.agent_bridge import AgentLLMModel, _ModelFailoverState
@@ -268,7 +568,10 @@ class TestAgentModelFallback(unittest.TestCase):
             ("openai", "primary-model"), threshold=1, cooldown_seconds=300
         )
         backup = FakeBot(stream_chunks=[{
-            "choices": [{"delta": {"content": "backup ok"}, "finish_reason": "stop"}],
+            "choices": [{
+                "delta": {"content": "<final_response>backup ok</final_response>"},
+                "finish_reason": "stop",
+            }],
         }])
 
         with patch("bridge.agent_bridge.conf", return_value=config):
@@ -363,7 +666,10 @@ class TestAgentModelFallback(unittest.TestCase):
             {"error": True, "message": "Rate limit exceeded", "status_code": 429},
         ])
         backup = FakeBot(stream_chunks=[{
-            "choices": [{"delta": {"content": "backup only"}, "finish_reason": "stop"}],
+            "choices": [{
+                "delta": {"content": "<final_response>backup only</final_response>"},
+                "finish_reason": "stop",
+            }],
         }])
 
         with patch("bridge.agent_bridge.conf", return_value=config):
@@ -418,7 +724,9 @@ class TestAgentModelFallback(unittest.TestCase):
                 }])
                 backup = FakeBot(stream_chunks=[{
                     "choices": [{
-                        "delta": {"content": "backup safe"},
+                        "delta": {
+                            "content": "<final_response>backup safe</final_response>",
+                        },
                         "finish_reason": "stop",
                     }],
                 }])
@@ -467,7 +775,12 @@ class TestAgentModelFallback(unittest.TestCase):
                     "choices": [{"delta": {"content": fragment}, "finish_reason": "stop"}],
                 }])
                 backup = FakeBot(stream_chunks=[{
-                    "choices": [{"delta": {"content": "backup safe"}, "finish_reason": "stop"}],
+                    "choices": [{
+                        "delta": {
+                            "content": "<final_response>backup safe</final_response>",
+                        },
+                        "finish_reason": "stop",
+                    }],
                 }])
 
                 with patch("bridge.agent_bridge.conf", return_value=config):
@@ -511,7 +824,10 @@ class TestAgentModelFallback(unittest.TestCase):
             }],
         }])
         backup = FakeBot(stream_chunks=[{
-            "choices": [{"delta": {"content": "backup final"}, "finish_reason": "stop"}],
+            "choices": [{
+                "delta": {"content": "<final_response>backup final</final_response>"},
+                "finish_reason": "stop",
+            }],
         }])
         events = []
 
@@ -554,7 +870,10 @@ class TestAgentModelFallback(unittest.TestCase):
             "choices": [{"delta": {}, "finish_reason": "stop"}],
         }])
         backup = FakeBot(stream_chunks=[{
-            "choices": [{"delta": {"content": "backup final"}, "finish_reason": "stop"}],
+            "choices": [{
+                "delta": {"content": "<final_response>backup final</final_response>"},
+                "finish_reason": "stop",
+            }],
         }])
 
         with patch("bridge.agent_bridge.conf", return_value=config):

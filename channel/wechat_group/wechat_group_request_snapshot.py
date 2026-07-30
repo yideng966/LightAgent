@@ -97,6 +97,17 @@ class WechatGroupRequestSnapshotFactory:
             now=current_created_at or int(time.time()),
             excluded_source_event_ids=excluded,
         )
+        timeline_event_count = len(timeline.events)
+        member_events = [
+            event
+            for event in timeline.events
+            if event.source_type == "inbound" and event.actor_type == "member"
+        ]
+        timeline = WechatGroupTimelineSnapshot(
+            stable_room_id=timeline.stable_room_id,
+            revision=timeline.revision,
+            events=member_events,
+        )
         included = tuple(
             event.source_event_id
             for event in timeline.events
@@ -123,7 +134,7 @@ class WechatGroupRequestSnapshotFactory:
             diagnostics={
                 "context_mode": policy.mode,
                 "policy_reason": policy.reason,
-                "timeline_event_count": len(timeline.events),
+                "timeline_event_count": timeline_event_count,
                 "included_source_event_count": len(included),
                 "excluded_thread_event_count": len(excluded_ids),
                 "room_revision": timeline.revision.to_dict(),

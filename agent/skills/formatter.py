@@ -69,8 +69,11 @@ def format_unavailable_skills_for_prompt(
     lines = [
         "",
         "<unavailable_skills>",
-        "The following skills are installed but not yet ready. "
-        "Guide the user to complete the setup when relevant.",
+        "The following skills are installed but not yet ready. When relevant, "
+        "give a concise final-facing capability response and the necessary setup. "
+        "Do not narrate checks, routing, or private deliberation. "
+        "Only state requirements present in <missing> and do not claim to have "
+        "inspected files or configuration that are not explicitly provided.",
     ]
 
     for entry in entries:

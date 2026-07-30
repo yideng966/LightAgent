@@ -11,6 +11,7 @@ from channel.wechat_group.wechat_group_rolling_summary import (
     WechatGroupRollingSummaryService,
     WechatGroupRollingSummaryStore,
 )
+from channel.wechat_group.wechat_group_timeline_service import RoomRevision
 
 
 class FakeDreamEngine:
@@ -214,6 +215,50 @@ class WechatGroupRollingSummaryTest(unittest.TestCase):
         )
         self.assertEqual("", stale_block)
         self.assertIsNone(stale)
+
+    def test_summary_with_assistant_sources_is_not_injected(self):
+        self.store.save(
+            "wgr_room",
+            "包含旧机器人回复的摘要",
+            RoomRevision(inbound_cursor=3, assistant_cursor=2),
+            summarized_event_count=5,
+            source_event_ids=["inbound:1", "assistant:2"],
+        )
+        service = WechatGroupRollingSummaryService(
+            self.archive,
+            store=self.store,
+            dream_engine=FakeDreamEngine(),
+        )
+
+        block, state = service.get_prompt_context_state("wgr_room")
+
+        self.assertEqual("", block)
+        self.assertIsNone(state)
+
+    def test_refresh_excludes_assistant_replies_from_summary_input(self):
+        self._record_events(0, 20)
+        self.archive.record_assistant_reply(
+            "wgr_room",
+            content="INTERNAL_ASSISTANT_TEXT_MUST_NOT_BE_SUMMARIZED",
+            created_at=self.now - 95,
+            stable_room_id="wgr_room",
+        )
+        engine = FakeDreamEngine()
+        service = WechatGroupRollingSummaryService(
+            self.archive,
+            store=self.store,
+            dream_engine=engine,
+            retain_tail=12,
+        )
+
+        result = service.refresh_room("wgr_room", now=self.now)
+
+        self.assertEqual("updated", result["status"])
+        self.assertNotIn(
+            "INTERNAL_ASSISTANT_TEXT_MUST_NOT_BE_SUMMARIZED",
+            engine.calls[0]["user_prompt"],
+        )
+        self.assertEqual(0, result["revision"]["assistant_cursor"])
 
 
 if __name__ == "__main__":

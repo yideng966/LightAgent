@@ -16,6 +16,7 @@ from config import conf
 ACTION_NEW_THREAD = "new_thread"
 ACTION_RESUME_THREAD = "resume_thread"
 ACTION_OBSERVE_ONLY = "observe_only"
+WECHAT_GROUP_OUTPUT_PROTOCOL_VERSION = 2
 
 
 def resolve_wechat_group_session_scope() -> str:
@@ -119,6 +120,15 @@ class WechatGroupSessionPolicy:
             or follows_bot
         )
         active = self._store().get_active_thread(owner, ttl_seconds=ttl) if owner and should_resume else None
+        if active:
+            metadata = active.get("metadata")
+            protocol_version = (
+                metadata.get("output_protocol_version")
+                if isinstance(metadata, dict)
+                else None
+            )
+            if protocol_version != WECHAT_GROUP_OUTPUT_PROTOCOL_VERSION:
+                active = None
         if active and active.get("thread_id"):
             return WechatGroupSessionDecision(
                 action=ACTION_RESUME_THREAD,
@@ -157,7 +167,10 @@ class WechatGroupSessionPolicy:
                 stable_member_id=stable_member_id,
                 root_message_id=message_id,
                 ttl_seconds=decision.ttl_seconds,
-                metadata={"reason": decision.reason},
+                metadata={
+                    "reason": decision.reason,
+                    "output_protocol_version": WECHAT_GROUP_OUTPUT_PROTOCOL_VERSION,
+                },
             )
             return
         self._store().touch_thread(

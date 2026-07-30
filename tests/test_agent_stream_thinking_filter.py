@@ -94,6 +94,21 @@ class TestAgentStreamThinkingFilter(unittest.TestCase):
         self.assertEqual("答复前缀答复后缀", self._event_text(events, "message_update"))
         self.assertNotIn(private_reasoning, str(messages))
 
+    def test_wechat_group_handles_thinking_alias_split_across_chunks(self):
+        private_reasoning = "THINKING_ALIAS_PRIVATE_REASONING"
+        content, _, events, messages = self._run([
+            {"content": "<think"},
+            {"content": "ing>"},
+            {"content": private_reasoning},
+            {"content": "</think"},
+            {"content": "ing>最终答复"},
+        ])
+
+        self.assertEqual("最终答复", content)
+        self.assertEqual("最终答复", self._event_text(events, "message_update"))
+        self.assertNotIn(private_reasoning, str(messages))
+        self.assertNotIn("</thinking>", str(messages))
+
     def test_wechat_group_fails_closed_for_unclosed_thinking_block(self):
         private_reasoning = "UNCLOSED_PRIVATE_REASONING"
         content, _, events, messages = self._run([

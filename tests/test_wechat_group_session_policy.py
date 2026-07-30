@@ -199,6 +199,27 @@ class WechatGroupSessionPolicyTest(unittest.TestCase):
         self.assertEqual(ACTION_RESUME_THREAD, followup.action)
         self.assertEqual(first.thread_id, followup.thread_id)
 
+    def test_followup_does_not_resume_thread_without_output_protocol_version(self):
+        owner = "wechat_group:wgr_room:wgm_alice"
+        self.store.create_thread(
+            owner,
+            "wgt_legacy",
+            channel_type="wechat_group",
+            stable_room_id="wgr_room",
+            stable_member_id="wgm_alice",
+            metadata={"reason": "legacy"},
+        )
+
+        followup = self.policy.resolve(
+            "wgr_room",
+            "wgm_alice",
+            trigger_source="direct_reply",
+            text="继续刚才你说的",
+        )
+
+        self.assertEqual(ACTION_NEW_THREAD, followup.action)
+        self.assertNotEqual("wgt_legacy", followup.thread_id)
+
     def test_ambient_group_message_is_observe_only(self):
         decision = self.policy.resolve(
             "wgr_room",
