@@ -596,6 +596,49 @@ class AgentStreamExecutor:
     def _should_defer_message_updates(self) -> bool:
         return self._current_channel_type() == "wechat_group"
 
+    def _provider_continuation_context(self) -> Dict[str, Any]:
+        if self._current_channel_type() != "wechat_group" or self.context is None:
+            return {}
+        try:
+            get_value = self.context.get
+            identity_status = str(
+                get_value("wechat_group_identity_status") or ""
+            ).strip().lower()
+            if (
+                get_value("wechat_group_identity_requires_confirmation") is True
+                or identity_status != "confirmed"
+            ):
+                return {}
+            return {
+                "stable_account_scope": str(
+                    get_value("wechat_group_stable_account_id") or ""
+                ),
+                "stable_room_id": str(
+                    get_value("wechat_group_stable_room_id") or ""
+                ),
+                "stable_member_id": str(
+                    get_value("wechat_group_stable_member_id") or ""
+                ),
+                "owner_session_id": str(
+                    get_value("wechat_group_owner_session_id")
+                    or getattr(self.agent, "_current_session_id", "")
+                    or ""
+                ),
+                "thread_id": str(get_value("wechat_group_thread_id") or ""),
+                "thread_action": str(
+                    get_value("wechat_group_session_action") or ""
+                ),
+                "request_id": str(get_value("request_id") or ""),
+                "ttl_seconds": int(
+                    get_value("wechat_group_thread_ttl_seconds") or 900
+                ),
+                "identity_status": identity_status,
+                "identity_confirmed": True,
+                "is_admin": get_value("wechat_group_is_admin") is True,
+            }
+        except (AttributeError, TypeError, ValueError):
+            return {}
+
     def _hash_args(self, args: dict) -> str:
         """Generate a simple hash for tool arguments"""
         import hashlib
@@ -1172,6 +1215,7 @@ class AgentStreamExecutor:
             tools=tools_schema,
             system=self.system_prompt,
             source_metadata=source_metadata,
+            provider_continuation_context=self._provider_continuation_context(),
         )
         request = request_source.build_request()
         request._source_snapshot = request_source

@@ -233,7 +233,7 @@ class WechatGroupFocusService:
             rows = archive.get_recent_messages(
                 room_id,
                 limit=int(conf().get("wechat_group_focus_recent_message_limit", 30) or 30),
-                minutes=max(int(conf().get("wechat_group_recent_context_minutes", 60) or 60), 1),
+                minutes=120,
                 now=now,
             )
             return [dict(row) for row in rows or []]

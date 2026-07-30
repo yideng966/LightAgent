@@ -97,7 +97,7 @@ class WechatGroupPersonaTest(unittest.TestCase):
             block,
         )
 
-    def test_channel_injects_persona_block_into_group_text(self):
+    def test_channel_injects_persona_block_when_v2_snapshot_is_built(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_persona_prompt"] = "你是测试微信群助手"
         conf()["wechat_group_persona_preset_id"] = "custom"
@@ -117,6 +117,7 @@ class WechatGroupPersonaTest(unittest.TestCase):
         )
 
         context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        channel._refresh_v2_request_context(context)
 
         self.assertIsNotNone(context)
         self.assertIn("<wechat-group-persona>", context.content)

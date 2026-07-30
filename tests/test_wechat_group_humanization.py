@@ -5,12 +5,10 @@ import unittest
 from channel.wechat_group.wechat_group_archive import WechatGroupArchive
 from channel.wechat_group.wechat_group_archive_context import (
     build_archive_evidence_block,
-    build_local_extractive_summary_block,
 )
 from channel.wechat_group.wechat_group_context import build_safe_wechat_group_recent_context_block_from_rows
 from channel.wechat_group.wechat_group_humanized_context import (
     WechatGroupHumanizedContextBuilder,
-    should_include_contextual_history,
 )
 from channel.wechat_group.wechat_group_reply_cleanup import cleanup_wechat_group_reply_text
 from channel.wechat_group.wechat_group_message import WechatGroupMessage
@@ -23,21 +21,6 @@ LONG_WECHAT_IMAGE_TRANSPORT_XML = """<?xml version="1.0"?>
   <img aeskey="{}" cdnthumburl="masked" md5="masked" hevc_mid_size="31347" />
 </msg>
 """.format("a" * 240)
-
-LONG_WPS_APP_TRANSPORT_XML = """<?xml version="1.0"?>
-<msg>
-  <appmsg appid="wx-test" sdkver="0">
-    <title>WPS 文档</title>
-    <type>6</type>
-    <appattach>
-      <cdnattachurl>{}</cdnattachurl>
-      <aeskey>top-secret-aes-key</aeskey>
-      <fileext>docx</fileext>
-    </appattach>
-  </appmsg>
-</msg>
-""".format("A" * 240)
-
 
 class WechatGroupHumanizationArchiveTest(unittest.TestCase):
     def setUp(self):
@@ -201,22 +184,12 @@ class WechatGroupHumanizationArchiveTest(unittest.TestCase):
             now=1010,
             days=1,
             limit=10,
-            recent_limit=10,
-        )
-        summary = build_local_extractive_summary_block(
-            self.archive,
-            room_id="wgr_room_a",
-            now=1010,
-            hours=1,
-            limit=10,
         )
 
         for rows in (recent, searched, distilled):
             self.assertEqual(["room-a-message"], [row["message_id"] for row in rows])
         self.assertIn("A群昨天确认了发布计划", evidence)
-        self.assertIn("A群昨天确认了发布计划", summary)
         self.assertNotIn("B群机密内容", evidence)
-        self.assertNotIn("B群机密内容", summary)
         self.assertIsNone(self.archive.get_message_by_id("wgr_room_a", "room-b-collision"))
         self.assertEqual(
             ["legacy-message"],
@@ -258,10 +231,11 @@ class WechatGroupHumanizationArchiveTest(unittest.TestCase):
         self.assertNotIn("C:/Users", block)
         self.assertNotIn("<xml>", block)
 
-    def test_archive_evidence_and_local_summary_exclude_current_message(self):
+    def test_archive_evidence_excludes_current_and_covered_source_events(self):
         self._record("prev-1", text="Alice said the launch is Friday", sender="Alice", ts=950)
         self._record("prev-2", text="Bob said QA owns the checklist", sender="Bob", ts=960)
         self._record("current", text="summarize the launch discussion", sender="Carol", ts=970)
+        covered = self.archive.get_message_by_id("room@@a", "prev-1")
 
         evidence = build_archive_evidence_block(
             self.archive,
@@ -270,24 +244,16 @@ class WechatGroupHumanizationArchiveTest(unittest.TestCase):
             now=980,
             days=1,
             limit=10,
-            recent_limit=0,
             exclude_message_id="current",
-        )
-        summary = build_local_extractive_summary_block(
-            self.archive,
-            room_id="room@@a",
-            now=980,
-            hours=1,
-            limit=10,
-            exclude_message_id="current",
+            exclude_source_event_ids=(
+                "inbound:{}".format(covered["id"]),
+            ),
         )
 
         self.assertIn("<wechat-group-archive-evidence>", evidence)
-        self.assertIn("Alice: Alice said the launch is Friday", evidence)
-        self.assertIn("<local-extractive-summary>", summary)
-        self.assertIn("Bob said QA owns the checklist", summary)
+        self.assertNotIn("Alice said the launch is Friday", evidence)
+        self.assertIn("Bob said QA owns the checklist", evidence)
         self.assertNotIn("current", evidence)
-        self.assertNotIn("summarize the launch discussion", summary)
 
     def test_legacy_text_transport_xml_is_projected_from_all_prompt_contexts(self):
         self._record(
@@ -307,89 +273,23 @@ class WechatGroupHumanizationArchiveTest(unittest.TestCase):
             now=980,
             days=1,
             limit=10,
-            recent_limit=0,
-        )
-        summary = build_local_extractive_summary_block(
-            self.archive,
-            room_id="room@@a",
-            now=980,
-            hours=1,
-            limit=10,
         )
 
         self.assertIn("[image message]", recent)
         self.assertIn("[image message]", evidence)
-        self.assertEqual("", summary)
         for transport_fragment in ("<?xml", "<img", "hevc_mid_size", "aeskey", "cdnthumburl"):
             self.assertNotIn(transport_fragment, recent)
             self.assertNotIn(transport_fragment, evidence)
-            self.assertNotIn(transport_fragment, summary)
-
-    def test_local_summary_filters_wps_xml_paths_base64_and_sensitive_values(self):
-        self._record(
-            "legacy-wps-app",
-            text=LONG_WPS_APP_TRANSPORT_XML,
-            sender="Alice",
-            ts=950,
-            message_type="text",
-        )
-        self._record(
-            "unsafe-text",
-            text=(
-                "请看 D:/Users/Alice/private/report.docx "
-                "token=super-secret-token {} "
-                "https://example.test/share?access_token=url-secret&download=1"
-            ).format("B" * 160),
-            sender="Bob",
-            ts=960,
-        )
-        self._record(
-            "safe-text",
-            text="发布窗口调整到周五",
-            sender="Carol",
-            ts=970,
-        )
-
-        summary = build_local_extractive_summary_block(
-            self.archive,
-            room_id="room@@a",
-            now=980,
-            hours=1,
-            limit=10,
-        )
-
-        self.assertIn("发布窗口调整到周五", summary)
-        for fragment in (
-            "<appmsg",
-            "cdnattachurl",
-            "aeskey",
-            "top-secret-aes-key",
-            "D:/Users",
-            "super-secret-token",
-            "url-secret",
-            "B" * 80,
-        ):
-            self.assertNotIn(fragment, summary)
 
 
 class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
     def setUp(self):
         self._original_config = {
-            "wechat_group_humanized_context_enabled": conf().get("wechat_group_humanized_context_enabled"),
-            "wechat_group_reply_policy_enabled": conf().get("wechat_group_reply_policy_enabled"),
             "wechat_group_archive_evidence_enabled": conf().get("wechat_group_archive_evidence_enabled"),
-            "wechat_group_local_summary_enabled": conf().get("wechat_group_local_summary_enabled"),
-            "wechat_group_recent_context_enabled": conf().get("wechat_group_recent_context_enabled"),
-            "wechat_group_reference_policy_enabled": conf().get("wechat_group_reference_policy_enabled"),
-            "wechat_group_link_policy_enabled": conf().get("wechat_group_link_policy_enabled"),
+            "wechat_group_rolling_summary_enabled": conf().get("wechat_group_rolling_summary_enabled"),
         }
-        conf()["wechat_group_humanized_context_enabled"] = True
-        conf()["wechat_group_reply_policy_enabled"] = True
         conf()["wechat_group_archive_evidence_enabled"] = True
-        conf()["wechat_group_local_summary_enabled"] = True
-        conf()["wechat_group_recent_context_enabled"] = True
-        conf()["wechat_group_reference_policy_enabled"] = True
-        conf()["wechat_group_link_policy_enabled"] = True
+        conf()["wechat_group_rolling_summary_enabled"] = False
         self.tmpdir = tempfile.TemporaryDirectory()
         self.archive = WechatGroupArchive(os.path.join(self.tmpdir.name, "archive.db"))
 
@@ -436,12 +336,7 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
         msg.wechat_group_stable_member_id = "wgm_alice"
         return msg
 
-    def test_direct_reply_and_contextual_sources_include_history(self):
-        self.assertTrue(should_include_contextual_history("what is 2+2", "direct_reply"))
-        self.assertTrue(should_include_contextual_history("summarize above", "direct_reply"))
-        self.assertTrue(should_include_contextual_history("plain ambient", "free_reply"))
-
-    def test_builder_orders_policy_evidence_recent_focus_memory_and_raw_user_text(self):
+    def test_builder_orders_policy_recent_evidence_focus_memory_and_raw_user_text(self):
         class FakeChannel:
             def __init__(self, archive):
                 self.archive = archive
@@ -468,17 +363,24 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
                 return "direct_reply"
 
         self.archive.record_message(
-            message_id="prev",
+            message_id="old-evidence",
             room_id="room@@a",
             sender_nickname="Bob",
             text="Bob said ship Friday",
             created_at=1000,
         )
+        self.archive.record_message(
+            message_id="recent",
+            room_id="room@@a",
+            sender_nickname="Carol",
+            text="Carol confirmed the deployment owner",
+            created_at=199990,
+        )
         channel = FakeChannel(self.archive)
-        msg = self._msg()
+        msg = self._msg(ts=200000)
         result = WechatGroupHumanizedContextBuilder(channel).build(
             msg=msg,
-            user_content="summarize above",
+            user_content="总结昨天的 ship plan",
             trigger_source="direct_reply",
         )
 
@@ -486,14 +388,15 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
         self.assertIn("<wechat-group-mention-verification>", content)
         self.assertIn("<wechat-group-reply-policy>", content)
         self.assertIn("<wechat-group-archive-evidence>", content)
-        self.assertIn("<local-extractive-summary>", content)
-        self.assertIn("<recent-wechat-group-transcript>", content)
+        self.assertNotIn("<local-extractive-summary>", content)
+        self.assertIn("<recent-wechat-group-transcript", content)
         self.assertIn("<wechat-group-focus>", content)
         self.assertIn("<wechat-group-memory>", content)
         self.assertNotIn("<wechat-group-knowledge>", content)
-        self.assertTrue(content.rstrip().endswith("summarize above"))
+        self.assertTrue(content.rstrip().endswith("总结昨天的 ship plan"))
         self.assertLess(content.index("<wechat-group-reply-policy>"), content.index("<wechat-group-archive-evidence>"))
-        self.assertLess(content.index("<recent-wechat-group-transcript>"), content.index("<wechat-group-focus>"))
+        self.assertLess(content.index("<recent-wechat-group-transcript"), content.index("<wechat-group-archive-evidence>"))
+        self.assertLess(content.index("<wechat-group-archive-evidence>"), content.index("<wechat-group-focus>"))
         self.assertLess(content.index("<wechat-group-focus>"), content.index("<wechat-group-memory>"))
 
     def test_builder_falls_back_to_recent_rows_when_focus_only_has_current_message(self):
@@ -549,8 +452,8 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             trigger_source="direct_reply",
         )
 
-        self.assertIn("<recent-wechat-group-transcript>", result.content)
-        start = result.content.index("<recent-wechat-group-transcript>")
+        self.assertIn("<recent-wechat-group-transcript", result.content)
+        start = result.content.index("<recent-wechat-group-transcript")
         end = result.content.index("</recent-wechat-group-transcript>")
         transcript = result.content[start:end]
         self.assertIn("release window is Friday", transcript)
@@ -603,9 +506,9 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             trigger_source="direct_reply",
         )
 
-        self.assertIn("<wechat-group-archive-evidence>", result.content)
-        self.assertIn("<local-extractive-summary>", result.content)
-        self.assertIn("<recent-wechat-group-transcript>", result.content)
+        self.assertNotIn("<wechat-group-archive-evidence>", result.content)
+        self.assertNotIn("<local-extractive-summary>", result.content)
+        self.assertIn("<recent-wechat-group-transcript", result.content)
         self.assertIn("release window is Friday", result.content)
 
     def test_builder_injects_configured_context_for_direct_reply(self):
@@ -647,20 +550,10 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             trigger_source="direct_reply",
         )
 
-        self.assertIn("<recent-wechat-group-transcript>", result.content)
+        self.assertIn("<recent-wechat-group-transcript", result.content)
         self.assertIn("都是算30天又不是自然月", result.content)
-        self.assertIn("<wechat-group-archive-evidence>", result.content)
+        self.assertNotIn("<wechat-group-archive-evidence>", result.content)
         self.assertIn("<wechat-group-reply-policy>", result.content)
-
-        conf()["wechat_group_recent_context_enabled"] = False
-        disabled_result = WechatGroupHumanizedContextBuilder(FakeChannel(self.archive)).build(
-            msg=self._msg(text="@LightBot 你说说是自然月吗"),
-            user_content="你说说是自然月吗",
-            trigger_source="direct_reply",
-        )
-
-        self.assertNotIn("<recent-wechat-group-transcript>", disabled_result.content)
-        self.assertIn("<wechat-group-archive-evidence>", disabled_result.content)
 
     def test_free_reply_uses_recent_conversation_only(self):
         class FakeChannel:
@@ -700,30 +593,30 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             room_id="room@@a",
             sender_nickname="Bob",
             text="我弄好了",
-            created_at=3900,
+            created_at=9900,
         )
         self.archive.record_assistant_reply(
             room_id="room@@a",
             room_name="Room",
             content="刚才机器人真实发出的消息",
-            created_at=3950,
+            created_at=9950,
         )
         self.archive.record_message(
             message_id="current",
             room_id="room@@a",
             sender_nickname="Alice",
             text="有用吗",
-            created_at=4000,
+            created_at=10000,
         )
 
         result = WechatGroupHumanizedContextBuilder(FakeChannel(self.archive)).build(
-            msg=self._msg(text="有用吗", message_id="current", ts=4000, is_at=False),
+            msg=self._msg(text="有用吗", message_id="current", ts=10000, is_at=False),
             user_content="有用吗",
             trigger_source="free_reply",
             is_free_reply=True,
         )
 
-        self.assertIn("<recent-wechat-group-transcript>", result.content)
+        self.assertIn("<recent-wechat-group-transcript", result.content)
         self.assertIn("我弄好了", result.content)
         self.assertIn("刚才机器人真实发出的消息", result.content)
         self.assertNotIn("旧投屏话题", result.content)
@@ -731,7 +624,7 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
         self.assertNotIn("<local-extractive-summary>", result.content)
         self.assertNotIn("<wechat-group-focus>", result.content)
 
-    def test_builder_respects_link_policy_switch(self):
+    def test_builder_always_keeps_reference_policy(self):
         class FakeChannel:
             def __init__(self, archive):
                 self.archive = archive
@@ -757,16 +650,13 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             def _infer_multimodal_trigger_source(self, msg):
                 return "direct_reply"
 
-        conf()["wechat_group_reference_policy_enabled"] = True
-        conf()["wechat_group_link_policy_enabled"] = False
-
         result = WechatGroupHumanizedContextBuilder(FakeChannel(self.archive)).build(
             msg=self._msg(text="@LightBot read https://example.test"),
             user_content="read https://example.test",
             trigger_source="direct_reply",
         )
 
-        self.assertNotIn("<wechat-group-reference-policy>", result.content)
+        self.assertIn("<wechat-group-reference-policy>", result.content)
 
 
 class WechatGroupReplyCleanupTest(unittest.TestCase):

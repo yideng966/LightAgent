@@ -16,11 +16,6 @@ from channel.wechat_group.wechat_group_client import (
     WechatGroupClient,
     get_wechat_group_sidecar_memory_path,
 )
-from channel.wechat_group.wechat_group_context import (
-    build_safe_wechat_group_recent_context_block_from_rows,
-    build_wechat_group_recent_context_block,
-    build_wechat_group_recent_context_block_from_rows,
-)
 from channel.wechat_group.wechat_group_context_service import WechatGroupContextService
 from channel.wechat_group.wechat_group_emotion_service import WechatGroupEmotionService
 from channel.wechat_group.wechat_group_identity_service import WechatGroupIdentityService
@@ -59,8 +54,6 @@ from channel.wechat_group.wechat_group_sticker_service import WechatGroupSticker
 from channel.wechat_group.wechat_group_transport import project_wechat_message_type
 from channel.wechat_group.wechat_group_focus_service import WechatGroupFocusService
 from channel.wechat_group.wechat_group_humanized_context import (
-    WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT,
-    WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES,
     WechatGroupHumanizedContextBuilder,
 )
 from channel.wechat_group.wechat_group_free_reply import (
@@ -74,10 +67,8 @@ from channel.wechat_group.wechat_group_free_reply import (
 from channel.wechat_group.wechat_group_free_reply_judge import WechatGroupFreeReplyJudge
 from channel.wechat_group.wechat_group_free_reply_scorer import WechatGroupFreeReplyScorer
 from channel.wechat_group.wechat_group_free_reply_worker import WechatGroupFreeReplyWorkerPool
-from channel.wechat_group.wechat_group_free_reply_context import is_explicit_bot_followup_text
 from channel.wechat_group.wechat_group_session_policy import (
     WechatGroupSessionPolicy,
-    wechat_group_context_engine_v2_enabled,
 )
 from channel.wechat_group.wechat_group_reply_coordinator import (
     WechatGroupReplyCoordinator,
@@ -85,6 +76,9 @@ from channel.wechat_group.wechat_group_reply_coordinator import (
 from channel.wechat_group.wechat_group_intent_router import WechatGroupIntentRouter
 from channel.wechat_group.wechat_group_rolling_summary import (
     WechatGroupRollingSummaryService,
+)
+from channel.wechat_group.wechat_group_timeline_service import (
+    WechatGroupTimelineService,
 )
 from channel.wechat_group.wechat_group_reply_cleanup import cleanup_wechat_group_reply_text
 from channel.wechat_group.wechat_group_reply_policy import (
@@ -106,9 +100,6 @@ WECHAT_GROUP_VOICE_INTERACTION_FORCE_REPLY = "force_reply"
 WECHAT_GROUP_VOICE_INTERACTION_FREE_REPLY = "free_reply"
 WECHAT_GROUP_VOICE_INTERACTION_IGNORE = "ignore"
 WECHAT_GROUP_DEFAULT_IMAGE_REPLY_QUESTION = "请根据这张图片作出简短回应。"
-WECHAT_GROUP_AGENT_HISTORY_FRESH = "fresh"
-WECHAT_GROUP_AGENT_HISTORY_INTERACTIVE = "interactive_session"
-WECHAT_GROUP_AGENT_HISTORY_OBSERVE_ONLY = "observe_only"
 WECHAT_GROUP_MEMBERSHIP_EVENT_TTL_SECONDS = 600
 WECHAT_GROUP_MEMBERSHIP_EVENT_CACHE_SIZE = 512
 WECHAT_GROUP_TRANSIENT_MODEL_ERROR_FALLBACK = "别@我了哥，没Token了。"
@@ -256,37 +247,6 @@ def _is_archived_image_message(item) -> bool:
     )
 
 
-def select_wechat_group_agent_history_mode(
-    trigger_source: str,
-    text: str,
-    is_free_reply: bool = False,
-    local_decision: dict = None,
-    llm_decision: dict = None,
-) -> str:
-    source = str(trigger_source or "").strip()
-    local = local_decision if isinstance(local_decision, dict) else {}
-    llm = llm_decision if isinstance(llm_decision, dict) else {}
-    addressee = local.get("addressee") if isinstance(local.get("addressee"), dict) else {}
-    if is_free_reply:
-        target = str(llm.get("target") or addressee.get("target_kind") or "unknown")
-        follows_bot = bool(
-            llm.get("is_followup_to_bot") is True
-            or addressee.get("is_followup_to_bot") is True
-        )
-        if target == "bot":
-            return (
-                WECHAT_GROUP_AGENT_HISTORY_INTERACTIVE
-                if follows_bot
-                else WECHAT_GROUP_AGENT_HISTORY_FRESH
-            )
-        return WECHAT_GROUP_AGENT_HISTORY_OBSERVE_ONLY
-    if source == "quote_self":
-        return WECHAT_GROUP_AGENT_HISTORY_INTERACTIVE
-    if is_explicit_bot_followup_text(text):
-        return WECHAT_GROUP_AGENT_HISTORY_INTERACTIVE
-    return WECHAT_GROUP_AGENT_HISTORY_FRESH
-
-
 class WechatGroupChannel(ChatChannel):
     channel_type = const.WECHAT_GROUP
     NOT_SUPPORT_REPLYTYPE = []
@@ -375,7 +335,7 @@ class WechatGroupChannel(ChatChannel):
         self.report_startup_success()
 
     def _handle(self, context):
-        if not context or not wechat_group_context_engine_v2_enabled():
+        if not context:
             return super()._handle(context)
         msg = context.get("msg")
         if not msg or not getattr(msg, "is_group", False):
@@ -387,9 +347,6 @@ class WechatGroupChannel(ChatChannel):
                 or ""
             )
             priority = 10 if context.get("wechat_group_is_free_reply") is True else 0
-            if not conf().get("wechat_group_room_singleflight_enabled", True):
-                self._refresh_v2_request_context(context)
-                return super()._handle(context)
             with self.reply_coordinator.turn(room_id, priority=priority):
                 self._refresh_v2_request_context(context)
                 return super()._handle(context)
@@ -400,8 +357,6 @@ class WechatGroupChannel(ChatChannel):
             )
 
     def _refresh_v2_request_context(self, context) -> None:
-        if not conf().get("wechat_group_humanized_context_enabled", True):
-            return
         msg = context.get("msg")
         raw_text = str(
             context.get("wechat_group_user_content") or context.content or ""
@@ -412,18 +367,85 @@ class WechatGroupChannel(ChatChannel):
         context["wechat_group_suggested_tool_names"] = list(
             intent_route.suggested_tool_names
         )
-        result = WechatGroupHumanizedContextBuilder(self).build(
-            msg=msg,
-            user_content=raw_text,
-            trigger_source=str(context.get("wechat_group_trigger_source") or ""),
-            include_quote=not context.get("wechat_group_skip_multimodal_quote", False),
-            reply_mode=str(context.get("wechat_group_free_reply_mode") or ""),
-            is_free_reply=context.get("wechat_group_is_free_reply") is True,
-            request_context=context,
+        try:
+            result = WechatGroupHumanizedContextBuilder(self).build(
+                msg=msg,
+                user_content=raw_text,
+                trigger_source=str(context.get("wechat_group_trigger_source") or ""),
+                include_quote=not context.get("wechat_group_skip_multimodal_quote", False),
+                reply_mode=str(context.get("wechat_group_free_reply_mode") or ""),
+                is_free_reply=context.get("wechat_group_is_free_reply") is True,
+                request_context=context,
+            )
+            for key, value in result.metadata.items():
+                context[key] = value
+            context.content = result.content
+        except Exception as e:
+            logger.warning(
+                "[wechat_group] V2 context build failed, using minimal safe context: %s",
+                e,
+            )
+            self._apply_minimal_safe_context(context, msg, raw_text)
+
+    def _apply_minimal_safe_context(self, context, msg, raw_text: str) -> None:
+        source = str(context.get("wechat_group_trigger_source") or "")
+        room_scope = _wechat_group_stable_room_scope(msg)
+        member_scope = _wechat_group_stable_member_scope(msg)
+        identity_confirmed = (
+            getattr(msg, "wechat_group_identity_requires_confirmation", False)
+            is not True
         )
-        for key, value in result.metadata.items():
-            context[key] = value
-        context.content = result.content
+        blocks = [
+            build_wechat_group_admin_policy_block(
+                room_scope,
+                member_scope,
+                identity_confirmed=identity_confirmed,
+            ),
+            build_wechat_group_mention_verification_block(msg, source),
+            build_wechat_group_addressee_policy_block(msg, source),
+            build_wechat_group_reply_policy_block(
+                source,
+                reply_mode=str(context.get("wechat_group_free_reply_mode") or ""),
+            ),
+        ]
+        if not should_skip_persona_for_message(msg):
+            persona = get_wechat_group_persona_config()
+            blocks.append(build_wechat_group_persona_block(persona["prompt"]))
+            context["wechat_group_persona_preset_id"] = persona["preset_id"]
+        try:
+            timeline = WechatGroupTimelineService(self.archive).snapshot(
+                room_scope,
+                current_message_id=str(getattr(msg, "msg_id", "") or ""),
+                limit=4,
+                minutes=10,
+                now=int(getattr(msg, "create_time", 0) or time.time()),
+            )
+            recent_block = timeline.render_recent_block(max_chars=800)
+            if recent_block:
+                blocks.append(recent_block)
+                context["wechat_group_recent_context_injected"] = True
+            context["wechat_group_room_revision_before"] = (
+                timeline.revision.to_dict()
+            )
+        except Exception as recent_error:
+            logger.warning(
+                "[wechat_group] minimal recent snapshot failed: %s",
+                recent_error,
+            )
+        context["wechat_group_is_admin"] = bool(
+            identity_confirmed
+            and is_wechat_group_admin(room_scope, member_scope)
+        )
+        context["wechat_group_context_mode"] = "minimal"
+        context["wechat_group_context_diagnostics"] = {
+            "fallback": "context_builder_error",
+        }
+        safe_blocks = [block for block in blocks if block]
+        context.content = (
+            "{}\n\n{}".format("\n\n".join(safe_blocks), raw_text).strip()
+            if safe_blocks
+            else raw_text
+        )
 
     def stop(self):
         self.free_reply_worker.stop()
@@ -1611,155 +1633,31 @@ class WechatGroupChannel(ChatChannel):
             or self._infer_multimodal_trigger_source(msg)
         )
         context["wechat_group_trigger_source"] = trigger_source
-        if wechat_group_context_engine_v2_enabled():
-            session_decision = self.session_policy.resolve(
-                stable_room_id=context.get("wechat_group_stable_room_id") or "",
-                stable_member_id=context.get("wechat_group_stable_member_id") or "",
-                fallback_member_id=getattr(msg, "actual_user_id", ""),
-                trigger_source=trigger_source,
-                text=context.get("wechat_group_user_content") or context.content,
-                is_free_reply=context.get("wechat_group_is_free_reply") is True,
-                local_decision=(
-                    context.get("wechat_group_free_reply_decision")
-                    or kwargs.get("wechat_group_free_reply_decision")
-                    or {}
-                ),
-                llm_decision=(
-                    context.get("wechat_group_free_reply_llm_decision")
-                    or kwargs.get("wechat_group_free_reply_llm_decision")
-                    or {}
-                ),
-                is_quote_self=bool(getattr(msg, "is_quote_self", False)),
-            )
-            for key, value in session_decision.to_context().items():
-                context[key] = value
-            history_mode = session_decision.history_mode
-        else:
-            history_mode = str(
-                context.get("wechat_group_agent_history_mode")
-                or kwargs.get("wechat_group_agent_history_mode")
-                or select_wechat_group_agent_history_mode(
-                    trigger_source,
-                    context.get("wechat_group_user_content") or context.content,
-                    is_free_reply=context.get("wechat_group_is_free_reply") is True,
-                )
-            )
-        context["wechat_group_agent_history_mode"] = history_mode
-        if conf().get("wechat_group_humanized_context_enabled", True):
-            if wechat_group_context_engine_v2_enabled():
-                # V2 rebuilds one immutable snapshot after the request wins
-                # the room coordinator, so queued work never uses stale facts.
-                return context
-            try:
-                result = WechatGroupHumanizedContextBuilder(self).build(
-                    msg=msg,
-                    user_content=context.content,
-                    trigger_source=trigger_source,
-                    include_quote=not context.get("wechat_group_skip_multimodal_quote", False),
-                    reply_mode=reply_mode,
-                    is_free_reply=context.get("wechat_group_is_free_reply") is True,
-                    request_context=context,
-                )
-                for key, value in result.metadata.items():
-                    context[key] = value
-                context.content = result.content
-                return context
-            except Exception as e:
-                logger.warning("[wechat_group] failed to build humanized context: {}".format(e))
-        is_free_reply = context.get("wechat_group_is_free_reply") is True
-        focus = {} if is_free_reply else self._resolve_focus_context(msg, context.content)
-        if focus:
-            context["wechat_group_focus"] = focus
-        blocks = []
-        room_scope = _wechat_group_stable_room_scope(msg)
-        member_scope = _wechat_group_stable_member_scope(msg)
-        identity_confirmed = getattr(msg, "wechat_group_identity_requires_confirmation", False) is not True
-        admin_policy_block = build_wechat_group_admin_policy_block(
-            room_scope,
-            member_scope,
-            identity_confirmed=identity_confirmed,
-        )
-        if admin_policy_block:
-            context["wechat_group_is_admin"] = identity_confirmed and is_wechat_group_admin(room_scope, member_scope)
-            blocks.append(admin_policy_block)
-        if conf().get("wechat_group_reply_policy_enabled", True):
-            blocks.append(build_wechat_group_mention_verification_block(msg, trigger_source))
-            blocks.append(build_wechat_group_addressee_policy_block(msg, trigger_source))
-            blocks.append(
-                build_wechat_group_reply_policy_block(
-                    trigger_source,
-                    reply_mode=reply_mode,
-                )
-            )
-        if should_skip_persona_for_message(msg):
-            context["wechat_group_persona_skipped"] = True
-        else:
-            persona = get_wechat_group_persona_config()
-            block = build_wechat_group_persona_block(persona["prompt"])
-            if block:
-                context["wechat_group_persona_preset_id"] = persona["preset_id"]
-                blocks.append(block)
-        if is_free_reply:
-            getter = getattr(self.archive, "get_recent_conversation_messages", None)
-            rows = getter(
-                room_scope,
-                limit=WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT,
-                minutes=WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES,
-                now=getattr(msg, "create_time", None),
-            ) if callable(getter) else self.archive.get_recent_messages(
-                room_scope,
-                limit=WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT,
-                minutes=WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES,
-                now=getattr(msg, "create_time", None),
-            )
-            rows = [
-                row for row in rows or []
-                if str(row.get("message_id") or "") != str(getattr(msg, "msg_id", "") or "")
-            ]
-            recent_block = build_safe_wechat_group_recent_context_block_from_rows(rows)
-        else:
-            recent_block = self._build_recent_context_block(msg, focus=focus)
-        if recent_block:
-            blocks.append(recent_block)
-            context["wechat_group_recent_context_injected"] = True
-        focus_block = self._build_focus_context_block(focus)
-        if focus_block:
-            blocks.append(focus_block)
-            context["wechat_group_focus_injected"] = True
-        memory_block = self._build_memory_context_block(msg, context.content)
-        if memory_block:
-            blocks.append(memory_block)
-            context["wechat_group_memory_injected"] = True
-        style_block = self._build_style_context_block(msg)
-        if style_block:
-            blocks.append(style_block)
-            context["wechat_group_style_injected"] = True
-        emotion_block = self._build_emotion_context_block(msg)
-        if emotion_block:
-            blocks.append(emotion_block)
-            context["wechat_group_emotion_injected"] = True
-        trigger_source = (
-            context.get("wechat_group_trigger_source")
-            or kwargs.get("wechat_group_trigger_source")
-            or self._infer_multimodal_trigger_source(msg)
-        )
-        context["wechat_group_trigger_source"] = trigger_source
-        multimodal = self._build_multimodal_context(
-            msg,
-            query=context.content,
+        session_decision = self.session_policy.resolve(
+            stable_room_id=context.get("wechat_group_stable_room_id") or "",
+            stable_member_id=context.get("wechat_group_stable_member_id") or "",
+            fallback_member_id=getattr(msg, "actual_user_id", ""),
             trigger_source=trigger_source,
-            include_quote=not context.get("wechat_group_skip_multimodal_quote", False),
+            text=context.get("wechat_group_user_content") or context.content,
+            is_free_reply=context.get("wechat_group_is_free_reply") is True,
+            local_decision=(
+                context.get("wechat_group_free_reply_decision")
+                or kwargs.get("wechat_group_free_reply_decision")
+                or {}
+            ),
+            llm_decision=(
+                context.get("wechat_group_free_reply_llm_decision")
+                or kwargs.get("wechat_group_free_reply_llm_decision")
+                or {}
+            ),
+            is_quote_self=bool(getattr(msg, "is_quote_self", False)),
         )
-        multimodal_block = multimodal.get("block") or ""
-        context["wechat_group_multimodal_diagnostics"] = multimodal.get("diagnostics") or {}
-        matched_images = multimodal.get("matched_images") or []
-        if matched_images:
-            context["wechat_group_multimodal_matched_images"] = matched_images
-        if multimodal_block:
-            blocks.append(multimodal_block)
-            context["wechat_group_multimodal_injected"] = True
-        if blocks:
-            context.content = "{}\n\n{}".format("\n\n".join(blocks), context.content).strip()
+        for key, value in session_decision.to_context().items():
+            context[key] = value
+        history_mode = session_decision.history_mode
+        context["wechat_group_agent_history_mode"] = history_mode
+        # The immutable snapshot is rebuilt after this request wins the room
+        # coordinator, so queued work never consumes stale group facts.
         return context
 
     def _decorate_reply(self, context, reply):
@@ -1809,7 +1707,7 @@ class WechatGroupChannel(ChatChannel):
                         )
                     )
                     return
-            if reply.type == ReplyType.TEXT and conf().get("wechat_group_response_cleanup_enabled", True):
+            if reply.type == ReplyType.TEXT:
                 cleaned = cleanup_wechat_group_reply_text(
                     reply.content,
                     max_chars=conf().get("wechat_group_response_cleanup_max_chars", 800),
@@ -1865,9 +1763,6 @@ class WechatGroupChannel(ChatChannel):
         self._record_sticker_reply(reply, context)
 
     def _send_text_reply(self, receiver: str, content: str, mention_ids) -> bool:
-        if not wechat_group_context_engine_v2_enabled():
-            self.client.send_text(receiver, content, mention_ids=mention_ids)
-            return True
         confirmed = getattr(self.client, "send_text_confirmed", None)
         if not callable(confirmed):
             logger.error("[wechat_group] V2 requires confirmed text sending")
@@ -1883,10 +1778,6 @@ class WechatGroupChannel(ChatChannel):
         return False
 
     def _send_media_reply(self, media_type: str, receiver: str, path: str) -> bool:
-        legacy_method = getattr(self.client, "send_{}".format(media_type))
-        if not wechat_group_context_engine_v2_enabled():
-            legacy_method(receiver, path)
-            return True
         confirmed = getattr(
             self.client,
             "send_{}_confirmed".format(media_type),
@@ -1912,8 +1803,6 @@ class WechatGroupChannel(ChatChannel):
     def _should_suppress_stale_ambient(self, context) -> bool:
         if context.get("wechat_group_stale_suppressed") is True:
             return True
-        if not wechat_group_context_engine_v2_enabled():
-            return False
         if context.get("wechat_group_is_free_reply") is not True:
             return False
         before = context.get("wechat_group_room_revision_before")
@@ -2087,6 +1976,7 @@ class WechatGroupChannel(ChatChannel):
                 return False
             pending["state"] = "committed"
             self._save_confirmed_continuation(pending)
+            self._commit_provider_continuation(request_id)
             self._sync_cached_agent_thread(session_id, thread_id)
             return True
         except Exception as e:
@@ -2130,13 +2020,18 @@ class WechatGroupChannel(ChatChannel):
 
     def _discard_pending_agent_delivery(self, context, reason: str = "") -> int:
         pending = context.get("wechat_group_pending_agent_delivery") if context else None
+        request_id = str(
+            (pending.get("request_id") if isinstance(pending, dict) else "")
+            or (context.get("request_id") if context else "")
+            or ""
+        )
+        provider_removed = self._discard_provider_continuation(request_id)
         if not isinstance(pending, dict) or pending.get("state") != "pending":
-            return 0
+            return provider_removed
         session_id = str(pending.get("owner_session_id") or "")
         thread_id = str(pending.get("thread_id") or "")
-        request_id = str(pending.get("request_id") or "")
         if not session_id or not thread_id or not request_id:
-            return 0
+            return provider_removed
         try:
             from agent.memory import get_conversation_store
 
@@ -2157,7 +2052,7 @@ class WechatGroupChannel(ChatChannel):
                 removed,
                 reason or "unspecified",
             )
-            return int(removed or 0)
+            return int(removed or 0) + provider_removed
         except Exception as e:
             logger.warning(
                 "[wechat_group] failed to discard pending agent delivery: "
@@ -2166,6 +2061,46 @@ class WechatGroupChannel(ChatChannel):
                 thread_id,
                 request_id,
                 e,
+            )
+            return provider_removed
+
+    @staticmethod
+    def _commit_provider_continuation(request_id: str) -> bool:
+        if not request_id or not conf().get(
+            "wechat_group_provider_continuation_enabled", False
+        ):
+            return False
+        try:
+            from channel.wechat_group.wechat_group_provider_continuation import (
+                ProviderContinuationStore,
+            )
+
+            return ProviderContinuationStore().commit(request_id)
+        except Exception as exc:
+            logger.warning(
+                "[ProviderContinuation] confirmed anchor commit failed: "
+                "error_type=%s",
+                type(exc).__name__,
+            )
+            return False
+
+    @staticmethod
+    def _discard_provider_continuation(request_id: str) -> int:
+        if not request_id or not conf().get(
+            "wechat_group_provider_continuation_enabled", False
+        ):
+            return 0
+        try:
+            from channel.wechat_group.wechat_group_provider_continuation import (
+                ProviderContinuationStore,
+            )
+
+            return ProviderContinuationStore().discard(request_id)
+        except Exception as exc:
+            logger.warning(
+                "[ProviderContinuation] pending anchor discard failed: "
+                "error_type=%s",
+                type(exc).__name__,
             )
             return 0
 
@@ -2187,9 +2122,7 @@ class WechatGroupChannel(ChatChannel):
             return -1
 
     def _schedule_rolling_summary(self, stable_room_id: str) -> None:
-        if not wechat_group_context_engine_v2_enabled():
-            return
-        if not conf().get("wechat_group_rolling_summary_enabled", False):
+        if not conf().get("wechat_group_rolling_summary_enabled", True):
             return
         scope = str(stable_room_id or "").strip()
         if not scope:
@@ -2206,23 +2139,6 @@ class WechatGroupChannel(ChatChannel):
                 scope,
                 exc,
             )
-
-    def _build_recent_context_block(self, msg: WechatGroupMessage, focus=None) -> str:
-        if not conf().get("wechat_group_recent_context_enabled", True):
-            return ""
-        try:
-            if focus and isinstance(focus, dict) and focus.get("messages"):
-                return build_wechat_group_recent_context_block_from_rows(focus.get("messages") or [])
-            return build_wechat_group_recent_context_block(
-                self.archive,
-                _wechat_group_stable_room_scope(msg),
-                limit=conf().get("wechat_group_recent_context_limit", 20),
-                minutes=conf().get("wechat_group_recent_context_minutes", 60),
-                now=msg.create_time,
-            )
-        except Exception as e:
-            logger.warning("[wechat_group] failed to build recent context: {}".format(e))
-            return ""
 
     def _resolve_focus_context(self, msg: WechatGroupMessage, query: str) -> dict:
         if not conf().get("wechat_group_focus_enabled", True):
@@ -2260,14 +2176,13 @@ class WechatGroupChannel(ChatChannel):
             return ""
         try:
             service = self._get_memory_service()
-            preview = service.preview_context(
+            content = service.build_prompt_block(
                 room_id=_wechat_group_stable_room_scope(msg),
                 sender_id=_wechat_group_stable_member_scope(msg),
                 query=query,
                 mentioned_sender_ids=getattr(msg, "at_list", []) or [],
                 bot_sender_id=msg.to_user_id,
             )
-            content = (preview or {}).get("content")
             return content if isinstance(content, str) else ""
         except Exception as e:
             logger.warning("[wechat_group] failed to build memory context: {}".format(e))
@@ -2921,13 +2836,6 @@ class WechatGroupChannel(ChatChannel):
             image_understanding_triggered = True
         trigger_source = "image_message" if msg.ctype == ContextType.IMAGE else "free_reply"
         reply_mode = str((llm_decision or {}).get("reply_mode") or "")
-        history_mode = select_wechat_group_agent_history_mode(
-            trigger_source,
-            content,
-            is_free_reply=True,
-            local_decision=task.get("local_decision") or {},
-            llm_decision=llm_decision or {},
-        )
         context_kwargs = {
             "isgroup": True,
             "msg": msg,
@@ -2935,7 +2843,6 @@ class WechatGroupChannel(ChatChannel):
             "wechat_group_is_free_reply": True,
             "wechat_group_trigger_source": trigger_source,
             "wechat_group_free_reply_mode": reply_mode,
-            "wechat_group_agent_history_mode": history_mode,
             "wechat_group_free_reply_decision": task.get("local_decision") or {},
             "wechat_group_free_reply_llm_decision": llm_decision or {},
         }
@@ -2949,10 +2856,6 @@ class WechatGroupChannel(ChatChannel):
             return
         context["wechat_group_free_reply_triggered"] = True
         context["wechat_group_free_reply_mode"] = reply_mode
-        history_mode = str(
-            context.get("wechat_group_agent_history_mode") or history_mode
-        )
-        context["wechat_group_agent_history_mode"] = history_mode
         context["wechat_group_free_reply_decision"] = task.get("local_decision") or {}
         context["wechat_group_free_reply_llm_decision"] = llm_decision or {}
         if image_understanding_triggered or context.get("wechat_group_multimodal_matched_images"):

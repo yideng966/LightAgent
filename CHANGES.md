@@ -2,6 +2,41 @@
 
 ## 2026-07-30
 
+### 统一微信群 V2 全群上下文并发布 2.1.23
+
+- 微信群上下文引擎固定为 V2，删除 Legacy 运行分支、模式配置、Web 引擎选择和旧轻量拼装；会话作用域继续保留并默认按 `stable_room_id + stable_member_id` 隔离，旧 `group_shared_session = true` 仅在缺少新键时映射为 room scope。
+- room timeline、24 小时 rolling summary 和相关归档证据统一读取当前稳定群内所有成员的安全消息；其他群友刚说过的话可以进入当前请求，但不会写入当前成员私有 Agent thread。recent、summary、archive 和 thread 通过来源事件 ID 去重，runtime ID 碰撞也不会扩大到其他群。
+- rolling summary 改为最近 24 小时有界重建，最多读取 500 个安全事件并保留最新 12 条原文尾部，持久化来源事件 ID，限制 1200 字符和 1 小时 freshness；摘要失败不阻塞当前回复或推进 revision。
+- Builder 异常时只回退到包含权限、收件人、人设、用户原文和同群最近 4 条安全事件的 V2 最小上下文；用户原文与最终助手文本继续按 sidecar `sent` 两阶段提交，失败、未知、静默、空正文和 stale 抑制不推进 thread、timeline、工具续接或 Provider 锚点。
+- 新增 Provider continuation capability/store 合同和严格 stable account/room/member/session/thread/Provider/model/endpoint/权限作用域，锚点只在最终非工具响应消费完成后暂存，并在微信确认发送后提交；锚点失效时同候选只本地重放一次，主备 Provider 继续从同一不可变请求源独立构造请求。当前内置 OpenAI-compatible Chat Completions 没有可用 adapter，默认仍完整本地重放且不提交远端会话 ID。
+- Web「群聊 → 拟人化」改为单一主滚动的平铺设置，只保留会话作用域、thread TTL、rolling summary、归档证据、工具续接和回复长度；删除完整上下文注入预览的界面、状态、公开 API、残留中英文文案和已固定或无效的配置项。
+
+关键文件：
+
+- `agent/protocol/agent_stream.py`
+- `bridge/agent_bridge.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_humanized_context.py`
+- `channel/wechat_group/wechat_group_request_snapshot.py`
+- `channel/wechat_group/wechat_group_rolling_summary.py`
+- `channel/wechat_group/wechat_group_archive_context.py`
+- `channel/wechat_group/wechat_group_provider_continuation.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `config.py`
+- `config-template.json`
+- `plans/20260730_微信群全景上下文与Provider会话复用方案.md`
+- `docs/releases/v2.1.23.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 模型候选隔离、Provider 续接、V2 上下文、rolling summary、发送确认、自由回复、会话策略和 Web 配置专项共 433 项通过。
+- `python -X utf8 -m unittest discover -s tests`：运行 1273 项，结果 OK，1 项按条件跳过；首次全量运行发现 1 个仍按旧装配时点断言的人设测试，更新为 V2 赢得单群队列后构建 RequestSnapshot 的实际时点后，全量复验通过。
+- 微信群 sidecar Node 回归 61 项通过；Python 编译、JavaScript 语法、发行说明校验与 `git diff --check` 通过。
+- 使用隔离数据目录运行当前 worktree 的 `python app.py`，Web-only 实例在 `127.0.0.1:9931` 返回 HTTP 200。Playwright 在 1440×900、1024×768、768×1024、375×812 和 812×375 五档视口及浅色/深色主题验收：无横向溢出、嵌套滚动、控件重叠、长文案溢出或脚本错误，目标控件不小于 44px，Legacy、折叠区、完整注入预览和无效 Provider 开关均未出现；保存重绘前后主滚动位置保持 `130px`。
+- 未连接、更新或重启远端 Docker，未操作真实微信群；真实群 canary 仍是发布后的独立验收门禁。
+
 ### 重构微信群主备模型请求与候选隔离
 
 - 新增不可变 `LLMRequestSourceSnapshot`，在候选路由前冻结 Provider 无关的消息、工具、系统提示和请求选项；主模型、熔断后的首个备用模型及后续备用模型都从同一源重新创建独立请求，不再把深拷贝已组装成品作为唯一隔离边界。

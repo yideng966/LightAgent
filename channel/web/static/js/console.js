@@ -370,52 +370,29 @@ const I18N = {
         groups_voice_interaction_ignore: '忽略语音',
         groups_voice_interaction_ignore_hint: '收到群语音后不转写、不进入回复链路，但仍保留消息归档。',
         groups_humanization_title: '拟人化上下文',
-        groups_humanization_desc: '控制群聊回复策略、证据检索、摘要、链接策略和发送前清洗。',
-        groups_humanization_enabled: '启用拟人化上下文',
-        groups_humanization_enabled_hint: '按触发来源和意图组织当前轮微信群上下文。',
-        groups_context_engine_title: '上下文与会话引擎',
-        groups_context_engine_desc: '控制 V2 灰度、线程复用与群级回复协调。',
-        groups_context_engine_mode: '引擎模式',
-        groups_context_engine_mode_hint: 'Legacy 保持原行为；V2 启用快照、线程和发送确认。',
-        groups_context_engine_legacy: 'Legacy',
-        groups_context_engine_v2: 'V2',
+        groups_humanization_desc: '配置成员会话、群聊背景、续接和回复长度。',
+        groups_context_session_title: '会话',
+        groups_context_background_title: '群聊背景',
+        groups_context_continuation_title: '续接',
+        groups_context_response_title: '回复',
         groups_context_session_scope: '会话作用域',
         groups_context_session_scope_hint: '成员隔离为默认；整群共享仅用于兼容旧配置。',
         groups_context_session_member: '按成员隔离',
         groups_context_session_room: '整群共享',
         groups_context_thread_ttl: '承接线程有效期（分钟）',
         groups_context_thread_ttl_hint: '短追问在该时间内可继续同一 Agent 线程。',
-        groups_context_singleflight: '启用单群串行回复',
-        groups_context_singleflight_hint: '同一群只生成一个最终回复，显式请求优先于自由接话。',
         groups_context_rolling_summary: '启用滚动摘要',
-        groups_context_rolling_summary_hint: '后台压缩较早群现场，不增加直接回复首包等待。',
-        groups_context_continuation: '启用安全工具续接',
-        groups_context_continuation_hint: '短时复用白名单只读工具的清洗摘要。',
-        groups_humanization_persist_raw_user_only: '历史只保存用户原文',
-        groups_humanization_persist_raw_user_only_hint: '增强提示词只进入当前轮请求，不写入后续对话历史。',
-        groups_humanization_reply_policy_enabled: '启用回复策略',
-        groups_humanization_reply_policy_enabled_hint: '区分直接 @、引用、自由回复和图片消息。',
-        groups_humanization_recent_enabled: '启用最近上下文',
-        groups_humanization_recent_enabled_hint: '仅在上下文依赖、自由回复、引用和多模态等场景按需注入 recent transcript。',
-        groups_humanization_recent_limit: '最近上下文条数',
-        groups_humanization_recent_minutes: '最近上下文分钟窗口',
+        groups_context_rolling_summary_hint: '后台压缩本群所有成员最近 24 小时的较早现场。',
+        groups_context_tool_continuation: '启用安全工具结果续接',
+        groups_context_tool_continuation_hint: '追问时短暂复用白名单只读工具的清洗结果。',
+        groups_context_provider_continuation: '启用 Provider 会话续接',
+        groups_context_provider_continuation_hint: '仅在当前 Provider 明确支持可回滚续接时可用。',
         groups_humanization_archive_evidence_enabled: '启用归档证据',
-        groups_humanization_archive_evidence_limit: '归档证据条数',
+        groups_humanization_archive_evidence_enabled_hint: '仅在需要回溯旧讨论时，检索当前群的语义相关证据。',
         groups_humanization_archive_evidence_days: '归档检索天数',
-        groups_humanization_archive_evidence_recent_limit: '近聊兜底条数',
-        groups_humanization_local_summary_enabled: '启用本地摘要',
-        groups_humanization_local_summary_limit: '摘要候选条数',
-        groups_humanization_local_summary_hours: '摘要小时窗口',
-        groups_humanization_reference_policy_enabled: '启用引用/图片策略',
-        groups_humanization_link_policy_enabled: '启用链接策略',
-        groups_humanization_response_cleanup_enabled: '启用发送前清洗',
+        groups_humanization_archive_evidence_days_hint: '限制远期证据范围，不影响最近原文和 24 小时摘要。',
         groups_humanization_response_cleanup_max_chars: '清洗后最大字符数',
-        groups_recent_enabled: '启用最近上下文',
-        groups_recent_enabled_hint: '回复前注入当前群最近聊天流水。',
-        groups_recent_limit: '消息条数',
-        groups_recent_limit_hint: '最多读取多少条最近消息。',
-        groups_recent_minutes: '时间窗口（分钟）',
-        groups_recent_minutes_hint: '只读取该时间范围内的消息。',
+        groups_humanization_response_cleanup_max_chars_hint: '限制发送到群里的最终文本长度，避免单条回复过长。',
         groups_alias_sync_cooldown_minutes: '群昵称补同步冷却时间（分钟）',
         groups_alias_sync_cooldown_minutes_hint: '群昵称缺失时，当前群最多多久补同步一次成员信息。',
         groups_basic_proxy: '代理地址',
@@ -818,7 +795,7 @@ const I18N = {
         groups_persona_title: '人设设定',
         groups_persona_desc: '只保留一份自定义人设，保存后对微信群回复生效。',
         groups_memory_title: '永久记忆',
-        groups_memory_desc: '按群维护群记忆、群友画像和本轮注入预览。',
+        groups_memory_desc: '按群维护群记忆和自动学习运行。',
         groups_profiles_title: '群友画像',
         groups_profiles_desc: '每个群独立维护画像；同一群友在当前群最多一份。',
         groups_profiles_room_filter: '所属群',
@@ -900,7 +877,7 @@ const I18N = {
         groups_memory_profile_count_label: '画像 {count}',
         groups_memory_profiles_title: '群友画像',
         groups_memory_profiles_hint: '每个群独立维护群友画像，并以稳定群和稳定成员作为唯一键。',
-        groups_memory_profiles_moved_hint: '群友画像已迁移到“群友画像”，这里仅保留群记忆、注入预览和学习运行。',
+        groups_memory_profiles_moved_hint: '群友画像已迁移到“群友画像”，这里仅保留群记忆和学习运行。',
         groups_memory_member_lookup_label: '检索群友',
         groups_memory_member_lookup_placeholder: '输入微信 ID、发送者 ID 或昵称',
         groups_memory_member_lookup_hint: '从当前群已归档聊天记录中检索；没有结果时仍可手动填写发送者 ID。',
@@ -921,12 +898,6 @@ const I18N = {
         groups_memory_profiles_empty: '当前群暂无群友画像',
         groups_memory_revisions_title: '历史版本',
         groups_memory_revisions_empty: '点击画像后查看历史版本',
-        groups_memory_preview_title: '注入预览',
-        groups_memory_preview_hint: '只读查看本轮将注入的群记忆与画像上下文，不会调用模型或写入记忆。',
-        groups_memory_preview_query: '模拟问题',
-        groups_memory_preview_mentions: '被 @ 的发送者 ID',
-        groups_memory_preview_run: '生成预览',
-        groups_memory_preview_empty: '暂无可注入记忆',
         groups_memory_tab_manual: '记忆维护',
         groups_memory_tab_auto: '学习运行',
         groups_memory_auto_title: '群记忆梦境蒸馏',
@@ -1425,52 +1396,29 @@ const I18N = {
         groups_voice_interaction_ignore: 'Ignore voice messages',
         groups_voice_interaction_ignore_hint: 'Do not transcribe or reply, while keeping the inbound message archive.',
         groups_humanization_title: 'Humanized context',
-        groups_humanization_desc: 'Controls reply policy, evidence search, summaries, link policy, and outgoing cleanup.',
-        groups_humanization_enabled: 'Enable humanized context',
-        groups_humanization_enabled_hint: 'Build current-turn WeChat group context by trigger source and intent.',
-        groups_context_engine_title: 'Context and session engine',
-        groups_context_engine_desc: 'Controls V2 rollout, thread reuse, and room-level reply coordination.',
-        groups_context_engine_mode: 'Engine mode',
-        groups_context_engine_mode_hint: 'Legacy preserves current behavior; V2 enables snapshots, threads, and send confirmation.',
-        groups_context_engine_legacy: 'Legacy',
-        groups_context_engine_v2: 'V2',
+        groups_humanization_desc: 'Configure member sessions, room context, continuation, and reply length.',
+        groups_context_session_title: 'Session',
+        groups_context_background_title: 'Room context',
+        groups_context_continuation_title: 'Continuation',
+        groups_context_response_title: 'Reply',
         groups_context_session_scope: 'Session scope',
         groups_context_session_scope_hint: 'Per-member isolation is the default; room sharing is for legacy compatibility.',
         groups_context_session_member: 'Per member',
         groups_context_session_room: 'Shared room',
         groups_context_thread_ttl: 'Follow-up thread TTL (minutes)',
         groups_context_thread_ttl_hint: 'Short follow-ups can resume the same Agent thread during this window.',
-        groups_context_singleflight: 'Enable room single-flight',
-        groups_context_singleflight_hint: 'Generate one final reply per room, prioritizing explicit requests over ambient replies.',
         groups_context_rolling_summary: 'Enable rolling summary',
-        groups_context_rolling_summary_hint: 'Compress older room context in the background without delaying direct replies.',
-        groups_context_continuation: 'Enable safe tool continuation',
-        groups_context_continuation_hint: 'Temporarily reuse sanitized summaries from allowlisted read-only tools.',
-        groups_humanization_persist_raw_user_only: 'Persist raw user text only',
-        groups_humanization_persist_raw_user_only_hint: 'Use enhanced prompts only for the current request, not future chat history.',
-        groups_humanization_reply_policy_enabled: 'Enable reply policy',
-        groups_humanization_reply_policy_enabled_hint: 'Distinguish direct @, quote, ambient reply, and image messages.',
-        groups_humanization_recent_enabled: 'Enable recent context',
-        groups_humanization_recent_enabled_hint: 'Inject recent transcript only when the request depends on context, quote, free reply, or multimodal state.',
-        groups_humanization_recent_limit: 'Recent context limit',
-        groups_humanization_recent_minutes: 'Recent context minutes',
+        groups_context_rolling_summary_hint: 'Compress older messages from every member in this room over the last 24 hours.',
+        groups_context_tool_continuation: 'Enable safe tool result continuation',
+        groups_context_tool_continuation_hint: 'Temporarily reuse sanitized results from allowlisted read-only tools.',
+        groups_context_provider_continuation: 'Enable Provider continuation',
+        groups_context_provider_continuation_hint: 'Available only when the current Provider supports rollback-safe continuation.',
         groups_humanization_archive_evidence_enabled: 'Enable archive evidence',
-        groups_humanization_archive_evidence_limit: 'Archive evidence limit',
+        groups_humanization_archive_evidence_enabled_hint: 'Retrieve semantically relevant evidence from this room only when older discussion is needed.',
         groups_humanization_archive_evidence_days: 'Archive search days',
-        groups_humanization_archive_evidence_recent_limit: 'Recent fallback limit',
-        groups_humanization_local_summary_enabled: 'Enable local summary',
-        groups_humanization_local_summary_limit: 'Summary candidate limit',
-        groups_humanization_local_summary_hours: 'Summary hours',
-        groups_humanization_reference_policy_enabled: 'Enable quote/image policy',
-        groups_humanization_link_policy_enabled: 'Enable link policy',
-        groups_humanization_response_cleanup_enabled: 'Enable outgoing cleanup',
+        groups_humanization_archive_evidence_days_hint: 'Limit older evidence without changing the recent transcript or 24-hour summary.',
         groups_humanization_response_cleanup_max_chars: 'Cleaned max chars',
-        groups_recent_enabled: 'Enable recent context',
-        groups_recent_enabled_hint: 'Inject recent messages from the current group before replying.',
-        groups_recent_limit: 'Message limit',
-        groups_recent_limit_hint: 'Maximum recent messages to read.',
-        groups_recent_minutes: 'Time window (minutes)',
-        groups_recent_minutes_hint: 'Only read messages within this time window.',
+        groups_humanization_response_cleanup_max_chars_hint: 'Limit the final text sent to the room so one reply cannot grow excessively long.',
         groups_alias_sync_cooldown_minutes: 'Alias refresh cooldown (minutes)',
         groups_alias_sync_cooldown_minutes_hint: 'When a room alias is missing, limit how often member info is resynced per group.',
         groups_basic_proxy: 'Proxy URL',
@@ -1873,7 +1821,7 @@ const I18N = {
         groups_persona_title: 'Persona',
         groups_persona_desc: 'Only one custom persona is kept. It applies to WeChat group replies after saving.',
         groups_memory_title: 'Long-term memory',
-        groups_memory_desc: 'Maintain room memory, room-scoped member profiles, and prompt injection previews.',
+        groups_memory_desc: 'Maintain room memories and automated learning runs.',
         groups_profiles_title: 'Member profiles',
         groups_profiles_desc: 'Profiles are isolated by room; each member has at most one profile in the current room.',
         groups_profiles_room_filter: 'Room',
@@ -1955,7 +1903,7 @@ const I18N = {
         groups_memory_profile_count_label: 'Profiles {count}',
         groups_memory_profiles_title: 'Member profiles',
         groups_memory_profiles_hint: 'Each room keeps independent profiles keyed by stable room and stable member.',
-        groups_memory_profiles_moved_hint: 'Member profiles moved to Member profiles. This page now keeps room memories, injection preview, and learning runs.',
+        groups_memory_profiles_moved_hint: 'Member profiles moved to Member profiles. This page now keeps room memories and learning runs.',
         groups_memory_member_lookup_label: 'Find member',
         groups_memory_member_lookup_placeholder: 'Search by WeChat ID, sender ID, or nickname',
         groups_memory_member_lookup_hint: 'Searches archived messages in the current group. You can still enter sender ID manually.',
@@ -1976,12 +1924,6 @@ const I18N = {
         groups_memory_profiles_empty: 'No member profiles for this group',
         groups_memory_revisions_title: 'Revisions',
         groups_memory_revisions_empty: 'Select a profile to view revisions',
-        groups_memory_preview_title: 'Injection preview',
-        groups_memory_preview_hint: 'Read-only preview of <wechat-group-memory>; it does not call models or write memory.',
-        groups_memory_preview_query: 'Simulated query',
-        groups_memory_preview_mentions: 'Mentioned sender IDs',
-        groups_memory_preview_run: 'Preview',
-        groups_memory_preview_empty: 'No memory would be injected',
         groups_memory_tab_manual: 'Memory',
         groups_memory_tab_auto: 'Learning',
         groups_memory_auto_title: 'Group memory Dream distillation',
@@ -10514,18 +10456,6 @@ let groupsProfilesState = {
     evolutionDirty: false,
     evolutionAction: '',
 };
-let groupsContextPreviewState = {
-    roomId: '',
-    members: [],
-    loadedRoomId: '',
-    loadingMembers: false,
-    senderId: '',
-    mentionedIds: '',
-    query: '',
-    preview: null,
-    loading: false,
-    error: '',
-};
 let groupsEmotionState = {
     selectedRoomId: '',
     loadedRoomId: '',
@@ -10628,8 +10558,12 @@ let groupsGithubEventModalState = {
 };
 let wechatGroupRoomsAutoRefreshTriggered = false;
 
-function loadGroupsView() {
+function loadGroupsView(options = {}) {
     const container = document.getElementById('groups-content');
+    const previousMain = container?.querySelector('main');
+    const savedScrollTop = options.preserveScroll && previousMain
+        ? previousMain.scrollTop
+        : null;
     if (container) {
         container.innerHTML = `<div class="h-full flex items-center justify-center text-slate-400 dark:text-slate-500 text-sm">
             <i class="fas fa-spinner fa-spin text-xs mr-2"></i>${t('groups_loading')}</div>`;
@@ -10642,6 +10576,12 @@ function loadGroupsView() {
         channelsData = data.channels || [];
         resetGroupsMembershipDraft(getWechatGroupChannel()?.extra || {});
         renderGroupsView();
+        if (savedScrollTop !== null) {
+            requestAnimationFrame(() => {
+                const currentMain = container?.querySelector('main');
+                if (currentMain) currentMain.scrollTop = savedScrollTop;
+            });
+        }
         maybeAutoRefreshWechatGroupRooms();
     }).catch(() => showGroupsStatus('groups_load_failed', true));
 }
@@ -10819,9 +10759,6 @@ function renderGroupsView(options = {}) {
     </div>`;
     if (groupsActiveSection === 'profiles') {
         ensureGroupsProfilesLoaded(extra);
-    }
-    if (groupsActiveSection === 'humanization') {
-        ensureGroupsContextPreviewLoaded(extra);
     }
     if (groupsActiveSection === 'free_reply') {
         syncFreeReplyProfileFields(extra.free_reply || {});
@@ -12045,164 +11982,50 @@ function readWechatGroupVoiceInteractionMode(saved = {}) {
 
 function buildGroupsHumanizationPanel(extra) {
     const humanization = extra.humanization || {};
-    const recent = extra.recent_context || {};
-    const contextEngine = extra.context_engine || {};
-    const settings = readWechatGroupHumanizationSettings(humanization, recent, contextEngine);
-    return `<div class="h-full w-full">
+    const settings = readWechatGroupHumanizationSettings(humanization);
+    const sectionTitle = (icon, key) => `<h3 class="text-sm font-semibold text-slate-800 dark:text-slate-100"><i class="fas ${icon} mr-2 text-primary-500"></i>${t(key)}</h3>`;
+    return `<div class="h-full w-full pb-1">
         ${buildGroupsPanelTitle('fa-user-check', 'groups_humanization_title', 'groups_humanization_desc')}
-        <details open class="mb-5 rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111]">
-            <summary class="min-h-11 cursor-pointer px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500">
-                <i class="fas fa-diagram-project mr-2 text-primary-500"></i>${t('groups_context_engine_title')}
-                <span class="block pl-6 mt-1 text-xs font-normal text-slate-500 dark:text-slate-400">${t('groups_context_engine_desc')}</span>
-            </summary>
-            <div class="border-t border-slate-200 dark:border-white/10 p-4">
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                    ${buildGroupsSegmentedControl('groups-context-engine-mode', 'groups_context_engine_mode', 'groups_context_engine_mode_hint', settings.context_engine_mode, [
-                        { value: 'legacy', label: 'groups_context_engine_legacy' },
-                        { value: 'v2', label: 'groups_context_engine_v2' },
-                    ])}
-                    ${buildGroupsSegmentedControl('groups-context-session-scope', 'groups_context_session_scope', 'groups_context_session_scope_hint', settings.session_scope, [
-                        { value: 'member', label: 'groups_context_session_member' },
-                        { value: 'room', label: 'groups_context_session_room' },
-                    ])}
-                </div>
-                <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
-                    ${buildGroupsNumberField('groups-context-thread-ttl', 'groups_context_thread_ttl', 'groups_context_thread_ttl_hint', settings.thread_followup_ttl_minutes, 1, 1440)}
-                    ${buildGroupsHumanizationToggle('groups-context-singleflight-enabled', 'groups_context_singleflight', 'groups_context_singleflight_hint', settings.room_singleflight_enabled)}
-                    ${buildGroupsHumanizationToggle('groups-context-rolling-summary-enabled', 'groups_context_rolling_summary', 'groups_context_rolling_summary_hint', settings.rolling_summary_enabled)}
-                    ${buildGroupsHumanizationToggle('groups-context-continuation-enabled', 'groups_context_continuation', 'groups_context_continuation_hint', settings.continuation_enabled)}
-                </div>
+        <section class="mt-5 space-y-3">
+            ${sectionTitle('fa-comments', 'groups_context_session_title')}
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                ${buildGroupsSegmentedControl('groups-context-session-scope', 'groups_context_session_scope', 'groups_context_session_scope_hint', settings.session_scope, [
+                    { value: 'member', label: 'groups_context_session_member' },
+                    { value: 'room', label: 'groups_context_session_room' },
+                ])}
+                ${buildGroupsNumberField('groups-context-thread-ttl', 'groups_context_thread_ttl', 'groups_context_thread_ttl_hint', settings.thread_followup_ttl_minutes, 1, 1440)}
             </div>
-        </details>
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            ${buildGroupsHumanizationToggle('groups-humanization-enabled', 'groups_humanization_enabled', 'groups_humanization_enabled_hint', settings.enabled)}
-            ${buildGroupsHumanizationToggle('groups-humanization-persist-raw-user-only', 'groups_humanization_persist_raw_user_only', 'groups_humanization_persist_raw_user_only_hint', settings.persist_raw_user_only)}
-            ${buildGroupsHumanizationToggle('groups-humanization-reply-policy-enabled', 'groups_humanization_reply_policy_enabled', 'groups_humanization_reply_policy_enabled_hint', settings.reply_policy_enabled)}
-            ${buildGroupsHumanizationToggle('groups-humanization-recent-enabled', 'groups_humanization_recent_enabled', 'groups_humanization_recent_enabled_hint', settings.recent_enabled)}
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
-            ${buildGroupsNumberField('groups-humanization-recent-limit', 'groups_humanization_recent_limit', 'groups_recent_limit_hint', settings.recent_limit)}
-            ${buildGroupsNumberField('groups-humanization-recent-minutes', 'groups_humanization_recent_minutes', 'groups_recent_minutes_hint', settings.recent_minutes)}
-            ${buildGroupsNumberField('groups-humanization-archive-evidence-limit', 'groups_humanization_archive_evidence_limit', 'groups_recent_limit_hint', settings.archive_evidence_limit)}
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mt-4">
-            ${buildGroupsHumanizationToggle('groups-humanization-archive-evidence-enabled', 'groups_humanization_archive_evidence_enabled', 'groups_humanization_archive_evidence_enabled', settings.archive_evidence_enabled)}
-            ${buildGroupsHumanizationToggle('groups-humanization-local-summary-enabled', 'groups_humanization_local_summary_enabled', 'groups_humanization_local_summary_enabled', settings.local_summary_enabled)}
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
-            ${buildGroupsNumberField('groups-humanization-archive-evidence-days', 'groups_humanization_archive_evidence_days', 'groups_humanization_archive_evidence_days', settings.archive_evidence_days)}
-            ${buildGroupsNumberField('groups-humanization-archive-evidence-recent-limit', 'groups_humanization_archive_evidence_recent_limit', 'groups_humanization_archive_evidence_recent_limit', settings.archive_evidence_recent_limit)}
-            ${buildGroupsNumberField('groups-humanization-local-summary-limit', 'groups_humanization_local_summary_limit', 'groups_humanization_local_summary_limit', settings.local_summary_limit)}
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
-            ${buildGroupsNumberField('groups-humanization-local-summary-hours', 'groups_humanization_local_summary_hours', 'groups_humanization_local_summary_hours', settings.local_summary_hours)}
-            ${buildGroupsNumberField('groups-humanization-response-cleanup-max-chars', 'groups_humanization_response_cleanup_max_chars', 'groups_humanization_response_cleanup_max_chars', settings.response_cleanup_max_chars)}
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4 mt-4">
-            ${buildGroupsHumanizationToggle('groups-humanization-reference-policy-enabled', 'groups_humanization_reference_policy_enabled', 'groups_humanization_reference_policy_enabled', settings.reference_policy_enabled)}
-            ${buildGroupsHumanizationToggle('groups-humanization-link-policy-enabled', 'groups_humanization_link_policy_enabled', 'groups_humanization_link_policy_enabled', settings.link_policy_enabled)}
-            ${buildGroupsHumanizationToggle('groups-humanization-response-cleanup-enabled', 'groups_humanization_response_cleanup_enabled', 'groups_humanization_response_cleanup_enabled', settings.response_cleanup_enabled)}
-        </div>
-        ${buildGroupsContextPreviewPanel(extra)}
+        </section>
+        <section class="mt-6 space-y-3">
+            ${sectionTitle('fa-layer-group', 'groups_context_background_title')}
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                ${buildGroupsHumanizationToggle('groups-context-rolling-summary-enabled', 'groups_context_rolling_summary', 'groups_context_rolling_summary_hint', settings.rolling_summary_enabled)}
+                ${buildGroupsHumanizationToggle('groups-humanization-archive-evidence-enabled', 'groups_humanization_archive_evidence_enabled', 'groups_humanization_archive_evidence_enabled_hint', settings.archive_evidence_enabled)}
+                ${buildGroupsNumberField('groups-humanization-archive-evidence-days', 'groups_humanization_archive_evidence_days', 'groups_humanization_archive_evidence_days_hint', settings.archive_evidence_days, 1, 365)}
+            </div>
+        </section>
+        <section class="mt-6 space-y-3">
+            ${sectionTitle('fa-link', 'groups_context_continuation_title')}
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                ${buildGroupsHumanizationToggle('groups-context-tool-continuation-enabled', 'groups_context_tool_continuation', 'groups_context_tool_continuation_hint', settings.tool_continuation_enabled)}
+                ${settings.provider_continuation_supported ? buildGroupsHumanizationToggle('groups-context-provider-continuation-enabled', 'groups_context_provider_continuation', 'groups_context_provider_continuation_hint', settings.provider_continuation_enabled) : ''}
+            </div>
+        </section>
+        <section class="mt-6 space-y-3">
+            ${sectionTitle('fa-comment-dots', 'groups_context_response_title')}
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                ${buildGroupsNumberField('groups-humanization-response-cleanup-max-chars', 'groups_humanization_response_cleanup_max_chars', 'groups_humanization_response_cleanup_max_chars_hint', settings.response_cleanup_max_chars, 100, 4000)}
+            </div>
+        </section>
     </div>`;
 }
 
-function buildGroupsContextPreviewPanel(extra) {
-    const rooms = getGroupsMembershipSelectedRooms(extra);
-    if (!rooms.some(room => room.id === groupsContextPreviewState.roomId)) {
-        groupsContextPreviewState.roomId = rooms[0]?.id || '';
-    }
-    const members = groupsContextPreviewState.members || [];
-    const content = groupsContextPreviewState.preview?.content || '';
-    return `<details class="mt-6 border-t border-slate-200 dark:border-white/10 pt-4">
-        <summary class="min-h-11 cursor-pointer py-2 text-sm font-semibold text-slate-800 dark:text-slate-100"><i class="fas fa-code mr-2 text-primary-500"></i>${currentLang === 'zh' ? '完整上下文注入预览' : 'Full context injection preview'}</summary>
-        <div class="pt-3 space-y-3"><p class="text-xs text-slate-500 dark:text-slate-400">${currentLang === 'zh' ? '只读查看群记忆、发言人画像和被提及画像的完整注入结果，不调用模型也不写入数据。' : 'Read-only preview of group memories and member profiles. It does not call a model or write data.'}</p>
-            ${rooms.length ? `<div class="grid grid-cols-1 lg:grid-cols-2 gap-3"><label><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">${currentLang === 'zh' ? '稳定群' : 'Stable group'}</span><select id="groups-context-preview-room" onchange="changeGroupsContextPreviewRoom(this.value)" class="w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-base text-slate-800 dark:text-slate-100">${rooms.map(room => `<option value="${escapeHtml(room.id)}" ${room.id === groupsContextPreviewState.roomId ? 'selected' : ''}>${escapeHtml(room.name || room.id)}</option>`).join('')}</select></label>
-            <label><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">${currentLang === 'zh' ? '发言人（可按昵称或稳定 ID 搜索）' : 'Speaker (search nickname or stable ID)'}</span><input id="groups-context-preview-sender" list="groups-context-preview-members" value="${escapeHtml(groupsContextPreviewState.senderId)}" class="w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-base text-slate-800 dark:text-slate-100"><datalist id="groups-context-preview-members">${members.map(member => `<option value="${escapeHtml(member.stable_member_id || '')}">${escapeHtml(member.sender_nickname || member.profile_nickname || member.stable_member_id || '')}</option>`).join('')}</datalist></label></div>
-            <label class="block"><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">${currentLang === 'zh' ? '被提及成员稳定 ID（逗号分隔）' : 'Mentioned stable member IDs (comma separated)'}</span><input id="groups-context-preview-mentioned" value="${escapeHtml(groupsContextPreviewState.mentionedIds)}" class="w-full min-h-11 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-base text-slate-800 dark:text-slate-100"></label>
-            <label class="block"><span class="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400">${currentLang === 'zh' ? '模拟问题' : 'Query'}</span><textarea id="groups-context-preview-query" rows="3" class="w-full rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-[#111111] px-3 py-2 text-base text-slate-800 dark:text-slate-100">${escapeHtml(groupsContextPreviewState.query)}</textarea></label>
-            <button type="button" onclick="runGroupsContextPreview()" ${groupsContextPreviewState.loading ? 'disabled' : ''} class="min-h-11 px-4 py-2 rounded-lg bg-primary-600 hover:bg-primary-700 text-sm font-medium text-white disabled:opacity-50"><i class="fas ${groupsContextPreviewState.loading ? 'fa-spinner fa-spin' : 'fa-eye'} mr-1.5"></i>${currentLang === 'zh' ? '生成预览' : 'Generate preview'}</button>` : `<p class="py-4 text-sm text-slate-500 dark:text-slate-400">${currentLang === 'zh' ? '请先选择并确认稳定群。' : 'Select and confirm a stable group first.'}</p>`}
-            ${groupsContextPreviewState.error ? `<p class="text-sm text-red-600 dark:text-red-400" role="alert">${escapeHtml(groupsContextPreviewState.error)}</p>` : ''}
-            ${content ? `<details class="rounded-lg border border-slate-200 dark:border-white/10"><summary class="min-h-11 cursor-pointer px-3 py-2 text-sm text-slate-700 dark:text-slate-200">${currentLang === 'zh' ? '查看原始注入块' : 'View raw injection block'}</summary><pre id="groups-context-preview-content" class="overflow-auto border-t border-slate-200 dark:border-white/10 p-3 text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap break-words">${escapeHtml(content)}</pre></details>` : ''}
-        </div>
-    </details>`;
-}
-
-function ensureGroupsContextPreviewLoaded(extra) {
-    const rooms = getGroupsMembershipSelectedRooms(extra);
-    if (!rooms.some(room => room.id === groupsContextPreviewState.roomId)) {
-        groupsContextPreviewState.roomId = rooms[0]?.id || '';
-        groupsContextPreviewState.loadedRoomId = '';
-        groupsContextPreviewState.members = [];
-    }
-    if (groupsContextPreviewState.roomId && groupsContextPreviewState.loadedRoomId !== groupsContextPreviewState.roomId && !groupsContextPreviewState.loadingMembers) {
-        loadGroupsContextPreviewMembers();
-    }
-}
-
-function changeGroupsContextPreviewRoom(roomId) {
-    groupsContextPreviewState.roomId = String(roomId || '');
-    groupsContextPreviewState.senderId = '';
-    groupsContextPreviewState.mentionedIds = '';
-    groupsContextPreviewState.preview = null;
-    groupsContextPreviewState.loadedRoomId = '';
-    renderGroupsView();
-    loadGroupsContextPreviewMembers();
-}
-
-async function loadGroupsContextPreviewMembers() {
-    const roomId = groupsContextPreviewState.roomId;
-    if (!roomId) return;
-    groupsContextPreviewState.loadingMembers = true;
-    try {
-        const payload = await fetchGroupMemoryJson(`/api/wechat-group/members?stable_room_id=${encodeURIComponent(roomId)}&limit=500`);
-        if (roomId !== groupsContextPreviewState.roomId) return;
-        groupsContextPreviewState.members = Array.isArray(payload.members) ? payload.members : [];
-        groupsContextPreviewState.loadedRoomId = roomId;
-    } catch (error) {
-        groupsContextPreviewState.error = error.message;
-    } finally {
-        groupsContextPreviewState.loadingMembers = false;
-        if (groupsActiveSection === 'humanization') renderGroupsView();
-    }
-}
-
-async function runGroupsContextPreview() {
-    const roomId = groupsContextPreviewState.roomId;
-    const senderId = (document.getElementById('groups-context-preview-sender')?.value || '').trim();
-    groupsContextPreviewState.senderId = senderId;
-    groupsContextPreviewState.mentionedIds = (document.getElementById('groups-context-preview-mentioned')?.value || '').trim();
-    groupsContextPreviewState.query = document.getElementById('groups-context-preview-query')?.value || '';
-    if (!roomId || !senderId) {
-        groupsContextPreviewState.error = currentLang === 'zh' ? '请选择稳定群和发言人。' : 'Select a stable group and speaker.';
-        renderGroupsView();
-        return;
-    }
-    groupsContextPreviewState.loading = true;
-    groupsContextPreviewState.error = '';
-    renderGroupsView();
-    try {
-        const payload = await fetchGroupMemoryJson('/api/wechat-group/memories/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ stable_room_id: roomId, stable_member_id: senderId, query: groupsContextPreviewState.query, mentioned_sender_ids: groupsContextPreviewState.mentionedIds.split(/[\n,]/).map(item => item.trim()).filter(Boolean) }) });
-        groupsContextPreviewState.preview = payload.preview || {};
-    } catch (error) {
-        groupsContextPreviewState.error = error.message;
-    } finally {
-        groupsContextPreviewState.loading = false;
-        renderGroupsView();
-    }
-}
-
-function readWechatGroupHumanizationSettings(saved = {}, recentCompat = {}, contextEngine = {}) {
+function readWechatGroupHumanizationSettings(saved = {}) {
     const boolValue = (id, fallback) => document.getElementById(id) ? !!document.getElementById(id).checked : fallback;
     const numberValue = (id, fallback, min = 1) => {
         const el = document.getElementById(id);
         const value = el ? Number(el.value || fallback) : Number(fallback);
         return Math.max(min, Number.isFinite(value) ? value : Number(fallback));
-    };
-    const recentSource = {
-        enabled: saved.recent_enabled ?? recentCompat.enabled ?? true,
-        limit: saved.recent_limit ?? recentCompat.limit ?? 100,
-        minutes: saved.recent_minutes ?? recentCompat.minutes ?? 1440,
     };
     const selectedValue = (name, fallback, allowed) => {
         const selected = document.querySelector(`input[name="${name}"]:checked`);
@@ -12210,34 +12033,20 @@ function readWechatGroupHumanizationSettings(saved = {}, recentCompat = {}, cont
         return allowed.includes(value) ? value : allowed[0];
     };
     return {
-        context_engine_mode: selectedValue('groups-context-engine-mode', contextEngine.mode || 'legacy', ['legacy', 'v2']),
-        session_scope: selectedValue('groups-context-session-scope', contextEngine.session_scope || 'member', ['member', 'room']),
-        thread_followup_ttl_minutes: numberValue('groups-context-thread-ttl', Number(contextEngine.thread_followup_ttl_minutes || 15)),
-        room_singleflight_enabled: boolValue('groups-context-singleflight-enabled', contextEngine.room_singleflight_enabled !== false),
-        rolling_summary_enabled: boolValue('groups-context-rolling-summary-enabled', !!contextEngine.rolling_summary_enabled),
-        continuation_enabled: boolValue('groups-context-continuation-enabled', !!contextEngine.continuation_enabled),
-        enabled: boolValue('groups-humanization-enabled', saved.enabled !== false),
-        persist_raw_user_only: boolValue('groups-humanization-persist-raw-user-only', saved.persist_raw_user_only !== false),
-        reply_policy_enabled: boolValue('groups-humanization-reply-policy-enabled', saved.reply_policy_enabled !== false),
-        recent_enabled: boolValue('groups-humanization-recent-enabled', recentSource.enabled !== false),
-        recent_limit: numberValue('groups-humanization-recent-limit', Number(recentSource.limit || 100)),
-        recent_minutes: numberValue('groups-humanization-recent-minutes', Number(recentSource.minutes || 1440)),
+        session_scope: selectedValue('groups-context-session-scope', saved.session_scope || 'member', ['member', 'room']),
+        thread_followup_ttl_minutes: numberValue('groups-context-thread-ttl', Number(saved.thread_followup_ttl_minutes || 15)),
+        rolling_summary_enabled: boolValue('groups-context-rolling-summary-enabled', saved.rolling_summary_enabled !== false),
+        tool_continuation_enabled: boolValue('groups-context-tool-continuation-enabled', !!saved.tool_continuation_enabled),
+        provider_continuation_supported: saved.provider_continuation_supported === true,
+        provider_continuation_enabled: boolValue('groups-context-provider-continuation-enabled', !!saved.provider_continuation_enabled),
         archive_evidence_enabled: boolValue('groups-humanization-archive-evidence-enabled', saved.archive_evidence_enabled !== false),
-        archive_evidence_limit: numberValue('groups-humanization-archive-evidence-limit', Number(saved.archive_evidence_limit || 48)),
         archive_evidence_days: numberValue('groups-humanization-archive-evidence-days', Number(saved.archive_evidence_days || 90)),
-        archive_evidence_recent_limit: numberValue('groups-humanization-archive-evidence-recent-limit', Number(saved.archive_evidence_recent_limit ?? 16), 0),
-        local_summary_enabled: boolValue('groups-humanization-local-summary-enabled', saved.local_summary_enabled !== false),
-        local_summary_limit: numberValue('groups-humanization-local-summary-limit', Number(saved.local_summary_limit || 100)),
-        local_summary_hours: numberValue('groups-humanization-local-summary-hours', Number(saved.local_summary_hours || 24)),
-        reference_policy_enabled: boolValue('groups-humanization-reference-policy-enabled', saved.reference_policy_enabled !== false),
-        link_policy_enabled: boolValue('groups-humanization-link-policy-enabled', saved.link_policy_enabled !== false),
-        response_cleanup_enabled: boolValue('groups-humanization-response-cleanup-enabled', saved.response_cleanup_enabled !== false),
         response_cleanup_max_chars: numberValue('groups-humanization-response-cleanup-max-chars', Number(saved.response_cleanup_max_chars || 800), 100),
     };
 }
 
 function buildGroupsHumanizationToggle(id, labelKey, hintKey, enabled) {
-    return `<div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+    return `<div class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
         <div class="flex items-center justify-between gap-3">
             <div class="min-w-0">
                 <h4 class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(labelKey)}</h4>
@@ -12253,12 +12062,12 @@ function buildGroupsHumanizationToggle(id, labelKey, hintKey, enabled) {
 
 function buildGroupsNumberField(id, labelKey, hintKey, value, min = 1, max = null) {
     const maxAttribute = max == null ? '' : `max="${Number(max)}"`;
-    return `<label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 flex flex-col">
+    return `<label class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 flex flex-col">
         <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(labelKey)}</span>
         <span class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t(hintKey)}</span>
         <span class="mt-auto pt-3">
             <input id="${id}" type="number" min="${Number(min)}" ${maxAttribute} value="${Number(value ?? min)}"
-                class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors">
+                class="w-full min-h-11 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-base sm:text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-colors">
         </span>
     </label>`;
 }
@@ -14954,7 +14763,7 @@ function getGroupsMemoryRooms(extra) {
 }
 
 function buildGroupsSegmentedControl(name, labelKey, hintKey, value, options) {
-    return `<fieldset class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
+    return `<fieldset class="rounded-lg border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
         <legend class="text-sm font-medium text-slate-800 dark:text-slate-100">${t(labelKey)}</legend>
         <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">${t(hintKey)}</p>
         <div class="grid grid-cols-2 gap-2 mt-3" role="radiogroup">
@@ -16469,7 +16278,7 @@ function saveWechatGroupSettings() {
     if (Object.prototype.hasOwnProperty.call(githubCommitNotify, 'webhook_secret')) {
         githubCommitNotifyConfig.github_commit_notify_webhook_secret = githubCommitNotify.webhook_secret;
     }
-    const humanization = readWechatGroupHumanizationSettings(extra.humanization || {}, extra.recent_context || {}, extra.context_engine || {});
+    const humanization = readWechatGroupHumanizationSettings(extra.humanization || {});
     const freeReply = readWechatGroupFreeReplySettings(extra.free_reply || {});
     const voiceInteractionMode = readWechatGroupVoiceInteractionMode(extra.voice_interaction || {});
     const freeReplyStableRoomIds = Array.isArray(freeReply.stable_room_ids) ? freeReply.stable_room_ids : [];
@@ -16497,28 +16306,15 @@ function saveWechatGroupSettings() {
                 wechat_group_alias_sync_cooldown_minutes: aliasSyncCooldownMinutes,
                 tools_web_fetch_proxy: basicProxy,
                 ...githubCommitNotifyConfig,
-                wechat_group_context_engine_mode: humanization.context_engine_mode,
                 wechat_group_session_scope: humanization.session_scope,
                 wechat_group_thread_followup_ttl_minutes: humanization.thread_followup_ttl_minutes,
-                wechat_group_room_singleflight_enabled: humanization.room_singleflight_enabled,
                 wechat_group_rolling_summary_enabled: humanization.rolling_summary_enabled,
-                wechat_group_continuation_enabled: humanization.continuation_enabled,
-                wechat_group_humanized_context_enabled: humanization.enabled,
-                wechat_group_context_persist_raw_user_only: humanization.persist_raw_user_only,
-                wechat_group_reply_policy_enabled: humanization.reply_policy_enabled,
-                wechat_group_recent_context_enabled: humanization.recent_enabled,
-                wechat_group_recent_context_limit: humanization.recent_limit,
-                wechat_group_recent_context_minutes: humanization.recent_minutes,
+                wechat_group_tool_continuation_enabled: humanization.tool_continuation_enabled,
+                ...(humanization.provider_continuation_supported ? {
+                    wechat_group_provider_continuation_enabled: humanization.provider_continuation_enabled,
+                } : {}),
                 wechat_group_archive_evidence_enabled: humanization.archive_evidence_enabled,
-                wechat_group_archive_evidence_limit: humanization.archive_evidence_limit,
                 wechat_group_archive_evidence_days: humanization.archive_evidence_days,
-                wechat_group_archive_evidence_recent_limit: humanization.archive_evidence_recent_limit,
-                wechat_group_local_summary_enabled: humanization.local_summary_enabled,
-                wechat_group_local_summary_limit: humanization.local_summary_limit,
-                wechat_group_local_summary_hours: humanization.local_summary_hours,
-                wechat_group_reference_policy_enabled: humanization.reference_policy_enabled,
-                wechat_group_link_policy_enabled: humanization.link_policy_enabled,
-                wechat_group_response_cleanup_enabled: humanization.response_cleanup_enabled,
                 wechat_group_response_cleanup_max_chars: humanization.response_cleanup_max_chars,
                 wechat_group_free_reply_enabled: freeReply.enabled,
                 wechat_group_free_reply_stable_room_ids: freeReplyStableRoomIds,
@@ -16593,7 +16389,7 @@ function saveWechatGroupSettings() {
                 } else {
                     showGroupsStatus('wechat_group_settings_saved', false);
                 }
-                loadGroupsView();
+                loadGroupsView({ preserveScroll: true });
             } else {
                 showChannelStatus('wechat_group', 'wechat_group_settings_saved', false);
                 loadChannelsView();

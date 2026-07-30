@@ -25,7 +25,6 @@ class WechatGroupContextPolicyDecision:
     recent_max_chars: int
     include_archive_evidence: bool = False
     include_focus: bool = False
-    include_local_summary: bool = False
     include_rolling_summary: bool = False
     reason: str = ""
 
@@ -104,5 +103,6 @@ class WechatGroupContextPolicy:
             recent_limit=12,
             recent_minutes=30,
             recent_max_chars=2400,
+            include_rolling_summary=True,
             reason=reason,
         )

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 from uuid import uuid4
 
 from agent.memory import get_conversation_store
@@ -31,6 +31,8 @@ class WechatGroupRequestSnapshot:
     owner_session_id: str = ""
     thread_id: str = ""
     thread_action: str = ""
+    included_source_event_ids: Tuple[str, ...] = ()
+    excluded_source_event_ids: Tuple[str, ...] = ()
     diagnostics: Dict[str, Any] = field(default_factory=dict)
 
     def recent_block(self, after_revision: Optional[RoomRevision] = None) -> str:
@@ -95,6 +97,16 @@ class WechatGroupRequestSnapshotFactory:
             now=current_created_at or int(time.time()),
             excluded_source_event_ids=excluded,
         )
+        included = tuple(
+            event.source_event_id
+            for event in timeline.events
+            if event.source_event_id
+        )
+        excluded_ids = tuple(
+            str(item or "").strip()
+            for item in excluded
+            if str(item or "").strip()
+        )
         return WechatGroupRequestSnapshot(
             request_id=str(request_id or uuid4().hex),
             stable_room_id=stable_room_id,
@@ -106,11 +118,14 @@ class WechatGroupRequestSnapshotFactory:
             owner_session_id=str(owner_session_id or ""),
             thread_id=str(thread_id or ""),
             thread_action=str(thread_action or ""),
+            included_source_event_ids=included,
+            excluded_source_event_ids=excluded_ids,
             diagnostics={
                 "context_mode": policy.mode,
                 "policy_reason": policy.reason,
                 "timeline_event_count": len(timeline.events),
-                "excluded_thread_event_count": len(excluded),
+                "included_source_event_count": len(included),
+                "excluded_thread_event_count": len(excluded_ids),
                 "room_revision": timeline.revision.to_dict(),
             },
         )

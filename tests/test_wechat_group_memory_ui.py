@@ -158,17 +158,29 @@ class WechatGroupMemoryUiTest(unittest.TestCase):
         self.assertIn("status !== 'success'", body)
         self.assertIn("Number(run.profile_update_count || 0) > 0", body)
 
-    def test_humanization_keeps_full_context_preview(self):
-        start = self.console_js.index("function buildGroupsContextPreviewPanel")
-        end = self.console_js.index("function ensureGroupsContextPreviewLoaded", start)
-        body = self.console_js[start:end]
+    def test_humanization_removes_full_context_preview(self):
+        self.assertNotIn("groupsContextPreviewState", self.console_js)
+        self.assertNotIn("buildGroupsContextPreviewPanel", self.console_js)
+        self.assertNotIn("ensureGroupsContextPreviewLoaded", self.console_js)
+        self.assertNotIn("groups-context-preview-room", self.console_js)
+        self.assertNotIn("groups-context-preview-sender", self.console_js)
+        self.assertNotIn("groups-context-preview-content", self.console_js)
+        self.assertNotIn("/api/wechat-group/memories/preview", self.console_js)
+        self.assertNotIn("groups_memory_preview_", self.console_js)
+        self.assertNotIn("注入预览", self.console_js)
+        self.assertNotIn("Injection preview", self.console_js)
 
-        self.assertIn("groups-context-preview-room", body)
-        self.assertIn("groups-context-preview-sender", body)
-        self.assertIn("groups-context-preview-content", body)
-        self.assertIn("/api/wechat-group/memories/preview", self.console_js)
-        self.assertIn("<wechat-group-memory>".strip(""), self.console_js)
-        self.assertIn("群记忆与画像上下文", self.console_js)
+    def test_groups_save_preserves_the_single_main_scroll_position(self):
+        loader = self._function_source("loadGroupsView", "getWechatGroupChannel")
+        saver = self._function_source(
+            "saveWechatGroupSettings",
+            "readGroupsAdminRequiredPermissions",
+        )
+
+        self.assertIn("options.preserveScroll", loader)
+        self.assertIn("previousMain.scrollTop", loader)
+        self.assertIn("currentMain.scrollTop = savedScrollTop", loader)
+        self.assertIn("loadGroupsView({ preserveScroll: true })", saver)
 
     def test_group_memory_tabs_and_dialog_are_keyboard_accessible(self):
         self.assertIn("function handleMemoryScopeKey(", self.console_js)

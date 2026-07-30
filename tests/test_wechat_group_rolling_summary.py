@@ -44,7 +44,7 @@ class WechatGroupRollingSummaryTest(unittest.TestCase):
                 "wgr_room",
                 sender_nickname="成员{}".format(index % 3),
                 text="第{}条事实 token=secret{}".format(index, index),
-                created_at=self.now + index,
+                created_at=self.now - 100 + index,
                 stable_room_id="wgr_room",
                 stable_member_id="member-{}".format(index % 3),
             )
@@ -127,6 +127,93 @@ class WechatGroupRollingSummaryTest(unittest.TestCase):
         self.assertNotIn("第0条事实", recent)
         self.assertIn("第19条事实", recent)
         self.assertEqual(12, recent.count("[text]"))
+
+    def test_summary_rebuild_uses_all_room_members_and_drops_expired_events(self):
+        self.archive.record_message(
+            "expired",
+            "wgr_room",
+            sender_nickname="过期成员",
+            text="两天前的旧事实",
+            created_at=self.now - 25 * 60 * 60,
+            stable_room_id="wgr_room",
+            stable_member_id="member-expired",
+        )
+        self._record_events(0, 20)
+        engine = FakeDreamEngine()
+        service = WechatGroupRollingSummaryService(
+            self.archive,
+            store=self.store,
+            dream_engine=engine,
+            retain_tail=12,
+        )
+
+        result = service.refresh_room("wgr_room", now=self.now)
+        prompt = engine.calls[0]["user_prompt"]
+
+        self.assertEqual("updated", result["status"])
+        self.assertIn("成员0", prompt)
+        self.assertIn("成员1", prompt)
+        self.assertIn("成员2", prompt)
+        self.assertNotIn("两天前的旧事实", prompt)
+        self.assertEqual(self.now - 24 * 60 * 60, result["window_start_at"])
+        self.assertEqual(self.now, result["window_end_at"])
+
+    def test_rebuild_does_not_merge_previous_summary_text(self):
+        self._record_events(0, 20)
+        engine = FakeDreamEngine("第一版摘要中的旧内容")
+        service = WechatGroupRollingSummaryService(
+            self.archive,
+            store=self.store,
+            dream_engine=engine,
+            retain_tail=12,
+        )
+        service.refresh_room("wgr_room", now=self.now)
+        self.archive.record_message(
+            "new-message",
+            "wgr_room",
+            sender_nickname="新成员",
+            text="新的群聊事实",
+            created_at=self.now + 1,
+            stable_room_id="wgr_room",
+            stable_member_id="member-new",
+        )
+        engine.response = "第二版摘要"
+
+        service.refresh_room("wgr_room", now=self.now + 1)
+
+        self.assertNotIn("第一版摘要中的旧内容", engine.calls[-1]["user_prompt"])
+
+    def test_summary_source_ids_survive_store_reopen_and_expire_when_stale(self):
+        self._record_events(0, 20)
+        service = WechatGroupRollingSummaryService(
+            self.archive,
+            store=self.store,
+            dream_engine=FakeDreamEngine(),
+            retain_tail=12,
+        )
+
+        service.refresh_room("wgr_room", now=self.now)
+        state = self.store.get("wgr_room")
+        reopened = WechatGroupRollingSummaryStore(self.store.db_path).get("wgr_room")
+
+        self.assertEqual(8, len(state.source_event_ids))
+        self.assertEqual(state.source_event_ids, reopened.source_event_ids)
+        self.assertEqual(
+            tuple("inbound:{}".format(index) for index in range(1, 9)),
+            reopened.source_event_ids,
+        )
+        block, fresh = service.get_prompt_context_state(
+            "wgr_room",
+            now=state.updated_at + 3600,
+        )
+        self.assertIn("wechat-group-rolling-summary", block)
+        self.assertIsNotNone(fresh)
+        stale_block, stale = service.get_prompt_context_state(
+            "wgr_room",
+            now=state.updated_at + 3601,
+        )
+        self.assertEqual("", stale_block)
+        self.assertIsNone(stale)
 
 
 if __name__ == "__main__":

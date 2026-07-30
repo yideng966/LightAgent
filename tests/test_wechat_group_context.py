@@ -9,10 +9,6 @@ from channel.wechat_group.protocol import parse_sidecar_event
 from channel.wechat_group.wechat_group_archive import WechatGroupArchive
 from channel.wechat_group.wechat_group_channel import WechatGroupChannel
 from channel.wechat_group.wechat_group_context_service import WechatGroupContextService
-from channel.wechat_group.wechat_group_context import (
-    build_wechat_group_recent_context_block,
-    build_wechat_group_recent_context_block_from_rows,
-)
 from channel.wechat_group.wechat_group_identity_service import WechatGroupIdentityService
 from channel.wechat_group.wechat_group_identity_store import WechatGroupIdentityStore
 from channel.wechat_group.wechat_group_knowledge_service import WechatGroupKnowledgeService
@@ -24,20 +20,10 @@ from channel.wechat_group.wechat_group_reply_policy import build_wechat_group_re
 from config import conf
 
 
-WECHAT_IMAGE_TRANSPORT_XML = """<?xml version="1.0"?>
-<msg>
-  <img aeskey="masked" cdnthumburl="masked" md5="masked" hevc_mid_size="31347" />
-</msg>
-"""
-
-
 class WechatGroupRecentContextTest(unittest.TestCase):
     def setUp(self):
         self._original_config = {
             "wechat_group_room_ids": conf().get("wechat_group_room_ids"),
-            "wechat_group_recent_context_enabled": conf().get("wechat_group_recent_context_enabled"),
-            "wechat_group_recent_context_limit": conf().get("wechat_group_recent_context_limit"),
-            "wechat_group_recent_context_minutes": conf().get("wechat_group_recent_context_minutes"),
             "wechat_group_record_messages": conf().get("wechat_group_record_messages"),
             "wechat_group_persona_prompt": conf().get("wechat_group_persona_prompt"),
             "wechat_group_persona_preset_id": conf().get("wechat_group_persona_preset_id"),
@@ -55,7 +41,9 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "wechat_group_focus_min_keywords": conf().get("wechat_group_focus_min_keywords"),
             "wechat_group_style_enabled": conf().get("wechat_group_style_enabled"),
             "wechat_group_emotion_enabled": conf().get("wechat_group_emotion_enabled"),
+            "wechat_group_rolling_summary_enabled": conf().get("wechat_group_rolling_summary_enabled"),
         }
+        conf()["wechat_group_rolling_summary_enabled"] = False
         self._tmp = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self._tmp.name, "wechat_group_archive.db")
         self.profile_db_path = os.path.join(self._tmp.name, "profiles.db")
@@ -68,6 +56,11 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             else:
                 conf()[key] = value
         self._tmp.cleanup()
+
+    @staticmethod
+    def _refresh_v2_context(channel, context):
+        channel._refresh_v2_request_context(context)
+        return context
 
     def _create_profile_scope(self, member_specs):
         identity = WechatGroupIdentityService(
@@ -192,31 +185,6 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         self.assertEqual("assistant_reply", rows[1]["metadata"]["source"])
         self.assertNotIn("其他群的碰撞回复", [item["text"] for item in rows])
 
-    def test_recent_context_block_can_render_focus_rows(self):
-        rows = [{
-            "created_at": 100,
-            "message_type": "text",
-            "sender_nickname": "Alice",
-            "text": "发布窗口是周五",
-        }]
-
-        block = build_wechat_group_recent_context_block_from_rows(rows)
-
-        self.assertIn("<recent-wechat-group-transcript>", block)
-        self.assertIn("发布窗口是周五", block)
-
-    def test_recent_context_treats_missing_message_type_as_text(self):
-        rows = [{
-            "created_at": 100,
-            "sender_nickname": "Alice",
-            "text": "发布窗口是周五",
-        }]
-
-        block = build_wechat_group_recent_context_block_from_rows(rows)
-
-        self.assertIn("[text] Alice: 发布窗口是周五", block)
-        self.assertNotIn("[unknown message]", block)
-
     def test_archive_recent_messages_include_parsed_metadata(self):
         archive = WechatGroupArchive(self.db_path)
         archive.record_message(
@@ -338,88 +306,9 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             [item for item in caught if "ffmpeg or avconv" in str(item.message)]
         )
 
-    def test_recent_context_block_is_compact_and_omits_other_rooms(self):
-        archive = WechatGroupArchive(self.db_path)
-        archive.record_message(
-            message_id="msg-old",
-            room_id="room@@a",
-            room_name="A群",
-            sender_id="wxid_alice",
-            sender_nickname="Alice",
-            message_type="text",
-            text="第一条消息需要被摘要",
-            created_at=1000,
-        )
-        archive.record_message(
-            message_id="msg-other",
-            room_id="room@@b",
-            room_name="B群",
-            sender_id="wxid_bob",
-            sender_nickname="Bob",
-            message_type="text",
-            text="其他群消息不应该出现",
-            created_at=1001,
-        )
-
-        block = build_wechat_group_recent_context_block(archive, "room@@a", limit=5, minutes=60, now=2000)
-
-        self.assertIn("<recent-wechat-group-transcript>", block)
-        self.assertIn("[text] Alice", block)
-        self.assertIn("第一条消息需要被摘要", block)
-        self.assertNotIn("其他群消息", block)
-
-    def test_recent_context_block_does_not_expose_media_paths_or_transport_xml(self):
-        archive = WechatGroupArchive(self.db_path)
-        archive.record_message(
-            message_id="image-1",
-            room_id="room@@a",
-            room_name="A群",
-            sender_id="wxid_alice",
-            sender_nickname="Alice",
-            message_type="image",
-            text="",
-            media_path="D:/tmp/private/image-1.jpg",
-            created_at=1000,
-        )
-        archive.record_message(
-            message_id="file-1",
-            room_id="room@@a",
-            room_name="A群",
-            sender_id="wxid_bob",
-            sender_nickname="Bob",
-            message_type="file",
-            text="",
-            media_path="C:/Users/clancy/.lightagent/private/report.pdf",
-            created_at=1001,
-        )
-        archive.record_message(
-            message_id="legacy-image-as-text",
-            room_id="room@@a",
-            room_name="A群",
-            sender_id="wxid_carol",
-            sender_nickname="Carol",
-            message_type="text",
-            text=WECHAT_IMAGE_TRANSPORT_XML,
-            media_path="",
-            created_at=1002,
-        )
-
-        block = build_wechat_group_recent_context_block(archive, "room@@a", limit=5, minutes=60, now=2000)
-
-        self.assertIn("[image message_id=image-1]", block)
-        self.assertIn("[file message_id=file-1]", block)
-        self.assertIn("[image message_id=legacy-image-as-text]", block)
-        self.assertNotIn("D:/tmp/private/image-1.jpg", block)
-        self.assertNotIn("C:/Users/clancy/.lightagent/private/report.pdf", block)
-        for transport_fragment in ("<?xml", "<img", "hevc_mid_size", "aeskey", "cdnthumburl"):
-            self.assertNotIn(transport_fragment, block)
-
     def test_channel_records_message_and_injects_recent_context_before_request(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_record_messages"] = True
-        conf()["wechat_group_recent_context_enabled"] = True
-        conf()["wechat_group_recent_context_limit"] = 5
-        conf()["wechat_group_recent_context_minutes"] = 60
         conf()["wechat_group_persona_prompt"] = ""
         conf()["wechat_group_persona_preset_id"] = ""
         archive = WechatGroupArchive(self.db_path)
@@ -449,10 +338,13 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         self.assertIsNotNone(context)
-        self.assertIn("<recent-wechat-group-transcript>", context.content)
+        self.assertIn("<recent-wechat-group-transcript", context.content)
         self.assertIn("刚才讨论了发布窗口", context.content)
         self.assertIn("Alice", context.content)
         self.assertTrue(context.content.rstrip().endswith("总结一下"))
@@ -560,20 +452,16 @@ class WechatGroupRecentContextTest(unittest.TestCase):
 
     def test_channel_injects_memory_after_recent_context_before_request(self):
         class FakeContextService:
-            def preview_context(self, **kwargs):
-                return {
-                    "content": (
-                        "<wechat-group-knowledge>\n"
-                        "[group_memory]\n发布窗口是周五晚上\n"
-                        '[speaker_profile sender_id="wxid_alice"]\n直接给结论\n'
-                        "</wechat-group-knowledge>"
-                    ),
-                    "filtered_reasons": [],
-                }
+            def build_prompt_block(self, **kwargs):
+                return (
+                    "<wechat-group-knowledge>\n"
+                    "[group_memory]\n发布窗口是周五晚上\n"
+                    '[speaker_profile sender_id="wxid_alice"]\n直接给结论\n'
+                    "</wechat-group-knowledge>"
+                )
 
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_record_messages"] = True
-        conf()["wechat_group_recent_context_enabled"] = True
         conf()["wechat_group_knowledge_enabled"] = True
         conf()["wechat_group_profile_enabled"] = True
         archive = WechatGroupArchive(self.db_path)
@@ -603,9 +491,12 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
-        recent_index = context.content.index("<recent-wechat-group-transcript>")
+        recent_index = context.content.index("<recent-wechat-group-transcript")
         memory_index = context.content.index("<wechat-group-memory>")
         request_index = context.content.rindex("总结一下")
         self.assertLess(recent_index, memory_index)
@@ -614,15 +505,12 @@ class WechatGroupRecentContextTest(unittest.TestCase):
 
     def test_channel_injects_focus_after_recent_context_before_memory(self):
         class FakeContextService:
-            def preview_context(self, **kwargs):
-                return {
-                    "content": (
-                        "<wechat-group-knowledge>\n"
-                        "[group_memory]\n发布窗口是周五晚上\n"
-                        "</wechat-group-knowledge>"
-                    ),
-                    "filtered_reasons": [],
-                }
+            def build_prompt_block(self, **kwargs):
+                return (
+                    "<wechat-group-knowledge>\n"
+                    "[group_memory]\n发布窗口是周五晚上\n"
+                    "</wechat-group-knowledge>"
+                )
 
         class FakeFocusService:
             def resolve_reply_focus(self, archive, msg, query, now=None):
@@ -650,7 +538,6 @@ class WechatGroupRecentContextTest(unittest.TestCase):
 
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_record_messages"] = True
-        conf()["wechat_group_recent_context_enabled"] = True
         conf()["wechat_group_knowledge_enabled"] = True
         conf()["wechat_group_profile_enabled"] = True
         conf()["wechat_group_focus_enabled"] = True
@@ -687,9 +574,12 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
-        recent_index = context.content.index("<recent-wechat-group-transcript>")
+        recent_index = context.content.index("<recent-wechat-group-transcript")
         focus_index = context.content.index("<wechat-group-focus")
         memory_index = context.content.index("<wechat-group-memory>")
         request_index = context.content.rindex("总结一下")
@@ -702,7 +592,6 @@ class WechatGroupRecentContextTest(unittest.TestCase):
     def test_channel_injects_recent_context_for_standalone_at(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_record_messages"] = True
-        conf()["wechat_group_recent_context_enabled"] = True
         conf()["wechat_group_focus_enabled"] = True
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
@@ -728,19 +617,21 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         self.assertIn("让gpt来帮忙了", context.content)
         self.assertIn("她不爱我了", context.content)
         self.assertIn("不爱你了吗", context.content)
-        self.assertIn("<recent-wechat-group-transcript>", context.content)
+        self.assertIn("<recent-wechat-group-transcript", context.content)
         self.assertTrue(context["wechat_group_recent_context_injected"])
         self.assertNotIn("<wechat-group-topic>", context.content)
 
     def test_channel_keeps_focus_messages_for_summary_request(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_record_messages"] = True
-        conf()["wechat_group_recent_context_enabled"] = True
         conf()["wechat_group_focus_enabled"] = True
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
@@ -765,17 +656,20 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         self.assertIn("<wechat-group-focus", context.content)
-        self.assertIn("<recent-wechat-group-transcript>", context.content)
+        self.assertIn("<recent-wechat-group-transcript", context.content)
         self.assertIn("发布窗口是周五晚上", context.content)
         self.assertIn("回归还没过", context.content)
         self.assertNotIn("<wechat-group-topic>", context.content)
 
     def test_channel_omits_memory_block_when_memory_config_disabled(self):
         class FakeContextService:
-            def preview_context(self, **kwargs):
+            def build_prompt_block(self, **kwargs):
                 raise AssertionError("context service should not be called")
 
         conf()["wechat_group_room_ids"] = ["room@@abc"]
@@ -797,7 +691,10 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         self.assertNotIn("<wechat-group-memory>", context.content)
 
@@ -838,7 +735,10 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         emotion_index = context.content.index("<wechat-group-emotion>")
         request_index = context.content.rindex("总结一下")
@@ -846,15 +746,12 @@ class WechatGroupRecentContextTest(unittest.TestCase):
 
     def test_channel_injects_style_between_memory_and_emotion(self):
         class FakeContextService:
-            def preview_context(self, **kwargs):
-                return {
-                    "content": (
-                        "<wechat-group-knowledge>\n"
-                        "[group_memory]\n本群喜欢先给结论\n"
-                        "</wechat-group-knowledge>"
-                    ),
-                    "filtered_reasons": [],
-                }
+            def build_prompt_block(self, **kwargs):
+                return (
+                    "<wechat-group-knowledge>\n"
+                    "[group_memory]\n本群喜欢先给结论\n"
+                    "</wechat-group-knowledge>"
+                )
 
         class FakeStyleService:
             def build_prompt_block_from_archive(self, archive, room_id, now=None):
@@ -907,7 +804,10 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "timestamp": 1010,
         }))
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         memory_index = context.content.index("<wechat-group-memory>")
         style_index = context.content.index("<wechat-group-style>")

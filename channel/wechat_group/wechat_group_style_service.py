@@ -44,7 +44,7 @@ class WechatGroupStyleService:
         messages = archive.get_recent_messages(
             room_id,
             limit=int(conf().get("wechat_group_style_learning_batch_limit", 100) or 100),
-            minutes=max(int(conf().get("wechat_group_recent_context_minutes", 60) or 60), 60),
+            minutes=24 * 60,
             now=now,
         )
         texts = [

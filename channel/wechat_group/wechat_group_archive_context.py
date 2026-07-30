@@ -6,10 +6,7 @@ from typing import Any, Dict, Iterable, List
 
 from channel.wechat_group.wechat_group_context import (
     build_safe_wechat_group_context_lines,
-    is_wechat_group_transport_payload,
-    sanitize_wechat_group_prompt_text,
 )
-from channel.wechat_group.wechat_group_transport import project_wechat_message_type
 
 
 def build_archive_evidence_block(
@@ -19,8 +16,9 @@ def build_archive_evidence_block(
     now: int,
     days: int = 90,
     limit: int = 48,
-    recent_limit: int = 16,
     exclude_message_id: str = "",
+    exclude_source_event_ids: Iterable[str] = (),
+    max_chars: int = 3200,
 ) -> str:
     if not archive or not room_id:
         return ""
@@ -32,19 +30,17 @@ def build_archive_evidence_block(
         limit=limit,
         exclude_message_id=exclude_message_id,
     )
-    if recent_limit and len(rows) < min(int(limit or 48), 100):
-        rows = _append_recent_fallback(
-            rows,
-            archive.get_recent_messages(
-                room_id,
-                limit=max(int(recent_limit or 0), 0),
-                minutes=max(int(days or 90), 1) * 1440,
-                now=now,
-            ),
-            limit=limit,
-            exclude_message_id=exclude_message_id,
-        )
-    lines = build_safe_wechat_group_context_lines(rows)
+    excluded_sources = {
+        str(item or "").strip()
+        for item in (exclude_source_event_ids or [])
+        if str(item or "").strip()
+    }
+    if excluded_sources:
+        rows = [
+            row for row in rows
+            if _source_event_id(row) not in excluded_sources
+        ]
+    lines = _bounded_lines(build_safe_wechat_group_context_lines(rows), max_chars)
     if not lines:
         return ""
     return "<wechat-group-archive-evidence>\n{}\n</wechat-group-archive-evidence>".format(
@@ -52,66 +48,30 @@ def build_archive_evidence_block(
     )
 
 
-def build_local_extractive_summary_block(
-    archive,
-    room_id: str,
-    now: int,
-    hours: int = 24,
-    limit: int = 100,
-    exclude_message_id: str = "",
-) -> str:
-    if not archive or not room_id:
+def _source_event_id(row: Dict[str, Any]) -> str:
+    source_id = str(row.get("source_event_id") or "").strip()
+    if source_id:
+        return source_id
+    try:
+        return "inbound:{}".format(int(row.get("id") or 0))
+    except (TypeError, ValueError):
         return ""
-    rows = archive.get_messages_for_distill(
-        room_id,
-        since_ts=int(now or 0) - max(int(hours or 24), 1) * 3600,
-        until_ts=now,
-        limit=min(max(int(limit or 100), 1), 500),
-    )
-    excluded = str(exclude_message_id or "").strip()
-    lines = []
-    for row in rows:
-        if excluded and str(row.get("message_id") or "") == excluded:
-            continue
-        if project_wechat_message_type(row.get("message_type") or "text", row.get("text")) != "text":
-            continue
-        if is_wechat_group_transport_payload(row.get("text")):
-            continue
-        text = sanitize_wechat_group_prompt_text(row.get("text"), 160)
+
+
+def _bounded_lines(lines: Iterable[str], max_chars: int) -> List[str]:
+    limit = max(int(max_chars or 3200), 200)
+    selected = []
+    used = 0
+    for line in lines or []:
+        text = str(line or "").strip()
         if not text:
             continue
-        sender = sanitize_wechat_group_prompt_text(
-            row.get("sender_nickname") or "unknown",
-            80,
-        )
-        lines.append("{}: {}".format(sender or "unknown", text))
-    if not lines:
-        return ""
-    return "<local-extractive-summary>\n{}\n</local-extractive-summary>".format(
-        "\n".join(lines)
-    )
-
-
-def _append_recent_fallback(
-    rows: Iterable[Dict[str, Any]],
-    recent_rows: Iterable[Dict[str, Any]],
-    limit: int,
-    exclude_message_id: str = "",
-) -> List[Dict[str, Any]]:
-    max_limit = min(max(int(limit or 48), 1), 100)
-    excluded = str(exclude_message_id or "").strip()
-    merged = []
-    seen = set()
-    for row in list(rows or []) + list(recent_rows or []):
-        message_id = str(row.get("message_id") or "").strip()
-        if excluded and message_id == excluded:
-            continue
-        if message_id and message_id in seen:
-            continue
-        if message_id:
-            seen.add(message_id)
-        merged.append(row)
-        if len(merged) >= max_limit:
+        addition = len(text) + (1 if selected else 0)
+        if selected and used + addition > limit:
             break
-    merged.sort(key=lambda item: (int(item.get("created_at") or 0), int(item.get("id") or 0)))
-    return merged
+        if not selected and addition > limit:
+            text = text[:limit]
+            addition = len(text)
+        selected.append(text)
+        used += addition
+    return selected

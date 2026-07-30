@@ -13,6 +13,7 @@ from channel.wechat_group.wechat_group_session_policy import (
     build_wechat_group_owner_session_id,
 )
 from config import conf
+from config import _migrate_wechat_group_context_config
 
 
 class WechatGroupConversationThreadStoreTest(unittest.TestCase):
@@ -237,6 +238,29 @@ class WechatGroupSessionPolicyTest(unittest.TestCase):
             "wechat_group:wgr_room",
             build_wechat_group_owner_session_id("wgr_room", "wgm_alice"),
         )
+
+    def test_removed_context_keys_are_migrated_once_in_memory(self):
+        legacy = {
+            "wechat_group_continuation_enabled": True,
+            "group_shared_session": True,
+        }
+
+        _migrate_wechat_group_context_config(legacy)
+
+        self.assertTrue(legacy["wechat_group_tool_continuation_enabled"])
+        self.assertEqual("room", legacy["wechat_group_session_scope"])
+        self.assertNotIn("wechat_group_continuation_enabled", legacy)
+
+        explicit = {
+            "wechat_group_continuation_enabled": True,
+            "wechat_group_tool_continuation_enabled": False,
+            "group_shared_session": True,
+            "wechat_group_session_scope": "member",
+        }
+        _migrate_wechat_group_context_config(explicit)
+        self.assertFalse(explicit["wechat_group_tool_continuation_enabled"])
+        self.assertEqual("member", explicit["wechat_group_session_scope"])
+        self.assertNotIn("wechat_group_continuation_enabled", explicit)
 
 
 if __name__ == "__main__":

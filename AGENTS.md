@@ -340,16 +340,20 @@ docker push yideng966/lightagent:latest
 - 普通群成员可以问答、查询、总结和读取上下文，但不能触发知识库写入、永久记忆写入、群记忆写入、群友画像写入、自主进化、workspace 文件写入/编辑、定时任务修改或微信群配置修改。
 - 管理员门禁必须同时包含通道层拒绝、Agent 工具过滤和 Prompt 权限提示；不能只依赖模型自觉遵守提示词。
 - 微信群稳定身份改造后，`wechat_group_room_id` / `wechat_group_sender_id` 继续表示当前 Wechaty 登录态 runtime ID；长期配置、权限、会话、归档、记忆、画像、焦点、情绪、风格、表情和 scheduler 必须优先使用显式 stable 字段。
-- 群永久记忆的唯一 Web 管理入口是「管理 → 记忆 → 群记忆」；「管理 → 知识」只管理全局 Markdown 知识库，「群聊」不得再提供重复的群永久记忆管理入口。群友画像及自主学习保留在「群聊 → 群友画像」，完整记忆与画像注入预览保留在「群聊 → 拟人化」。
+- 群永久记忆的唯一 Web 管理入口是「管理 → 记忆 → 群记忆」；「管理 → 知识」只管理全局 Markdown 知识库，「群聊」不得再提供重复的群永久记忆管理入口。群友画像及自主学习保留在「群聊 → 群友画像」；完整上下文注入预览已删除，不得恢复其 UI、状态、自动成员加载或公开 API。
 - 群记忆管理、上下文注入和 Agent 查询必须统一绑定当前 `stable_room_id`，只允许列出 `wechat_group_stable_room_ids`，不得回退展示 runtime 群快照；群记忆工具 schema 不得接收模型传入的 `room_id`。内部历史类名、配置键和数据库表名可为兼容保留 knowledge 命名，但不得据此把群永久记忆重新展示为知识。
 - 微信群归档按群查询必须优先严格匹配 `stable_room_id`；只有归档记录自身未绑定稳定群 ID 时，才允许使用 legacy `room_id` 兼容读取，不得用无条件 `stable_room_id OR room_id` 扩大检索范围。
-- 微信群成员会话默认按 `stable_room_id + stable_member_id` 隔离；旧配置缺少 `group_shared_session` 时必须按 `false` 处理，不能回退为全群共享。显式开启全群共享时保持兼容，但不要通过提高同一共享会话的 `concurrency_in_session` 解决阻塞，以免引入会话历史和回复顺序竞争。
-- 微信群 Context Engine V2 必须区分 room timeline、owner session、Agent thread、request 和 Provider transport；`new_thread` 不得清空或推进旧 session 的 `context_start_seq`，其他渠道未传 `thread_id` 时必须保持旧 session 语义。V2 thread 只持久化首个用户原文和最终助手文本，工具原始消息、thinking、增强 Prompt、runtime ID 与媒体路径不得进入可恢复历史。
-- V2 Agent turn 必须以 sidecar `send_result` 为两阶段提交边界：生成完成后只能写模型/Web 均不可见的 pending 行；仅确认 `sent` 后才允许确认 thread、记录已发送 assistant timeline、保存 continuation capsule 并刷新 Agent 缓存。发送失败、未知、超时、清洗为空、静默或 stale 抑制必须删除本请求 pending 行且不创建/续期 thread；不得把“已交给 sidecar”当作发送成功。
-- `wechat_group_context_engine_mode` 在真实群 canary 完成前保持默认 `legacy`；room single-flight 只在 V2 生效，rolling summary 与 continuation 必须可独立关闭。无法获得稳定 outbound message ID 时不得按相似文本伪造 quote-to-thread anchor。
+- 微信群会话作用域由 `wechat_group_session_scope` 控制，默认按 `stable_room_id + stable_member_id` 隔离；仅旧配置缺少新键且显式 `group_shared_session = true` 时一次性兼容映射为 `room`。不要通过提高同一共享会话的 `concurrency_in_session` 解决阻塞，以免引入会话历史和回复顺序竞争。
+- 微信群上下文引擎固定为 V2，不再读取、保存或展示 `wechat_group_context_engine_mode`，也不得恢复 Legacy 运行分支。V2 必须区分 room timeline、owner session、Agent thread、request 和 Provider transport；`new_thread` 不得清空或推进旧 session 的 `context_start_seq`，其他渠道未传 `thread_id` 时必须保持旧 session 语义。
+- room timeline、24 小时 rolling summary 和归档证据必须按当前 `stable_room_id` 汇集本群所有成员的安全公开消息；`stable_member_id` 只用于身份、权限、画像、owner session 和成员私有 Agent thread，不能用于缩小群级上下文查询。其他成员消息可以进入当前请求，但不得写入当前成员的私有 thread。
+- V2 thread 固定只持久化用户原文和最终助手文本，工具原始消息、thinking、增强 Prompt、runtime ID 与媒体路径不得进入可恢复历史；原文持久化不再由用户配置关闭。
+- V2 Agent turn 必须以 sidecar `send_result` 为两阶段提交边界：生成完成后只能写模型/Web 均不可见的 pending 行；仅确认 `sent` 后才允许确认 thread、记录已发送 assistant timeline、保存工具 continuation capsule、确认 Provider continuation anchor 并刷新 Agent 缓存。发送失败、未知、超时、清洗为空、静默或 stale 抑制必须删除本请求 pending 状态且不创建或续期 thread；不得把“已交给 sidecar”当作发送成功。
+- Provider continuation 只是可选传输优化，默认关闭；只有 Provider 明确实现 capability、请求构造、锚点提取和锚点失效分类合同时才允许启用。锚点必须按 stable account、room、member、owner session、thread、Provider、model、endpoint 和权限指纹严格隔离，失效后同候选只允许无锚点本地重放一次，主备 Provider 不得共用锚点。
+- rolling summary、归档证据、工具续接和 Provider 续接必须可独立关闭；无法获得稳定 outbound message ID 时不得按相似文本伪造 quote-to-thread anchor。
+- Web「群聊 → 拟人化」只保留真实生效的 V2 参数，采用单一页面主滚动；不得加入 `<details>/<summary>` 折叠区、引擎模式选择或完整上下文注入预览，不支持 Provider 续接时不得展示无效开关。
 - 身份恢复必须按 stable account -> stable room -> stable member 的顺序确认；未确认 account 不得确认 room，未确认 member 不得写入管理员 stable 配置或继承敏感权限。
 - legacy runtime room/member 如果在多个 stable account 下产生歧义，必须返回未解析并要求人工确认，不得按最近记录任取；在线成员解析应优先使用当前运行中 room 的 stable 映射。
-- 通道层管理员硬门禁、humanized 降级上下文、生图额度和 scheduler 会话都必须使用 stable scope；runtime 字段只用于微信真实发送和 legacy 快照。
+- 通道层管理员硬门禁、V2 安全降级上下文、生图额度和 scheduler 会话都必须使用 stable scope；runtime 字段只用于微信真实发送和 legacy 快照。
 - `wechat_group_voice_interaction_mode = ignore` 表示群语音在 sidecar 下载并由 Python 写入群归档后立即短路；`voice` / `audio` 都不得进入音频转换、ASR、自由回复、Agent、LLM、TTS 或发送链路。该模式不改变 sidecar 媒体下载和归档生命周期；如需做到侧车零下载，必须先单独规划配置同步与 JSON Lines 协议变更。
 - 群画像自主进化调用 LLM 时必须先识别模型错误 envelope（如 `{"error": true, "status_code": 503}`），HTTP 408/429/5xx 等临时供应商故障不得继续当作画像 JSON 正文解析；失败记录应保留可读 HTTP 状态且不推进归档游标。
 - GitHub 仓库事件通知属于 Webhook 到微信群的固定消息投递适配：配置 UI 放在「群聊 -> 基础设置」，只接收配置仓库并按事件/action 规则筛选，目标群只能使用已选择的 `wechat_group_stable_room_ids`；Webhook 必须先做 HMAC-SHA256 验签和 delivery 去重，配置 API 不得回显真实 Secret，`LIGHTAGENT_GITHUB_WEBHOOK_SECRET` 存在时优先于本地配置；通知只能读取代码内白名单字段，不得保存或转发原始 payload、评论正文和 Secret 扫描敏感内容，也不得进入 LLM、Agent、归档、记忆或画像链路。
@@ -385,23 +389,26 @@ docker push yideng966/lightagent:latest
 
 1. `WechatGroupChannel.handle_text()` 把 sidecar 消息包装为 `Context`。
 2. `WechatGroupChannel._compose_context()` 先调用 `super()._compose_context()`，继续执行原 `ChatChannel` 群白名单、触发词、@ 去除、`session_id`、`receiver` 和插件事件逻辑。每个 `Context` 实例必须有独立 `kwargs`，不能复用可变默认字典，避免调度任务、自由回复等标记污染后续消息。
-3. 微信群通道随后写入服务端元数据，例如 `wechat_group_room_id`、`wechat_group_sender_id`、`wechat_group_bot_sender_id`、`wechat_group_user_content`、`wechat_group_trigger_source`、`wechat_group_is_free_reply`、`wechat_group_agent_history_mode` 和 `intent_requires_scheduler`。其中 `wechat_group_user_content` 必须保存用户原文，用于后续原文持久化。
+3. 微信群通道随后写入服务端元数据，例如 runtime/stable account、room、member 身份，`wechat_group_user_content`、`wechat_group_trigger_source`、`wechat_group_owner_session_id`、`wechat_group_thread_id`、`wechat_group_session_action`、`wechat_group_agent_history_mode`、`request_id` 和 `intent_requires_scheduler`。其中 `wechat_group_user_content` 必须保存用户原文，用于后续原文持久化。
 4. `_record_inbound_message()` 先把本轮消息写入归档；随后 `WechatGroupHumanizedContextBuilder` 构造 prompt 时必须用 `exclude_message_id` 排除本轮消息，避免把用户刚问的问题当成证据。
-5. 微信群通道通过 `WechatGroupHumanizedContextBuilder` 在 `context.content` 前追加微信群专属上下文，包括 `<wechat-group-admin-policy>`、`<wechat-group-mention-verification>`、`<wechat-group-reply-policy>`、`<wechat-group-persona>`、`<wechat-group-archive-evidence>`、`<local-extractive-summary>`、`<recent-wechat-group-transcript>`、`<wechat-group-focus>`、`<wechat-group-memory>`、`<wechat-group-style>`、`<wechat-group-emotion>`、`<wechat-group-reference-policy>` 与 `<wechat-group-multimodal>`。
-6. Builder 会把注入结果回填到 `context` 元数据，例如 `wechat_group_contextual_history`、`wechat_group_archive_evidence_injected`、`wechat_group_recent_context_injected`、`wechat_group_memory_injected`、`wechat_group_multimodal_diagnostics` 和 `wechat_group_multimodal_matched_images`，供发送、诊断和测试使用。
+5. 微信群通道通过 `WechatGroupHumanizedContextBuilder` 在 `context.content` 前追加微信群专属上下文，包括 `<wechat-group-admin-policy>`、`<wechat-group-mention-verification>`、`<wechat-group-reply-policy>`、`<wechat-group-persona>`、`<wechat-group-rolling-summary>`、`<recent-wechat-group-transcript>`、按需的 `<wechat-group-archive-evidence>`、`<wechat-group-focus>`、`<wechat-group-memory>`、安全工具续接、`<wechat-group-style>`、`<wechat-group-emotion>`、`<wechat-group-reference-policy>` 与 `<wechat-group-multimodal>`。
+6. Builder 会把不可变 RequestSnapshot 和注入结果回填到 `context` 元数据，例如 `wechat_group_context_mode`、room revision、来源事件计数、rolling summary revision、`wechat_group_archive_evidence_injected`、`wechat_group_recent_context_injected`、`wechat_group_memory_injected`、`wechat_group_multimodal_diagnostics` 和 `wechat_group_multimodal_matched_images`，供发送复核、去重、诊断和测试使用。
 7. `ChatChannel._generate_reply()` 调用 `super().build_reply_content(context.content, context)`。
 8. 当 `agent` 配置为 `true` 时，`Channel.build_reply_content()` 进入 `Bridge.fetch_agent_reply()`，由 Agent 模式请求 LLM。
-9. `AgentBridge` 默认使用 `wechat_group_user_content` 预持久化用户原文；`interactive_session` 延续合法交互历史，`fresh` 空历史执行并推进持久化上下文边界，`observe_only` 在统一 execution lock 内快照旧历史、空历史运行并在所有退出路径恢复。观察轮次只以 `messages.extras.history_visibility=observe_only` 保存清洗后的 user 和最终 assistant 正文，模型恢复默认过滤，UI/审计仍可读取。
+9. `AgentBridge` 固定使用 `wechat_group_user_content` 预持久化用户原文；`new_thread` 使用新的成员私有 thread，`resume_thread` 只恢复同 stable room/member 已确认的 active thread，`observe_only` 不读取或推进交互 thread。内部 `fresh / interactive_session / observe_only` 只负责兼容 Agent 执行历史，不改变 V2 thread 所有权。
+10. TextModelRouter 默认每轮从不可变请求源重建完整本地 messages；只有显式支持且开启的 Provider adapter 才可附加远端续接锚点。最终非工具响应消费完成后只暂存 pending anchor，仍需微信确认发送成功后才能提交。
 
 按意图注入历史的规则：
 
-- `should_include_contextual_history()` 是 direct/quote/image 场景归档证据、本地摘要和普通 recent transcript 的主要门控；直接 `@` 产生的 `direct_reply` 必须进入该门控，并按拟人化页面已有开关、时间窗口和条数上限注入历史。文本中出现“刚才、上面、之前、谁说、总结、继续、引用、图片、照片、这张、链接、啥意思、什么意思”等上下文依赖表达时，其他触发来源也需要历史。普通 `free_reply` 是单独的 recent-only 策略，不能据此打开远期事实块。
-- 独立 direct reply 或 standalone @ 必须按配置注入当前 stable room 的归档证据、本地摘要和 recent transcript；关闭对应开关时不注入相应块。直接 `@` 仍使用既有 `fresh` / `interactive_session` 会话策略，不得因此恢复无关的旧成员 Agent 历史或陈旧焦点。
-- 普通 `free_reply` 只从当前 stable room 的 conversation timeline 注入最近 30 分钟、最多 12 条安全消息，包含机器人已真实发送的回复并排除当前 `message_id`；不得注入 archive evidence、local summary 或旧焦点。其他上下文依赖场景的 `<recent-wechat-group-transcript>` 才允许优先使用当前焦点消息并按配置回退归档。
-- `<wechat-group-archive-evidence>` 和 `<local-extractive-summary>` 只在非普通自由回复的上下文依赖场景注入，并且必须先按当前 stable room 过滤，再排除当前 `message_id`。`get_messages_for_distill()` 必须倒序截取最新 N 条后正序返回；本地摘要必须过滤 transport XML、base64、路径、敏感键值和 URL 查询参数。
+- `WechatGroupContextPolicy` 固定选择 `minimal / recent / contextual / recall` 深度；这些是 V2 内部策略，不是用户可选引擎。确定性命令使用 minimal，普通 direct 和 ambient 使用 recent，引用机器人、图片、多模态、明确继续和上下文短问句使用 contextual，显式总结或历史回溯使用 recall。
+- recent transcript、rolling summary 和 archive evidence 的查询作用域始终是当前 `stable_room_id` 下所有成员的安全消息，并排除当前 `message_id`；当前发言人的 stable member 不能成为群级消息过滤条件。recent、summary、archive 和当前成员 thread 必须按 `source_event_id` 去重。
+- V2 原文窗口固定由 policy 控制：minimal 最多 4 条/10 分钟，recent 最多 12 条/30 分钟，contextual 最多 24 条/2 小时，recall 最多 20 条/24 小时，并各自受字符预算约束；不得恢复全局“最近条数/分钟”配置。
+- recent、contextual 和 recall 可以注入当前群最近 24 小时 rolling summary，minimal 不注入。摘要从最多 500 个安全事件重建并保留最新 12 条原文尾部，最多 1200 字符；超过 1 小时未刷新视为不可用，生成失败不得阻塞当前回复或推进摘要 revision。
+- `<wechat-group-archive-evidence>` 仅在 recall 或明确语义需要时读取当前稳定群的相关旧证据，默认限制 90 天、12 条和统一字符预算；不得用固定厚历史替代相关性检索，也不得混入已被 recent、summary 或 thread 覆盖的来源事件。
+- 普通 `free_reply` 与 direct 共用 V2 recent + 可用 rolling summary，但不自动打开 archive evidence 或旧焦点；其他成员刚刚说过的话属于群现场，可以进入本轮上下文，但不会写入触发成员的私有 Agent thread。
 - 自由回复本地判定必须先分析近场收件人关系。“另一名群友刚陈述结果 -> 当前成员发无明确对象的短问句”命中 `likely_human_followup` 后硬抑制，Scorer、legacy Judge、active/crazy 档位均不得覆盖；“大家/谁能/有没有人”等明确开放群问题和明确机器人目标除外。
-- Scorer 与 legacy Judge 只能读取统一的安全近场投影：actor 使用当轮 opaque token，正文清洗并截断，不得携带 stable/runtime ID、XML、媒体路径、完整 URL 参数或原始 quote payload。
-- 如果 `wechat_group_humanized_context_enabled = false` 或 builder 异常，通道会降级到旧的轻量拼装路径；该降级只用于运行时兜底，不是新的目标链路。
+- Scorer 与兼容 Judge 只能读取统一的安全近场投影：actor 使用当轮 opaque token，正文清洗并截断，不得携带 stable/runtime ID、XML、媒体路径、完整 URL 参数或原始 quote payload。
+- Builder 异常时只能降级为 V2 最小安全上下文：保留权限、收件人、回复策略、人设、用户原文以及当前 stable room 最近 4 条/10 分钟安全事件；不得切换 Legacy、恢复废弃配置或读取其他群。
 
 因此 LLM 最终看到的是“通用 Agent 系统上下文 + Agent 会话历史 + 微信群增强后的当前用户消息”：
 
@@ -436,13 +443,12 @@ messages:
   当前 room_id 归档中按时间窗口和关键词检索出的证据；必须排除本轮消息，且不得暴露 message_id、media_path、本机路径、XML 或 base64。
   </wechat-group-archive-evidence>
 
-  <local-extractive-summary>
-  当前 room_id 短窗口内的本地抽取式摘要候选；只用于帮助模型组织总结，不替代长期记忆。
-  </local-extractive-summary>
+  <wechat-group-rolling-summary>
+  当前 stable_room_id 内所有成员最近 24 小时、排除最新原文尾部后的安全滚动摘要；有 freshness、来源事件和字符预算约束。
+  </wechat-group-rolling-summary>
 
   <recent-wechat-group-transcript>
-  当前 room_id 最近群聊归档，默认窗口 1440 分钟、最多 100 条。
-  standalone @ 按拟人化上下文配置注入；其他上下文依赖、引用、自由回复、图片/文件理解等请求继续按各自策略注入。
+  当前 stable_room_id 所有成员的有界最近群聊原文，窗口由 V2 policy 决定；排除当前消息以及已由摘要或当前成员 thread 覆盖的来源事件。
   </recent-wechat-group-transcript>
 
   <wechat-group-focus>
@@ -481,7 +487,7 @@ messages:
   用户本次去掉开头 @ 后的真实问题
 ```
 
-增强块只进入当前轮 LLM 请求。默认配置 `wechat_group_context_persist_raw_user_only = true` 时，`AgentBridge` 会在预持久化和本轮运行后的 Agent 内存中只保留用户原文，避免上一轮 `<wechat-group-*>` 块污染下一轮历史；关闭该配置可临时回退为旧持久化行为。这里的“用户原文”指 `_compose_context()` 增强前写入 `context["wechat_group_user_content"]` 的文本，通常是去掉开头 @ 后的真实问题。
+增强块只进入当前轮 LLM 请求。`AgentBridge` 固定只把用户原文写入 V2 可恢复 thread，避免上一轮 `<wechat-group-*>` 块污染下一轮历史；该行为不再提供关闭配置。这里的“用户原文”指 `_compose_context()` 增强前写入 `context["wechat_group_user_content"]` 的文本，通常是去掉开头 @ 后的真实问题。
 
 4.3 群永久记忆与群友画像的注入规则：
 
@@ -576,7 +582,7 @@ messages:
 - 当前微信群 `_compose_context()` 通过 `WechatGroupHumanizedContextBuilder` 统一装配当轮增强块；管理员策略、触发校验、回复策略、人设、归档证据、recent transcript、焦点、记忆、风格、情绪、引用策略和多模态都作为当前 user message 的前缀进入主链路。
 - `<wechat-group-memory>` 必须通过 `WechatGroupContextService` 或等价适配层装配，统一从 LightAgent 作用域记忆读取已过滤结果，不允许在通道层绕过 `room_id` / `sender_id` 校验直接拼接原始记忆；旧 `<wechat-group-knowledge>` 仅作为内部兼容输入，不作为新 prompt 输出目标。
 - 旧 `wechat_group_topics.db` 或旧 topic 表属于废弃数据；焦点栈初始化或首次使用时允许删除旧库或 drop 旧表，不提供历史话题恢复能力。
-- Agent 模式默认不再把微信群增强后的 `context.content` 持久化为历史；`wechat_group_context_persist_raw_user_only = true` 时，预持久化和运行后内存清洗都使用 `context["wechat_group_user_content"]` 原文。只有显式关闭该配置时，才会回退为持久化增强后 `query` 的旧行为。
+- Agent 模式不得把微信群增强后的 `context.content` 持久化为历史；预持久化、V2 pending turn 和运行后内存清洗都固定使用 `context["wechat_group_user_content"]` 原文，不再提供持久化增强 query 的回退配置。
 - 正文别名自动学习当前只允许在归档学习阶段处理“一个非机器人目标成员 + 一个非机器人显式 `@称呼` 文本”的高置信场景；不把普通文本昵称猜测、多目标映射或跨群自由匹配作为默认能力。
 - 当前正文别名自动学习的内部逻辑如下：
   - 数据来源只看归档文本消息：`message_type = text`，且消息里必须同时具备有效 `sender_id`、正文 `text`，以及 `metadata.at_list`；机器人自身 ID 来自 `metadata.self_id`，机器人展示名来自 `metadata.self_display_name`。

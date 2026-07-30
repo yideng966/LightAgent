@@ -29,18 +29,10 @@ class FakeClient:
 class WechatGroupConfirmedSendTest(unittest.TestCase):
     def setUp(self):
         self.original = {
-            "wechat_group_context_engine_mode": conf().get(
-                "wechat_group_context_engine_mode"
-            ),
-            "wechat_group_response_cleanup_enabled": conf().get(
-                "wechat_group_response_cleanup_enabled"
-            ),
             "wechat_group_record_messages": conf().get(
                 "wechat_group_record_messages"
             ),
         }
-        conf()["wechat_group_context_engine_mode"] = "v2"
-        conf()["wechat_group_response_cleanup_enabled"] = False
         conf()["wechat_group_record_messages"] = True
 
     def tearDown(self):
@@ -61,7 +53,10 @@ class WechatGroupConfirmedSendTest(unittest.TestCase):
         channel._record_emotion_reply = lambda _context: None
         channel._record_sticker_reply = lambda _reply, _context: None
         channel._wechat_group_rolling_summary_service = None
+        channel._schedule_rolling_summary = lambda _stable_room_id: None
         channel._sync_cached_agent_thread = lambda _session_id, _thread_id: 0
+        channel._commit_provider_continuation = Mock(return_value=True)
+        channel._discard_provider_continuation = Mock(return_value=0)
         return channel
 
     @staticmethod
@@ -196,6 +191,10 @@ class WechatGroupConfirmedSendTest(unittest.TestCase):
                 self.assertEqual("discarded", context[
                     "wechat_group_pending_agent_delivery"
                 ]["state"])
+                channel._commit_provider_continuation.assert_not_called()
+                channel._discard_provider_continuation.assert_called_with(
+                    context["request_id"]
+                )
                 self.assertEqual(
                     "",
                     continuation.get_prompt_block(
@@ -249,6 +248,9 @@ class WechatGroupConfirmedSendTest(unittest.TestCase):
             self.assertEqual("committed", context[
                 "wechat_group_pending_agent_delivery"
             ]["state"])
+            channel._commit_provider_continuation.assert_called_once_with(
+                context["request_id"]
+            )
             self.assertIn(
                 "public result",
                 continuation.get_prompt_block(

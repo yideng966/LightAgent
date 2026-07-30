@@ -255,7 +255,7 @@ class WechatGroupArchive:
         """Return a chronological inbound/outbound timeline for LLM routing."""
         if not room_id:
             return []
-        max_limit = min(max(int(limit or 20), 1), 300)
+        max_limit = min(max(int(limit or 20), 1), 501)
         window_minutes = max(int(minutes or 60), 1)
         until = _coerce_timestamp(now)
         cutoff = until - window_minutes * 60

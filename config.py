@@ -137,30 +137,14 @@ available_setting = {
     "wechat_group_sidecar_start_timeout": 60,
     "wechat_group_persona_preset_id": "owner-digital-twin",
     "wechat_group_persona_prompt": "",
-    "wechat_group_recent_context_enabled": True,
-    "wechat_group_recent_context_limit": 100,
-    "wechat_group_recent_context_minutes": 1440,
-    "wechat_group_humanized_context_enabled": True,
-    "wechat_group_context_persist_raw_user_only": True,
-    "wechat_group_context_engine_mode": "legacy",
     "wechat_group_session_scope": "member",
     "wechat_group_thread_followup_ttl_minutes": 15,
     "wechat_group_thread_agent_cache_max_entries": 128,
-    "wechat_group_room_singleflight_enabled": True,
-    "wechat_group_rolling_summary_enabled": False,
-    "wechat_group_continuation_enabled": False,
-    "wechat_group_continuation_ttl_minutes": 10,
-    "wechat_group_reply_policy_enabled": True,
+    "wechat_group_rolling_summary_enabled": True,
+    "wechat_group_tool_continuation_enabled": False,
+    "wechat_group_provider_continuation_enabled": False,
     "wechat_group_archive_evidence_enabled": True,
-    "wechat_group_archive_evidence_limit": 48,
     "wechat_group_archive_evidence_days": 90,
-    "wechat_group_archive_evidence_recent_limit": 16,
-    "wechat_group_local_summary_enabled": True,
-    "wechat_group_local_summary_limit": 100,
-    "wechat_group_local_summary_hours": 24,
-    "wechat_group_reference_policy_enabled": True,
-    "wechat_group_link_policy_enabled": True,
-    "wechat_group_response_cleanup_enabled": True,
     "wechat_group_response_cleanup_max_chars": 800,
     "wechat_group_memory_enabled": True,
     "wechat_group_knowledge_enabled": True,
@@ -626,6 +610,7 @@ def load_config():
     # only missing namespaces are filled in from the legacy section.
     _merge_legacy_namespace(config, legacy="tool",  canonical="tools")
     _merge_legacy_namespace(config, legacy="skill", canonical="skills")
+    _migrate_wechat_group_context_config(config)
 
     # override config with environment variables.
     # Some online deployment platforms (e.g. Railway) deploy project from github directly. So you shouldn't put your secrets like api key in a config file, instead use environment variables to override the default config.
@@ -812,6 +797,35 @@ def _merge_legacy_namespace(cfg, legacy: str, canonical: str) -> None:
             "Please rename '{}' to '{}' in your config.json.".format(
                 legacy, canonical, merged_keys, legacy, canonical,
             )
+        )
+
+
+def _migrate_wechat_group_context_config(cfg) -> None:
+    """Apply one-time in-memory migrations for removed WeChat group keys."""
+    old_tool_key = "wechat_group_continuation_enabled"
+    new_tool_key = "wechat_group_tool_continuation_enabled"
+    if new_tool_key not in cfg and old_tool_key in cfg:
+        legacy_value = cfg.get(old_tool_key)
+        cfg[new_tool_key] = (
+            legacy_value
+            if isinstance(legacy_value, bool)
+            else str(legacy_value or "").strip().lower() in {"1", "true", "yes", "on"}
+        )
+        logger.warning(
+            "[INIT] Legacy config key '%s' migrated to '%s' in memory.",
+            old_tool_key,
+            new_tool_key,
+        )
+    cfg.pop(old_tool_key, None)
+
+    if (
+        "wechat_group_session_scope" not in cfg
+        and cfg.get("group_shared_session") is True
+    ):
+        cfg["wechat_group_session_scope"] = "room"
+        logger.warning(
+            "[INIT] group_shared_session=true mapped to "
+            "wechat_group_session_scope='room' in memory."
         )
 
 

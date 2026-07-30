@@ -18,12 +18,6 @@ ACTION_RESUME_THREAD = "resume_thread"
 ACTION_OBSERVE_ONLY = "observe_only"
 
 
-def wechat_group_context_engine_v2_enabled() -> bool:
-    return str(
-        conf().get("wechat_group_context_engine_mode", "legacy") or "legacy"
-    ).lower() == "v2"
-
-
 def resolve_wechat_group_session_scope() -> str:
     configured = str(conf().get("wechat_group_session_scope", "") or "").strip().lower()
     if configured in {"member", "room"}:

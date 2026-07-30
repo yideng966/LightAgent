@@ -7,7 +7,6 @@ from channel.wechat_group.wechat_group_channel import WechatGroupChannel
 from channel.wechat_group.wechat_group_reply_coordinator import (
     WechatGroupReplyCoordinator,
 )
-from config import conf
 
 
 class WechatGroupReplyCoordinatorTest(unittest.TestCase):
@@ -77,16 +76,6 @@ class WechatGroupReplyCoordinatorTest(unittest.TestCase):
 
 
 class WechatGroupStaleAmbientTest(unittest.TestCase):
-    def setUp(self):
-        self.original = conf().get("wechat_group_context_engine_mode")
-        conf()["wechat_group_context_engine_mode"] = "v2"
-
-    def tearDown(self):
-        if self.original is None:
-            conf().pop("wechat_group_context_engine_mode", None)
-        else:
-            conf()["wechat_group_context_engine_mode"] = self.original
-
     def test_ambient_is_suppressed_when_room_revision_changes(self):
         channel = WechatGroupChannel.__new__(WechatGroupChannel)
         channel.archive = SimpleNamespace(

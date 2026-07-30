@@ -61,14 +61,30 @@ class FakeClient:
     def send_text(self, room_id, text, mention_ids=None):
         self.commands.append(("send_text", room_id, text, mention_ids or []))
 
+    def send_text_confirmed(self, room_id, text, mention_ids=None, timeout=15.0):
+        self.send_text(room_id, text, mention_ids=mention_ids)
+        return "sent"
+
     def send_file(self, room_id, path):
         self.commands.append(("send_file", room_id, path))
+
+    def send_file_confirmed(self, room_id, path, timeout=20.0):
+        self.send_file(room_id, path)
+        return "sent"
 
     def send_image(self, room_id, path):
         self.commands.append(("send_image", room_id, path))
 
+    def send_image_confirmed(self, room_id, path, timeout=20.0):
+        self.send_image(room_id, path)
+        return "sent"
+
     def send_audio(self, room_id, path):
         self.commands.append(("send_audio", room_id, path))
+
+    def send_audio_confirmed(self, room_id, path, timeout=20.0):
+        self.send_audio(room_id, path)
+        return "sent"
 
     def list_rooms(self):
         self.commands.append(("list_rooms",))
@@ -110,6 +126,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_alias_sync_cooldown_minutes": conf().get("wechat_group_alias_sync_cooldown_minutes"),
             "group_name_white_list": conf().get("group_name_white_list"),
             "group_shared_session": conf().get("group_shared_session"),
+            "wechat_group_session_scope": conf().get("wechat_group_session_scope"),
             "wechat_group_free_reply_enabled": conf().get("wechat_group_free_reply_enabled"),
             "wechat_group_voice_interaction_mode": conf().get("wechat_group_voice_interaction_mode"),
             "wechat_group_free_reply_room_ids": conf().get("wechat_group_free_reply_room_ids"),
@@ -122,7 +139,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_free_reply_scorer_enabled": conf().get("wechat_group_free_reply_scorer_enabled"),
             "wechat_group_free_reply_mute_minutes": conf().get("wechat_group_free_reply_mute_minutes"),
             "wechat_group_free_reply_mute_mentions_enabled": conf().get("wechat_group_free_reply_mute_mentions_enabled"),
-            "wechat_group_recent_context_enabled": conf().get("wechat_group_recent_context_enabled"),
             "wechat_group_knowledge_enabled": conf().get("wechat_group_knowledge_enabled"),
             "wechat_group_learning_enabled": conf().get("wechat_group_learning_enabled"),
             "wechat_group_profile_enabled": conf().get("wechat_group_profile_enabled"),
@@ -136,7 +152,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_emotion_enabled": conf().get("wechat_group_emotion_enabled"),
             "wechat_group_free_reply_typing_delay_enabled": conf().get("wechat_group_free_reply_typing_delay_enabled"),
             "wechat_group_free_reply_typing_chars_per_second": conf().get("wechat_group_free_reply_typing_chars_per_second"),
-            "wechat_group_response_cleanup_enabled": conf().get("wechat_group_response_cleanup_enabled"),
             "wechat_group_response_cleanup_max_chars": conf().get("wechat_group_response_cleanup_max_chars"),
             "wechat_group_image_understanding_enabled": conf().get("wechat_group_image_understanding_enabled"),
             "wechat_group_image_understanding_comment_enabled": conf().get("wechat_group_image_understanding_comment_enabled"),
@@ -156,12 +171,15 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_quote_context_enabled": conf().get("wechat_group_quote_context_enabled"),
             "wechat_group_sticker_enabled": conf().get("wechat_group_sticker_enabled"),
             "wechat_group_sticker_auto_collect_enabled": conf().get("wechat_group_sticker_auto_collect_enabled"),
+            "wechat_group_rolling_summary_enabled": conf().get("wechat_group_rolling_summary_enabled"),
             "image_create_prefix": conf().get("image_create_prefix"),
             "agent_workspace": conf().get("agent_workspace"),
             "agent": conf().get("agent"),
             "skills": conf().get("skills"),
             "tools": conf().get("tools"),
         }
+        conf()["wechat_group_rolling_summary_enabled"] = False
+        conf()["wechat_group_free_reply_typing_delay_enabled"] = False
 
     def tearDown(self):
         for key, value in self._original_config.items():
@@ -169,6 +187,19 @@ class WechatGroupChannelTest(unittest.TestCase):
                 conf().pop(key, None)
             else:
                 conf()[key] = value
+
+    @staticmethod
+    def _refresh_v2_context(channel, context):
+        archive = channel.archive
+        if isinstance(archive, Mock):
+            revision = getattr(archive, "get_room_revision")
+            if not isinstance(revision.return_value, dict):
+                revision.return_value = {}
+            recent = getattr(archive, "get_recent_conversation_messages")
+            if not isinstance(recent.return_value, list):
+                recent.return_value = []
+        channel._refresh_v2_request_context(context)
+        return context
 
     def test_factory_creates_wechat_group_channel(self):
         channel = create_channel(const.WECHAT_GROUP)
@@ -1272,7 +1303,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
         conf()["wechat_group_names"] = []
         conf()["group_name_white_list"] = []
-        conf()["group_shared_session"] = True
+        conf()["wechat_group_session_scope"] = "room"
 
         channel = WechatGroupChannel(
             client=FakeClient(),
@@ -1320,6 +1351,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_stable_room_ids"] = ["wgr_room"]
         conf()["wechat_group_names"] = []
         conf()["group_name_white_list"] = []
+        conf().pop("wechat_group_session_scope", None)
         conf().pop("group_shared_session", None)
         channel = WechatGroupChannel(client=FakeClient())
 
@@ -1695,7 +1727,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         )
 
     def test_send_cleans_text_before_typing_and_archive(self):
-        conf()["wechat_group_response_cleanup_enabled"] = True
         conf()["wechat_group_response_cleanup_max_chars"] = 200
         conf()["wechat_group_free_reply_typing_delay_enabled"] = True
         conf()["wechat_group_free_reply_typing_chars_per_second"] = 7
@@ -1726,7 +1757,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual("ship Friday", archive.record_assistant_reply.call_args.kwargs["content"])
 
     def test_send_strips_markdown_before_wechat_group_delivery_and_archive(self):
-        conf()["wechat_group_response_cleanup_enabled"] = True
         conf()["wechat_group_response_cleanup_max_chars"] = 800
         client = FakeClient()
         archive = Mock()
@@ -1990,25 +2020,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertIsNotNone(blocked)
         self.assertEqual(ReplyType.ERROR, blocked.type)
 
-    def test_legacy_recent_context_uses_stable_room_scope(self):
-        archive = Mock()
-        channel = WechatGroupChannel(client=FakeClient(), archive=archive)
-        msg = Mock(
-            wechat_group_stable_room_id="wgr_room",
-            stable_room_id="",
-            other_user_id="room@@new",
-            create_time=100,
-        )
-
-        with patch(
-            "channel.wechat_group.wechat_group_channel.build_wechat_group_recent_context_block",
-            return_value="recent",
-        ) as build_recent:
-            result = channel._build_recent_context_block(msg)
-
-        self.assertEqual("recent", result)
-        self.assertEqual("wgr_room", build_recent.call_args.args[1])
-
     def test_non_admin_normal_message_with_admin_policy_context_is_not_rejected(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["group_name_white_list"] = []
@@ -2042,7 +2053,10 @@ class WechatGroupChannelTest(unittest.TestCase):
             media_path="",
         )
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         self.assertIn("<wechat-group-admin-policy>", context.content)
         self.assertIn("写入知识库", context.content)
@@ -2950,7 +2964,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_multimodal_context_enabled"] = True
         conf()["wechat_group_multimodal_image_understanding_context_enabled"] = True
         conf()["wechat_group_multimodal_free_reply_image_context_enabled"] = False
-        conf()["wechat_group_recent_context_enabled"] = False
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
@@ -3274,6 +3287,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "A cat sitting on a desk."}),
         ) as execute:
             channel.handle_text(msg)
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         execute.assert_called_once_with({
             "image": "D:/tmp/cat.jpg",
@@ -3296,7 +3310,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_image_understanding_enabled"] = True
         conf()["wechat_group_image_understanding_comment_enabled"] = True
         conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
-        conf()["wechat_group_recent_context_enabled"] = False
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
@@ -3334,6 +3347,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "A cat sitting on a desk."}),
         ):
             channel.handle_text(msg)
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         context = channel.produce.call_args.args[0]
         default_question = getattr(
@@ -3572,6 +3586,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "A chart about revenue."}),
         ) as execute:
             channel.handle_text(msg)
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         archive.get_recent_messages.assert_any_call(
             "room@@abc",
@@ -3643,6 +3658,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "A confusing screenshot."}),
         ) as execute:
             channel.handle_text(msg)
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         execute.assert_called_once_with({
             "image": "D:/tmp/recent.jpg",
@@ -3718,6 +3734,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "Quoted image summary."}),
         ) as execute:
             channel.handle_text(msg)
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         archive.get_message_by_id.assert_any_call("room@@abc", "quoted-image")
         self.assertNotIn(
@@ -3802,6 +3819,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "Quoted sender image summary."}),
         ) as execute:
             channel.handle_text(msg)
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         execute.assert_called_once_with({
             "image": "D:/tmp/quoted-sender.jpg",
@@ -4200,7 +4218,10 @@ class WechatGroupChannelTest(unittest.TestCase):
             raw_app_type="19",
         )
 
-        context = channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg)
+        context = self._refresh_v2_context(
+            channel,
+            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
+        )
 
         self.assertTrue(context["wechat_group_multimodal_injected"])
         self.assertIn("<wechat-group-multimodal>", context.content)
@@ -4252,6 +4273,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         channel.handle_text(msg)
 
         context = channel.produce.call_args.args[0]
+        self._refresh_v2_context(channel, context)
         self.assertEqual(ContextType.TEXT, context.type)
         self.assertTrue(context["wechat_group_video_understanding_triggered"])
         self.assertTrue(context["wechat_group_multimodal_injected"])
@@ -4322,6 +4344,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "A cat on the sofa."}),
         ) as execute:
             channel._submit_free_reply_after_judge(task, {"approved": True, "confidence": 0.9})
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         execute.assert_called_once_with({
             "image": "D:/tmp/cat.jpg",
@@ -4353,7 +4376,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_multimodal_free_reply_image_context_enabled"] = True
         conf()["wechat_group_multimodal_same_sender_window_seconds"] = 120
         conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
-        conf()["wechat_group_recent_context_enabled"] = False
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
@@ -4404,6 +4426,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "A screenshot of a transfer notice."}),
         ) as execute:
             channel._submit_free_reply_after_judge(task, {"approved": True, "confidence": 0.9})
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         execute.assert_called_once_with({
             "image": "D:/tmp/fact.jpg",
@@ -4428,7 +4451,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_multimodal_image_understanding_context_enabled"] = True
         conf()["wechat_group_multimodal_unique_image_window_seconds"] = 120
         conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
-        conf()["wechat_group_recent_context_enabled"] = False
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
@@ -4478,6 +4500,7 @@ class WechatGroupChannelTest(unittest.TestCase):
             return_value=ToolResult.success({"content": "A suspicious payment screenshot."}),
         ) as execute:
             channel.handle_text(msg)
+            self._refresh_v2_context(channel, channel.produce.call_args.args[0])
 
         execute.assert_called_once_with({
             "image": "D:/tmp/recent.jpg",
@@ -4526,6 +4549,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
+        self._refresh_v2_context(channel, context)
         self.assertEqual("room@@abc", context["receiver"])
         self.assertEqual("wxid_alice", context["session_id"])
         self.assertTrue(context.content.endswith("哪里的用户名"))

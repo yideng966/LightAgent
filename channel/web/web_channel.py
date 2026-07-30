@@ -4471,45 +4471,23 @@ class ChannelsHandler:
                 "max_length": persona["max_length"],
             },
             "persona_presets": persona["presets"],
-            "recent_context": {
-                "enabled": conf().get("wechat_group_recent_context_enabled", True),
-                "limit": conf().get("wechat_group_recent_context_limit", 100),
-                "minutes": conf().get("wechat_group_recent_context_minutes", 1440),
-            },
-            "context_engine": {
-                "mode": conf().get("wechat_group_context_engine_mode", "legacy"),
+            "humanization": {
                 "session_scope": conf().get("wechat_group_session_scope", "member"),
                 "thread_followup_ttl_minutes": conf().get(
                     "wechat_group_thread_followup_ttl_minutes", 15
                 ),
-                "room_singleflight_enabled": conf().get(
-                    "wechat_group_room_singleflight_enabled", True
-                ),
                 "rolling_summary_enabled": conf().get(
-                    "wechat_group_rolling_summary_enabled", False
+                    "wechat_group_rolling_summary_enabled", True
                 ),
-                "continuation_enabled": conf().get(
-                    "wechat_group_continuation_enabled", False
+                "tool_continuation_enabled": conf().get(
+                    "wechat_group_tool_continuation_enabled",
+                    False,
                 ),
-            },
-            "humanization": {
-                "enabled": conf().get("wechat_group_humanized_context_enabled", True),
-                "recent_enabled": conf().get("wechat_group_recent_context_enabled", True),
-                "recent_limit": conf().get("wechat_group_recent_context_limit", 100),
-                "recent_minutes": conf().get("wechat_group_recent_context_minutes", 1440),
-                "persist_raw_user_only": conf().get("wechat_group_context_persist_raw_user_only", True),
-                "reply_policy_enabled": conf().get("wechat_group_reply_policy_enabled", True),
                 "archive_evidence_enabled": conf().get("wechat_group_archive_evidence_enabled", True),
-                "archive_evidence_limit": conf().get("wechat_group_archive_evidence_limit", 48),
                 "archive_evidence_days": conf().get("wechat_group_archive_evidence_days", 90),
-                "archive_evidence_recent_limit": conf().get("wechat_group_archive_evidence_recent_limit", 16),
-                "local_summary_enabled": conf().get("wechat_group_local_summary_enabled", True),
-                "local_summary_limit": conf().get("wechat_group_local_summary_limit", 100),
-                "local_summary_hours": conf().get("wechat_group_local_summary_hours", 24),
-                "reference_policy_enabled": conf().get("wechat_group_reference_policy_enabled", True),
-                "link_policy_enabled": conf().get("wechat_group_link_policy_enabled", True),
-                "response_cleanup_enabled": conf().get("wechat_group_response_cleanup_enabled", True),
                 "response_cleanup_max_chars": conf().get("wechat_group_response_cleanup_max_chars", 800),
+                "provider_continuation_supported": False,
+                "provider_continuation_enabled": False,
             },
             "basic": {
                 "alias_sync_cooldown_minutes": conf().get("wechat_group_alias_sync_cooldown_minutes", 1),
@@ -4763,28 +4741,12 @@ class ChannelsHandler:
             "wechat_group_persona_prompt",
             "wechat_group_persona_preset_id",
             "wechat_group_alias_sync_cooldown_minutes",
-            "wechat_group_recent_context_enabled",
-            "wechat_group_recent_context_limit",
-            "wechat_group_recent_context_minutes",
-            "wechat_group_humanized_context_enabled",
-            "wechat_group_context_persist_raw_user_only",
-            "wechat_group_context_engine_mode",
             "wechat_group_session_scope",
             "wechat_group_thread_followup_ttl_minutes",
-            "wechat_group_room_singleflight_enabled",
             "wechat_group_rolling_summary_enabled",
-            "wechat_group_continuation_enabled",
-            "wechat_group_reply_policy_enabled",
+            "wechat_group_tool_continuation_enabled",
             "wechat_group_archive_evidence_enabled",
-            "wechat_group_archive_evidence_limit",
             "wechat_group_archive_evidence_days",
-            "wechat_group_archive_evidence_recent_limit",
-            "wechat_group_local_summary_enabled",
-            "wechat_group_local_summary_limit",
-            "wechat_group_local_summary_hours",
-            "wechat_group_reference_policy_enabled",
-            "wechat_group_link_policy_enabled",
-            "wechat_group_response_cleanup_enabled",
             "wechat_group_response_cleanup_max_chars",
             "wechat_group_knowledge_enabled",
             "wechat_group_profile_enabled",
@@ -5035,18 +4997,9 @@ class ChannelsHandler:
             elif key == "wechat_group_persona_preset_id":
                 value = str(value or "").strip()
             elif key in (
-                "wechat_group_recent_context_enabled",
-                "wechat_group_humanized_context_enabled",
-                "wechat_group_context_persist_raw_user_only",
-                "wechat_group_room_singleflight_enabled",
                 "wechat_group_rolling_summary_enabled",
-                "wechat_group_continuation_enabled",
-                "wechat_group_reply_policy_enabled",
+                "wechat_group_tool_continuation_enabled",
                 "wechat_group_archive_evidence_enabled",
-                "wechat_group_local_summary_enabled",
-                "wechat_group_reference_policy_enabled",
-                "wechat_group_link_policy_enabled",
-                "wechat_group_response_cleanup_enabled",
                 "wechat_group_knowledge_enabled",
                 "wechat_group_profile_enabled",
                 "wechat_group_learning_enabled",
@@ -5079,10 +5032,6 @@ class ChannelsHandler:
                 "github_commit_notify_enabled",
             ):
                 value = cls._normalize_bool(value)
-            elif key == "wechat_group_context_engine_mode":
-                value = str(value or "legacy").strip().lower()
-                if value not in {"legacy", "v2"}:
-                    value = "legacy"
             elif key == "wechat_group_session_scope":
                 value = str(value or "member").strip().lower()
                 if value not in {"member", "room"}:
@@ -5115,20 +5064,8 @@ class ChannelsHandler:
                 value = cls._clamp_int(value, 1, 100, 20)
             elif key == "wechat_group_alias_sync_cooldown_minutes":
                 value = cls._clamp_int(value, 1, 1440, 1)
-            elif key == "wechat_group_recent_context_limit":
-                value = cls._clamp_int(value, 1, 100, 100)
-            elif key == "wechat_group_recent_context_minutes":
-                value = cls._clamp_int(value, 1, 1440, 1440)
-            elif key == "wechat_group_archive_evidence_limit":
-                value = cls._clamp_int(value, 1, 100, 48)
             elif key == "wechat_group_archive_evidence_days":
                 value = cls._clamp_int(value, 1, 365, 90)
-            elif key == "wechat_group_archive_evidence_recent_limit":
-                value = cls._clamp_int(value, 0, 100, 16)
-            elif key == "wechat_group_local_summary_limit":
-                value = cls._clamp_int(value, 1, 500, 100)
-            elif key == "wechat_group_local_summary_hours":
-                value = cls._clamp_int(value, 1, 168, 24)
             elif key == "wechat_group_response_cleanup_max_chars":
                 value = cls._clamp_int(value, 100, 4000, 800)
             elif key in (
@@ -6411,21 +6348,6 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
             if action in {"profiles/config", "profile-evolution/config"}:
                 applied = self._save_config_subset(body, self._PROFILE_CONFIG_KEYS)
                 return self._json({"status": "success", "config": applied})
-            if action == "preview":
-                room_identity = self._resolve_room_identity(body, require=True)
-                member_identity = self._resolve_member_identity(body, room_identity=room_identity, require=True)
-                preview = self._get_context_service().preview_context(
-                    room_id=room_identity["effective_room_id"],
-                    sender_id=member_identity["effective_member_id"],
-                    query=body.get("query") or "",
-                    mentioned_sender_ids=body.get("mentioned_sender_ids") or [],
-                    bot_sender_id=body.get("bot_sender_id") or None,
-                )
-                return self._json({
-                    "status": "success",
-                    "preview": preview,
-                    "identity": self._identity_payload(room_identity, member_identity),
-                })
             if action == "group":
                 room_identity = self._resolve_room_identity(body, require=True)
                 room_id = self._require_stable_room_identity(room_identity)

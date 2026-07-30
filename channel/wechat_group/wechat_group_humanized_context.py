@@ -7,9 +7,7 @@ from typing import Any, Dict
 
 from channel.wechat_group.wechat_group_archive_context import (
     build_archive_evidence_block,
-    build_local_extractive_summary_block,
 )
-from channel.wechat_group.wechat_group_context import build_safe_wechat_group_recent_context_block_from_rows
 from channel.wechat_group.wechat_group_permissions import (
     build_wechat_group_admin_policy_block,
     is_wechat_group_admin,
@@ -23,9 +21,6 @@ from channel.wechat_group.wechat_group_reference_policy import build_wechat_grou
 from channel.wechat_group.wechat_group_request_snapshot import (
     WechatGroupRequestSnapshotFactory,
 )
-from channel.wechat_group.wechat_group_session_policy import (
-    wechat_group_context_engine_v2_enabled,
-)
 from channel.wechat_group.wechat_group_continuation_store import (
     WechatGroupContinuationStore,
 )
@@ -38,10 +33,6 @@ from channel.wechat_group.wechat_group_reply_policy import (
     build_wechat_group_reply_policy_block,
 )
 from config import conf
-
-
-WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT = 12
-WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES = 30
 
 
 def _scope_text(value) -> str:
@@ -88,57 +79,52 @@ class WechatGroupHumanizedContextBuilder:
     ) -> WechatGroupHumanizedContextResult:
         text = str(user_content or "").strip()
         source = trigger_source or self.channel._infer_multimodal_trigger_source(msg)
-        v2_enabled = wechat_group_context_engine_v2_enabled()
-        snapshot = None
-        if v2_enabled:
-            route_details = (
-                request_context.get("wechat_group_intent_route_details")
-                if request_context else {}
-            )
-            if not isinstance(route_details, dict):
-                route_details = {}
-            factory = getattr(self.channel, "_wechat_group_snapshot_factory", None)
-            if factory is None:
-                factory = WechatGroupRequestSnapshotFactory(self.channel.archive)
-                self.channel._wechat_group_snapshot_factory = factory
-            snapshot = factory.build(
-                msg,
-                text,
-                trigger_source=source,
-                is_free_reply=bool(is_free_reply),
-                owner_session_id=(
-                    request_context.get("wechat_group_owner_session_id")
-                    if request_context else ""
-                ) or "",
-                thread_id=(
-                    request_context.get("wechat_group_thread_id")
-                    if request_context else ""
-                ) or "",
-                thread_action=(
-                    request_context.get("wechat_group_session_action")
-                    if request_context else ""
-                ) or "",
-                request_id=(request_context.get("request_id") if request_context else "") or "",
-                required_context_mode=str(
-                    route_details.get("required_context_mode") or ""
-                ),
-            )
-        include_history = bool(snapshot) or should_include_contextual_history(text, source)
+        route_details = (
+            request_context.get("wechat_group_intent_route_details")
+            if request_context else {}
+        )
+        if not isinstance(route_details, dict):
+            route_details = {}
+        factory = getattr(self.channel, "_wechat_group_snapshot_factory", None)
+        if factory is None:
+            factory = WechatGroupRequestSnapshotFactory(self.channel.archive)
+            self.channel._wechat_group_snapshot_factory = factory
+        snapshot = factory.build(
+            msg,
+            text,
+            trigger_source=source,
+            is_free_reply=bool(is_free_reply),
+            owner_session_id=(
+                request_context.get("wechat_group_owner_session_id")
+                if request_context else ""
+            ) or "",
+            thread_id=(
+                request_context.get("wechat_group_thread_id")
+                if request_context else ""
+            ) or "",
+            thread_action=(
+                request_context.get("wechat_group_session_action")
+                if request_context else ""
+            ) or "",
+            request_id=(request_context.get("request_id") if request_context else "") or "",
+            required_context_mode=str(
+                route_details.get("required_context_mode") or ""
+            ),
+        )
         ambient_free_reply = bool(is_free_reply)
         room_scope = _stable_room_scope(msg)
         member_scope = _stable_member_scope(msg)
         metadata: Dict[str, Any] = {
             "wechat_group_trigger_source": source,
-            "wechat_group_contextual_history": include_history,
+            "wechat_group_contextual_history": True,
         }
-        if snapshot:
-            metadata.update({
-                "request_id": snapshot.request_id,
-                "wechat_group_request_snapshot": snapshot,
-                "wechat_group_context_mode": snapshot.context_policy.mode,
-                "wechat_group_context_diagnostics": snapshot.diagnostics,
-                "wechat_group_room_revision_before": snapshot.timeline.revision.to_dict(),
-            })
+        metadata.update({
+            "request_id": snapshot.request_id,
+            "wechat_group_request_snapshot": snapshot,
+            "wechat_group_context_mode": snapshot.context_policy.mode,
+            "wechat_group_context_diagnostics": snapshot.diagnostics,
+            "wechat_group_room_revision_before": snapshot.timeline.revision.to_dict(),
+        })
         blocks = []
 
         identity_confirmed = getattr(msg, "wechat_group_identity_requires_confirmation", False) is not True
@@ -151,10 +137,9 @@ class WechatGroupHumanizedContextBuilder:
             metadata["wechat_group_is_admin"] = identity_confirmed and is_wechat_group_admin(room_scope, member_scope)
             blocks.append(admin_policy_block)
 
-        if conf().get("wechat_group_reply_policy_enabled", True):
-            blocks.append(build_wechat_group_mention_verification_block(msg, source))
-            blocks.append(build_wechat_group_addressee_policy_block(msg, source))
-            blocks.append(build_wechat_group_reply_policy_block(source, reply_mode=reply_mode))
+        blocks.append(build_wechat_group_mention_verification_block(msg, source))
+        blocks.append(build_wechat_group_addressee_policy_block(msg, source))
+        blocks.append(build_wechat_group_reply_policy_block(source, reply_mode=reply_mode))
 
         if should_skip_persona_for_message(msg):
             metadata["wechat_group_persona_skipped"] = True
@@ -165,53 +150,12 @@ class WechatGroupHumanizedContextBuilder:
                 metadata["wechat_group_persona_preset_id"] = persona["preset_id"]
                 blocks.append(block)
 
-        memory_block = self._normalize_memory_block(self.channel._build_memory_context_block(msg, text))
-        if memory_block and v2_enabled:
-            metadata["wechat_group_memory_injected"] = True
-            blocks.append(memory_block)
-
-        include_evidence = (
-            snapshot.context_policy.include_archive_evidence
-            if snapshot else include_history
-        )
-        if include_evidence and not ambient_free_reply and conf().get("wechat_group_archive_evidence_enabled", True):
-            evidence_block = build_archive_evidence_block(
-                self.channel.archive,
-                room_id=room_scope,
-                query=text,
-                now=msg.create_time,
-                days=conf().get("wechat_group_archive_evidence_days", 90),
-                limit=conf().get("wechat_group_archive_evidence_limit", 48),
-                recent_limit=conf().get("wechat_group_archive_evidence_recent_limit", 16),
-                exclude_message_id=msg.msg_id,
-            )
-            if evidence_block:
-                metadata["wechat_group_archive_evidence_injected"] = True
-                blocks.append(evidence_block)
-
-        if (
-            not v2_enabled
-            and include_history
-            and not ambient_free_reply
-            and conf().get("wechat_group_local_summary_enabled", True)
-        ):
-            summary_block = build_local_extractive_summary_block(
-                self.channel.archive,
-                room_id=room_scope,
-                now=msg.create_time,
-                hours=conf().get("wechat_group_local_summary_hours", 24),
-                limit=conf().get("wechat_group_local_summary_limit", 100),
-                exclude_message_id=msg.msg_id,
-            )
-            if summary_block:
-                metadata["wechat_group_local_summary_injected"] = True
-                blocks.append(summary_block)
-
         summary_revision = None
+        summary_source_event_ids = ()
         if (
             snapshot
             and snapshot.context_policy.include_rolling_summary
-            and conf().get("wechat_group_rolling_summary_enabled", False)
+            and conf().get("wechat_group_rolling_summary_enabled", True)
         ):
             summary_service = getattr(
                 self.channel,
@@ -221,9 +165,21 @@ class WechatGroupHumanizedContextBuilder:
             if summary_service is None:
                 summary_service = WechatGroupRollingSummaryService(self.channel.archive)
                 self.channel._wechat_group_rolling_summary_service = summary_service
-            summary_block, summary_revision = summary_service.get_prompt_context(
-                snapshot.stable_room_id
-            )
+            get_state = getattr(summary_service, "get_prompt_context_state", None)
+            if callable(get_state):
+                summary_block, summary_state = get_state(
+                    snapshot.stable_room_id,
+                    now=msg.create_time,
+                )
+                summary_revision = summary_state.revision if summary_state else None
+                summary_source_event_ids = (
+                    summary_state.source_event_ids if summary_state else ()
+                )
+            else:
+                summary_block, summary_revision = summary_service.get_prompt_context(
+                    snapshot.stable_room_id,
+                    now=msg.create_time,
+                )
             if summary_block:
                 metadata["wechat_group_rolling_summary_injected"] = True
                 metadata["wechat_group_rolling_summary_revision"] = (
@@ -240,22 +196,61 @@ class WechatGroupHumanizedContextBuilder:
         if focus:
             metadata["wechat_group_focus"] = focus
 
-        recent_block = self._build_recent_context_block(
-            msg,
-            focus,
-            include_history,
-            ambient_free_reply=ambient_free_reply,
-            snapshot=snapshot,
-            after_revision=summary_revision,
-        )
+        recent_block = snapshot.recent_block(after_revision=summary_revision)
         if recent_block:
             metadata["wechat_group_recent_context_injected"] = True
             blocks.append(recent_block)
 
+        excluded_evidence_sources = set(snapshot.included_source_event_ids)
+        excluded_evidence_sources.update(snapshot.excluded_source_event_ids)
+        excluded_evidence_sources.update(summary_source_event_ids)
+        include_evidence = snapshot.context_policy.include_archive_evidence
+        if (
+            include_evidence
+            and not ambient_free_reply
+            and conf().get("wechat_group_archive_evidence_enabled", True)
+        ):
+            evidence_block = build_archive_evidence_block(
+                self.channel.archive,
+                room_id=room_scope,
+                query=text,
+                now=msg.create_time,
+                days=conf().get("wechat_group_archive_evidence_days", 90),
+                limit=12,
+                exclude_message_id=msg.msg_id,
+                exclude_source_event_ids=excluded_evidence_sources,
+                max_chars=3200,
+            )
+            if evidence_block:
+                metadata["wechat_group_archive_evidence_injected"] = True
+                blocks.append(evidence_block)
+
+        focus_block = self.channel._build_focus_context_block(focus)
+        if focus_block:
+            metadata["wechat_group_focus_injected"] = True
+            blocks.append(focus_block)
+
+        memory_block = self._normalize_memory_block(
+            self.channel._build_memory_context_block(msg, text)
+        )
+        if memory_block:
+            metadata["wechat_group_memory_injected"] = True
+            blocks.append(memory_block)
+
+        metadata["wechat_group_context_source_counts"] = {
+            "recent": len(snapshot.included_source_event_ids),
+            "summary": len(summary_source_event_ids),
+            "thread_excluded": len(snapshot.excluded_source_event_ids),
+            "archive_excluded": len(excluded_evidence_sources),
+        }
+
         if (
             snapshot
             and snapshot.thread_action == "resume_thread"
-            and conf().get("wechat_group_continuation_enabled", False)
+            and conf().get(
+                "wechat_group_tool_continuation_enabled",
+                False,
+            )
         ):
             continuation_store = getattr(
                 self.channel,
@@ -275,15 +270,6 @@ class WechatGroupHumanizedContextBuilder:
                 metadata["wechat_group_continuation_injected"] = True
                 blocks.append(continuation_block)
 
-        focus_block = self.channel._build_focus_context_block(focus)
-        if focus_block:
-            metadata["wechat_group_focus_injected"] = True
-            blocks.append(focus_block)
-
-        if memory_block and not v2_enabled:
-            metadata["wechat_group_memory_injected"] = True
-            blocks.append(memory_block)
-
         style_block = self.channel._build_style_context_block(msg)
         if style_block:
             metadata["wechat_group_style_injected"] = True
@@ -294,16 +280,15 @@ class WechatGroupHumanizedContextBuilder:
             metadata["wechat_group_emotion_injected"] = True
             blocks.append(emotion_block)
 
-        if conf().get("wechat_group_reference_policy_enabled", True) or conf().get("wechat_group_link_policy_enabled", True):
-            reference_block = build_wechat_group_reference_policy_block(
-                msg,
-                text,
-                reference_enabled=conf().get("wechat_group_reference_policy_enabled", True),
-                link_enabled=conf().get("wechat_group_link_policy_enabled", True),
-            )
-            if reference_block:
-                metadata["wechat_group_reference_policy_injected"] = True
-                blocks.append(reference_block)
+        reference_block = build_wechat_group_reference_policy_block(
+            msg,
+            text,
+            reference_enabled=True,
+            link_enabled=True,
+        )
+        if reference_block:
+            metadata["wechat_group_reference_policy_injected"] = True
+            blocks.append(reference_block)
 
         multimodal = self.channel._build_multimodal_context(
             msg,
@@ -323,66 +308,6 @@ class WechatGroupHumanizedContextBuilder:
         content = "{}\n\n{}".format("\n\n".join([block for block in blocks if block]), text).strip() if blocks else text
         return WechatGroupHumanizedContextResult(content=content, metadata=metadata)
 
-    def _build_recent_context_block(
-        self,
-        msg,
-        focus: Dict[str, Any],
-        include_history: bool,
-        ambient_free_reply: bool = False,
-        snapshot=None,
-        after_revision=None,
-    ) -> str:
-        if not conf().get("wechat_group_recent_context_enabled", True):
-            return ""
-        if snapshot is not None:
-            return snapshot.recent_block(after_revision=after_revision)
-        if not include_history and not (focus and focus.get("messages")):
-            return ""
-        rows = []
-        used_focus_rows = False
-        if ambient_free_reply:
-            getter = getattr(self.channel.archive, "get_recent_conversation_messages", None)
-            if callable(getter):
-                rows = getter(
-                    _stable_room_scope(msg),
-                    limit=WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT,
-                    minutes=WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES,
-                    now=msg.create_time,
-                )
-            else:
-                rows = self.channel.archive.get_recent_messages(
-                    _stable_room_scope(msg),
-                    limit=WECHAT_GROUP_FREE_REPLY_RECENT_LIMIT,
-                    minutes=WECHAT_GROUP_FREE_REPLY_RECENT_MINUTES,
-                    now=msg.create_time,
-                )
-        elif focus and focus.get("messages"):
-            rows = list(focus.get("messages") or [])
-            used_focus_rows = True
-        elif include_history:
-            rows = self.channel.archive.get_recent_messages(
-                _stable_room_scope(msg),
-                limit=conf().get("wechat_group_recent_context_limit", 100),
-                minutes=conf().get("wechat_group_recent_context_minutes", 1440),
-                now=msg.create_time,
-            )
-        rows = [
-            row for row in rows
-            if row and str(row.get("message_id") or "") != str(getattr(msg, "msg_id", "") or "")
-        ]
-        if not rows and include_history and used_focus_rows:
-            rows = self.channel.archive.get_recent_messages(
-                _stable_room_scope(msg),
-                limit=conf().get("wechat_group_recent_context_limit", 100),
-                minutes=conf().get("wechat_group_recent_context_minutes", 1440),
-                now=msg.create_time,
-            )
-            rows = [
-                row for row in rows
-                if row and str(row.get("message_id") or "") != str(getattr(msg, "msg_id", "") or "")
-            ]
-        return build_safe_wechat_group_recent_context_block_from_rows(rows)
-
     @staticmethod
     def _normalize_memory_block(block: str) -> str:
         text = str(block or "").strip()
@@ -391,17 +316,3 @@ class WechatGroupHumanizedContextBuilder:
         text = text.replace("<wechat-group-knowledge>", "<wechat-group-memory>")
         text = text.replace("</wechat-group-knowledge>", "</wechat-group-memory>")
         return text
-
-
-def should_include_contextual_history(user_content: str, trigger_source: str = "") -> bool:
-    source = str(trigger_source or "").strip()
-    if source in {"direct_reply", "free_reply", "quote_self", "image_message"}:
-        return True
-    text = str(user_content or "").lower()
-    markers = (
-        "above", "earlier", "previous", "before", "just now", "summarize",
-        "summary", "continue", "quote", "image", "picture", "photo", "link",
-        "刚才", "上面", "前面", "之前", "谁说", "总结", "继续", "引用",
-        "图片", "照片", "这张", "链接", "啥意思", "什么意思",
-    )
-    return any(marker in text for marker in markers)

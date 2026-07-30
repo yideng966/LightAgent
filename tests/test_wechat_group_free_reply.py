@@ -12,7 +12,6 @@ from channel.wechat_group.wechat_group_free_reply import (
     is_contextual_short_question,
 )
 from channel.wechat_group.wechat_group_free_reply_judge import build_free_reply_judge_prompt
-from channel.wechat_group.wechat_group_channel import select_wechat_group_agent_history_mode
 
 
 class WechatGroupFreeReplyConfigTest(unittest.TestCase):
@@ -996,48 +995,6 @@ class WechatGroupFreeReplyJudgePromptTest(unittest.TestCase):
             "<aeskey>",
         ):
             self.assertNotIn(fragment, prompt)
-
-
-class WechatGroupAgentHistoryModeTest(unittest.TestCase):
-    def test_ambient_group_reply_is_observe_only(self):
-        mode = select_wechat_group_agent_history_mode(
-            "free_reply",
-            "大家觉得这个有用吗",
-            is_free_reply=True,
-            local_decision={"addressee": {"target_kind": "group"}},
-            llm_decision={"target": "group", "is_followup_to_bot": False},
-        )
-        self.assertEqual("observe_only", mode)
-
-    def test_explicit_bot_target_uses_fresh_or_interactive(self):
-        fresh = select_wechat_group_agent_history_mode(
-            "free_reply",
-            "小灯，2+2 等于几",
-            is_free_reply=True,
-            llm_decision={"target": "bot", "is_followup_to_bot": False},
-        )
-        interactive = select_wechat_group_agent_history_mode(
-            "free_reply",
-            "继续刚才你说的",
-            is_free_reply=True,
-            llm_decision={"target": "bot", "is_followup_to_bot": True},
-        )
-        self.assertEqual("fresh", fresh)
-        self.assertEqual("interactive_session", interactive)
-
-    def test_direct_reply_is_fresh_unless_it_explicitly_continues_bot(self):
-        self.assertEqual(
-            "fresh",
-            select_wechat_group_agent_history_mode("direct_reply", "2+2 等于几"),
-        )
-        self.assertEqual(
-            "interactive_session",
-            select_wechat_group_agent_history_mode("direct_reply", "继续刚才你说的"),
-        )
-        self.assertEqual(
-            "interactive_session",
-            select_wechat_group_agent_history_mode("quote_self", "有用吗"),
-        )
 
 
 if __name__ == "__main__":

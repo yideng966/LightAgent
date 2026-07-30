@@ -608,12 +608,295 @@ class TextModelRouter(LLMModel):
                 kwargs['reasoning_effort'] = effort
         return kwargs
 
+    def _get_provider_continuation_store(self):
+        store = getattr(self, "_provider_continuation_store", None)
+        if store is None:
+            from channel.wechat_group.wechat_group_provider_continuation import (
+                ProviderContinuationStore,
+            )
+
+            store = ProviderContinuationStore()
+            self._provider_continuation_store = store
+        return store
+
+    @staticmethod
+    def _request_has_tool_history(request: LLMRequest) -> bool:
+        for message in getattr(request, "messages", None) or []:
+            if not isinstance(message, dict):
+                continue
+            if message.get("role") == "tool" or message.get("tool_calls"):
+                return True
+            content = message.get("content")
+            if isinstance(content, list) and any(
+                isinstance(block, dict)
+                and block.get("type") in {"tool_use", "tool_result"}
+                for block in content
+            ):
+                return True
+        return False
+
+    @staticmethod
+    def _payload_has_tool_call(payload) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        choices = payload.get("choices") or []
+        for choice in choices if isinstance(choices, list) else []:
+            if not isinstance(choice, dict):
+                continue
+            message = choice.get("message") or choice.get("delta") or {}
+            if isinstance(message, dict) and message.get("tool_calls"):
+                return True
+            content = message.get("content") if isinstance(message, dict) else None
+            if isinstance(content, list) and any(
+                isinstance(block, dict) and block.get("type") == "tool_use"
+                for block in content
+            ):
+                return True
+        content = payload.get("content")
+        return isinstance(content, list) and any(
+            isinstance(block, dict) and block.get("type") == "tool_use"
+            for block in content
+        )
+
+    def _prepare_provider_continuation(
+        self,
+        request: LLMRequest,
+        candidate,
+        bot,
+        kwargs,
+    ):
+        if not conf().get("wechat_group_provider_continuation_enabled", False):
+            return kwargs, None
+        context = getattr(request, "provider_continuation_context", None)
+        if not isinstance(context, dict) or self._request_has_tool_history(request):
+            return kwargs, None
+        action = str(context.get("thread_action") or "").strip()
+        if action not in {"new_thread", "resume_thread"}:
+            return kwargs, None
+        capability_getter = getattr(
+            bot, "get_provider_continuation_capability", None
+        )
+        request_builder = getattr(
+            bot, "build_provider_continuation_request", None
+        )
+        anchor_extractor = getattr(
+            bot, "extract_provider_continuation_anchor", None
+        )
+        if not all(callable(item) for item in (
+            capability_getter, request_builder, anchor_extractor
+        )):
+            return kwargs, None
+        provider_key = str(candidate.get("bot_type") or "").strip()
+        model_name = str(candidate.get("model") or self.model).strip()
+        try:
+            from channel.wechat_group.wechat_group_provider_continuation import (
+                ProviderContinuationScope,
+                endpoint_fingerprint,
+                normalize_capability,
+                permission_fingerprint,
+            )
+
+            api_config = bot.get_api_config() if hasattr(bot, "get_api_config") else {}
+            api_base = (
+                api_config.get("api_base")
+                if isinstance(api_config, dict)
+                else ""
+            )
+            fingerprint = endpoint_fingerprint(provider_key, api_base or "")
+            capability = normalize_capability(
+                capability_getter(model=model_name),
+                provider_key,
+                model_name,
+                fingerprint,
+            )
+            if not capability.supported:
+                return kwargs, None
+            scope = ProviderContinuationScope(
+                stable_account_scope=str(
+                    context.get("stable_account_scope") or ""
+                ).strip(),
+                stable_room_id=str(context.get("stable_room_id") or "").strip(),
+                stable_member_id=str(context.get("stable_member_id") or "").strip(),
+                owner_session_id=str(context.get("owner_session_id") or "").strip(),
+                thread_id=str(context.get("thread_id") or "").strip(),
+                provider_key=provider_key,
+                model=model_name,
+                endpoint_fingerprint=fingerprint,
+                permission_fingerprint=permission_fingerprint(context),
+            )
+            request_id = str(context.get("request_id") or "").strip()
+            if not scope.valid() or not request_id:
+                return kwargs, None
+            store = self._get_provider_continuation_store()
+            committed = None
+            if (
+                action == "resume_thread"
+                and getattr(request, "_provider_continuation_skip_anchor", False)
+                is not True
+            ):
+                committed = store.get_committed(scope)
+            prepared = request_builder(
+                request_kwargs=copy.deepcopy(kwargs),
+                committed_anchor=(committed.anchor_value if committed else ""),
+                capability=capability.to_dict(),
+            )
+            if not isinstance(prepared, dict):
+                raise TypeError(
+                    "provider continuation request builder must return a dict"
+                )
+        except Exception as exc:
+            logger.warning(
+                "[ProviderContinuation] optional adapter disabled for request: "
+                "provider=%s model=%s error_type=%s",
+                provider_key,
+                model_name,
+                type(exc).__name__,
+            )
+            return kwargs, None
+        runtime = {
+            "bot": bot,
+            "capability": capability,
+            "scope": scope,
+            "store": store,
+            "request_id": request_id,
+            "ttl_seconds": min(
+                max(int(context.get("ttl_seconds") or 900), 60),
+                24 * 60 * 60,
+            ),
+            "committed": committed,
+            "candidate_anchor": "",
+            "candidate_anchor_type": capability.anchor_type,
+            "saw_tool_call": False,
+            "saw_error": False,
+        }
+        return prepared, runtime
+
+    def _observe_provider_continuation(self, request: LLMRequest, payload) -> None:
+        runtime = getattr(request, "_provider_continuation_runtime", None)
+        if not isinstance(runtime, dict):
+            return
+        if isinstance(payload, dict) and payload.get("error"):
+            runtime["saw_error"] = True
+        if self._payload_has_tool_call(payload):
+            runtime["saw_tool_call"] = True
+        try:
+            candidate = runtime["bot"].extract_provider_continuation_anchor(
+                payload=payload,
+                capability=runtime["capability"].to_dict(),
+            )
+        except Exception as exc:
+            logger.warning(
+                "[ProviderContinuation] candidate extraction failed: "
+                "provider=%s error_type=%s",
+                runtime["capability"].provider_key,
+                type(exc).__name__,
+            )
+            return
+        if isinstance(candidate, dict):
+            anchor_value = str(candidate.get("anchor_value") or "").strip()
+            anchor_type = str(
+                candidate.get("anchor_type")
+                or runtime["capability"].anchor_type
+            ).strip()
+        else:
+            anchor_value = str(candidate or "").strip()
+            anchor_type = runtime["capability"].anchor_type
+        if anchor_value:
+            runtime["candidate_anchor"] = anchor_value
+            runtime["candidate_anchor_type"] = anchor_type
+
+    def _stage_provider_continuation(self, request: LLMRequest) -> bool:
+        runtime = getattr(request, "_provider_continuation_runtime", None)
+        if not isinstance(runtime, dict):
+            return False
+        if runtime.get("saw_error") or runtime.get("saw_tool_call"):
+            return False
+        anchor_value = str(runtime.get("candidate_anchor") or "").strip()
+        if not anchor_value:
+            return False
+        committed = runtime.get("committed")
+        try:
+            staged = runtime["store"].stage(
+                runtime["scope"],
+                str(runtime.get("candidate_anchor_type") or ""),
+                anchor_value,
+                runtime["request_id"],
+                runtime["ttl_seconds"],
+                parent_anchor_value=(committed.anchor_value if committed else ""),
+            )
+        except Exception as exc:
+            logger.warning(
+                "[ProviderContinuation] candidate staging failed: "
+                "provider=%s model=%s error_type=%s",
+                runtime["capability"].provider_key,
+                runtime["capability"].model,
+                type(exc).__name__,
+            )
+            return False
+        if not staged:
+            return False
+        logger.debug(
+            "[ProviderContinuation] staged provider=%s model=%s anchor=%s request=%s",
+            staged.scope.provider_key,
+            staged.scope.model,
+            staged.hash_prefix,
+            staged.request_id,
+        )
+        return True
+
+    @staticmethod
+    def _provider_anchor_error(request: LLMRequest, error) -> bool:
+        runtime = getattr(request, "_provider_continuation_runtime", None)
+        if not isinstance(runtime, dict) or runtime.get("committed") is None:
+            return False
+        classifier = getattr(
+            runtime.get("bot"), "classify_provider_continuation_error", None
+        )
+        if not callable(classifier):
+            return False
+        try:
+            classification = classifier(
+                error=error,
+                capability=runtime["capability"].to_dict(),
+            )
+        except Exception:
+            return False
+        return str(classification or "").strip().lower() in {
+            "expired", "not_found"
+        }
+
+    @staticmethod
+    def _expire_provider_anchor(request: LLMRequest) -> None:
+        runtime = getattr(request, "_provider_continuation_runtime", None)
+        if not isinstance(runtime, dict):
+            return
+        committed = runtime.get("committed")
+        if committed is not None:
+            try:
+                runtime["store"].expire(committed.row_id)
+            except Exception as exc:
+                logger.warning(
+                    "[ProviderContinuation] committed anchor expiration failed: "
+                    "provider=%s model=%s error_type=%s",
+                    runtime["capability"].provider_key,
+                    runtime["capability"].model,
+                    type(exc).__name__,
+                )
+
     def _call_candidate(self, request: LLMRequest, candidate, stream: bool):
         bot = self._get_bot_for_candidate(candidate)
         if not hasattr(bot, 'call_with_tools'):
             bot_type = type(bot).__name__
             raise NotImplementedError(f"Bot {bot_type} does not support call_with_tools. Please add the method.")
-        return bot.call_with_tools(**self._build_call_kwargs(request, candidate, stream))
+        kwargs = self._build_call_kwargs(request, candidate, stream)
+        kwargs, runtime = self._prepare_provider_continuation(
+            request,
+            candidate,
+            bot,
+            kwargs,
+        )
+        request._provider_continuation_runtime = runtime
+        return bot.call_with_tools(**kwargs)
 
     @staticmethod
     def _request_source_snapshot(request: LLMRequest) -> LLMRequestSourceSnapshot:
@@ -745,100 +1028,145 @@ class TextModelRouter(LLMModel):
 
     def _call_wechat_group_stream(self, request_source, candidates, cancel_event=None):
         for index, candidate in enumerate(candidates):
-            candidate_request = self._candidate_request(request_source)
-            try:
-                if cancel_event is not None and cancel_event.is_set():
-                    raise AgentCancelledError("cancelled before model candidate")
-                stream = self._call_candidate(candidate_request, candidate, stream=True)
+            retry_next = False
+            for anchor_attempt in range(2):
+                candidate_request = self._candidate_request(request_source)
+                if anchor_attempt:
+                    candidate_request._provider_continuation_skip_anchor = True
                 buffered_chunks = []
                 transient_error = None
                 terminal_error = None
                 protocol_reason = ""
-
-                for chunk in stream:
+                retry_anchor = False
+                try:
                     if cancel_event is not None and cancel_event.is_set():
-                        raise AgentCancelledError("cancelled during model candidate")
-                    if len(buffered_chunks) >= self._WECHAT_GROUP_MAX_BUFFERED_CHUNKS:
-                        protocol_reason = "stream chunk limit exceeded"
-                        break
-                    is_error = isinstance(chunk, dict) and bool(chunk.get("error"))
-                    if is_error:
-                        if self._is_transient_model_error_payload(chunk):
-                            transient_error = chunk
-                        else:
-                            terminal_error = chunk
-                        break
-                    buffered_chunks.append(self._format_stream_chunk(chunk))
-
-                if transient_error is not None:
-                    self._record_primary_transient_failure(candidate, candidates)
-                    if index + 1 < len(candidates):
-                        next_candidate = candidates[index + 1]
-                        self._log_model_fallback(candidate, next_candidate, transient_error)
-                        continue
-                    if candidate.get("source") == "fallback":
-                        transient_error = self._mark_fallback_exhausted(transient_error)
-                    yield self._format_stream_chunk(transient_error)
-                    return
-
-                if terminal_error is not None:
-                    self._record_primary_healthy(candidate)
-                    yield self._format_stream_chunk(terminal_error)
-                    return
-
-                if not protocol_reason:
-                    protocol_reason, safety_reason = self._validate_wechat_group_candidate(
+                        raise AgentCancelledError("cancelled before model candidate")
+                    stream = self._call_candidate(
                         candidate_request,
-                        buffered_chunks,
+                        candidate,
+                        stream=True,
                     )
-                    if safety_reason:
-                        self._record_primary_healthy(candidate)
-                        yield self._wechat_group_safety_chunk(safety_reason)
+
+                    for chunk in stream:
+                        if cancel_event is not None and cancel_event.is_set():
+                            raise AgentCancelledError("cancelled during model candidate")
+                        if len(buffered_chunks) >= self._WECHAT_GROUP_MAX_BUFFERED_CHUNKS:
+                            protocol_reason = "stream chunk limit exceeded"
+                            break
+                        if (
+                            anchor_attempt == 0
+                            and not buffered_chunks
+                            and self._provider_anchor_error(candidate_request, chunk)
+                        ):
+                            self._expire_provider_anchor(candidate_request)
+                            retry_anchor = True
+                            break
+                        self._observe_provider_continuation(
+                            candidate_request,
+                            chunk,
+                        )
+                        is_error = isinstance(chunk, dict) and bool(chunk.get("error"))
+                        if is_error:
+                            if self._is_transient_model_error_payload(chunk):
+                                transient_error = chunk
+                            else:
+                                terminal_error = chunk
+                            break
+                        buffered_chunks.append(self._format_stream_chunk(chunk))
+
+                    if retry_anchor:
+                        continue
+
+                    if transient_error is not None:
+                        self._record_primary_transient_failure(candidate, candidates)
+                        if index + 1 < len(candidates):
+                            next_candidate = candidates[index + 1]
+                            self._log_model_fallback(
+                                candidate,
+                                next_candidate,
+                                transient_error,
+                            )
+                            retry_next = True
+                            break
+                        if candidate.get("source") == "fallback":
+                            transient_error = self._mark_fallback_exhausted(
+                                transient_error
+                            )
+                        yield self._format_stream_chunk(transient_error)
                         return
 
-                if protocol_reason:
-                    self._record_primary_unusable_probe(candidate, candidates)
-                    if index + 1 < len(candidates):
-                        next_candidate = candidates[index + 1]
-                        self._log_unusable_model_fallback(
+                    if terminal_error is not None:
+                        self._record_primary_healthy(candidate)
+                        yield self._format_stream_chunk(terminal_error)
+                        return
+
+                    if not protocol_reason:
+                        protocol_reason, safety_reason = (
+                            self._validate_wechat_group_candidate(
+                                candidate_request,
+                                buffered_chunks,
+                            )
+                        )
+                        if safety_reason:
+                            self._record_primary_healthy(candidate)
+                            yield self._wechat_group_safety_chunk(safety_reason)
+                            return
+
+                    if protocol_reason:
+                        self._record_primary_unusable_probe(candidate, candidates)
+                        if index + 1 < len(candidates):
+                            next_candidate = candidates[index + 1]
+                            self._log_unusable_model_fallback(
+                                candidate,
+                                next_candidate,
+                                protocol_reason,
+                            )
+                            retry_next = True
+                            break
+                        yield self._wechat_group_protocol_error_chunk(
                             candidate,
-                            next_candidate,
+                            index + 1,
                             protocol_reason,
                         )
-                        continue
-                    yield self._wechat_group_protocol_error_chunk(
-                        candidate,
-                        index + 1,
-                        protocol_reason,
-                    )
-                    return
+                        return
 
-                self._record_primary_healthy(candidate)
-                for chunk in buffered_chunks:
-                    yield chunk
-                return
-            except Exception as exc:
-                if isinstance(exc, AgentCancelledError):
-                    raise
-                is_transient = self._is_transient_model_error_text(str(exc))
-                if is_transient:
-                    self._record_primary_transient_failure(candidate, candidates)
-                else:
                     self._record_primary_healthy(candidate)
-                if is_transient and index + 1 < len(candidates):
-                    next_candidate = candidates[index + 1]
-                    self._log_model_fallback(candidate, next_candidate, exc)
-                    continue
-                if is_transient and candidate.get("source") == "fallback":
-                    exhausted_error = RuntimeError(str(exc))
-                    exhausted_error.model_fallback_exhausted = True
-                    raise self._with_route_exception_metadata(
-                        exhausted_error,
-                        candidate,
-                        index + 1,
-                    ) from exc
-                self._with_route_exception_metadata(exc, candidate, index + 1)
-                raise
+                    for chunk in buffered_chunks:
+                        yield chunk
+                    self._stage_provider_continuation(candidate_request)
+                    return
+                except Exception as exc:
+                    if isinstance(exc, AgentCancelledError):
+                        raise
+                    if (
+                        anchor_attempt == 0
+                        and not buffered_chunks
+                        and self._provider_anchor_error(candidate_request, exc)
+                    ):
+                        self._expire_provider_anchor(candidate_request)
+                        continue
+                    is_transient = self._is_transient_model_error_text(str(exc))
+                    if is_transient:
+                        self._record_primary_transient_failure(candidate, candidates)
+                    else:
+                        self._record_primary_healthy(candidate)
+                    if is_transient and index + 1 < len(candidates):
+                        next_candidate = candidates[index + 1]
+                        self._log_model_fallback(candidate, next_candidate, exc)
+                        retry_next = True
+                        break
+                    if is_transient and candidate.get("source") == "fallback":
+                        exhausted_error = RuntimeError(str(exc))
+                        exhausted_error.model_fallback_exhausted = True
+                        raise self._with_route_exception_metadata(
+                            exhausted_error,
+                            candidate,
+                            index + 1,
+                        ) from exc
+                    self._with_route_exception_metadata(exc, candidate, index + 1)
+                    raise
+            if retry_next:
+                continue
 
     def _is_transient_model_error_text(self, text) -> bool:
         error_text = str(text or "").lower()
@@ -1012,6 +1340,32 @@ class TextModelRouter(LLMModel):
             pass
         return exc
 
+    def _call_sync_candidate_with_anchor_retry(self, request_source, candidate):
+        candidate_request = self._candidate_request(request_source)
+        try:
+            response = self._call_candidate(
+                candidate_request, candidate, stream=False
+            )
+        except Exception as exc:
+            if not self._provider_anchor_error(candidate_request, exc):
+                raise
+            self._expire_provider_anchor(candidate_request)
+            candidate_request = self._candidate_request(request_source)
+            candidate_request._provider_continuation_skip_anchor = True
+            response = self._call_candidate(
+                candidate_request, candidate, stream=False
+            )
+        else:
+            if self._provider_anchor_error(candidate_request, response):
+                self._expire_provider_anchor(candidate_request)
+                candidate_request = self._candidate_request(request_source)
+                candidate_request._provider_continuation_skip_anchor = True
+                response = self._call_candidate(
+                    candidate_request, candidate, stream=False
+                )
+        self._observe_provider_continuation(candidate_request, response)
+        return response, candidate_request
+
     def call(self, request: LLMRequest, model=None, provider=None):
         """
         Call the model using LightAgent's bot infrastructure
@@ -1025,8 +1379,12 @@ class TextModelRouter(LLMModel):
             last_response = None
             for index, candidate in enumerate(candidates):
                 try:
-                    candidate_request = self._candidate_request(request_source)
-                    response = self._call_candidate(candidate_request, candidate, stream=False)
+                    response, candidate_request = (
+                        self._call_sync_candidate_with_anchor_retry(
+                            request_source,
+                            candidate,
+                        )
+                    )
                     response = self._format_response(response)
                     is_transient = self._is_transient_model_error_payload(response)
                     unusable_reason = (
@@ -1059,6 +1417,8 @@ class TextModelRouter(LLMModel):
                         continue
                     if is_transient and candidate.get("source") == "fallback":
                         response = self._mark_fallback_exhausted(response)
+                    if not is_transient and not unusable_reason:
+                        self._stage_provider_continuation(candidate_request)
                     return self._with_route_metadata(response, candidate, index + 1)
                 except Exception as e:
                     is_transient = self._is_transient_model_error_text(str(e))
@@ -1103,64 +1463,124 @@ class TextModelRouter(LLMModel):
                 return
             last_error_chunk = None
             for index, candidate in enumerate(candidates):
-                yielded_any = False
                 retry_next = False
-                primary_health_recorded = False
-                try:
+                for anchor_attempt in range(2):
+                    yielded_any = False
+                    retry_anchor = False
+                    primary_health_recorded = False
                     candidate_request = self._candidate_request(request_source)
-                    stream = self._call_candidate(candidate_request, candidate, stream=True)
-                    for chunk in stream:
-                        is_error = isinstance(chunk, dict) and bool(chunk.get("error"))
-                        is_transient = is_error and self._is_transient_model_error_payload(chunk)
-                        if candidate.get("source") == "primary" and is_error:
+                    if anchor_attempt:
+                        candidate_request._provider_continuation_skip_anchor = True
+                    try:
+                        stream = self._call_candidate(
+                            candidate_request, candidate, stream=True
+                        )
+                        for chunk in stream:
+                            if (
+                                anchor_attempt == 0
+                                and not yielded_any
+                                and self._provider_anchor_error(
+                                    candidate_request, chunk
+                                )
+                            ):
+                                self._expire_provider_anchor(candidate_request)
+                                retry_anchor = True
+                                break
+                            self._observe_provider_continuation(
+                                candidate_request, chunk
+                            )
+                            is_error = (
+                                isinstance(chunk, dict)
+                                and bool(chunk.get("error"))
+                            )
+                            is_transient = (
+                                is_error
+                                and self._is_transient_model_error_payload(chunk)
+                            )
+                            if candidate.get("source") == "primary" and is_error:
+                                if is_transient:
+                                    self._record_primary_transient_failure(
+                                        candidate, candidates
+                                    )
+                                else:
+                                    self._record_primary_healthy(candidate)
+                                primary_health_recorded = True
+                            if (
+                                is_error
+                                and not yielded_any
+                                and is_transient
+                                and index + 1 < len(candidates)
+                            ):
+                                next_candidate = candidates[index + 1]
+                                self._log_model_fallback(
+                                    candidate, next_candidate, chunk
+                                )
+                                last_error_chunk = chunk
+                                retry_next = True
+                                break
+                            if (
+                                is_transient
+                                and candidate.get("source") == "fallback"
+                            ):
+                                chunk = self._mark_fallback_exhausted(chunk)
+                            if (
+                                candidate.get("source") == "primary"
+                                and not primary_health_recorded
+                            ):
+                                self._record_primary_healthy(candidate)
+                                primary_health_recorded = True
+                            yielded_any = True
+                            yield self._format_stream_chunk(chunk)
+                        if retry_anchor:
+                            continue
+                        if retry_next:
+                            break
+                        if (
+                            candidate.get("source") == "primary"
+                            and not primary_health_recorded
+                        ):
+                            self._record_primary_healthy(candidate)
+                        self._stage_provider_continuation(candidate_request)
+                        return
+                    except Exception as e:
+                        if (
+                            anchor_attempt == 0
+                            and not yielded_any
+                            and self._provider_anchor_error(
+                                candidate_request, e
+                            )
+                        ):
+                            self._expire_provider_anchor(candidate_request)
+                            continue
+                        is_transient = self._is_transient_model_error_text(str(e))
+                        if candidate.get("source") == "primary":
                             if is_transient:
-                                self._record_primary_transient_failure(candidate, candidates)
+                                self._record_primary_transient_failure(
+                                    candidate, candidates
+                                )
                             else:
                                 self._record_primary_healthy(candidate)
-                            primary_health_recorded = True
                         if (
-                            is_error
-                            and not yielded_any
+                            not yielded_any
                             and is_transient
                             and index + 1 < len(candidates)
                         ):
                             next_candidate = candidates[index + 1]
-                            self._log_model_fallback(candidate, next_candidate, chunk)
-                            last_error_chunk = chunk
+                            self._log_model_fallback(
+                                candidate, next_candidate, e
+                            )
                             retry_next = True
                             break
-                        if is_transient and candidate.get("source") == "fallback":
-                            chunk = self._mark_fallback_exhausted(chunk)
-                        if candidate.get("source") == "primary" and not primary_health_recorded:
-                            self._record_primary_healthy(candidate)
-                            primary_health_recorded = True
-                        yielded_any = True
-                        yield self._format_stream_chunk(chunk)
-                    if retry_next:
-                        continue
-                    if candidate.get("source") == "primary" and not primary_health_recorded:
-                        self._record_primary_healthy(candidate)
-                    return
-                except Exception as e:
-                    is_transient = self._is_transient_model_error_text(str(e))
-                    if candidate.get("source") == "primary":
-                        if is_transient:
-                            self._record_primary_transient_failure(candidate, candidates)
-                        else:
-                            self._record_primary_healthy(candidate)
-                    if (
-                        not yielded_any
-                        and is_transient
-                        and index + 1 < len(candidates)
-                    ):
-                        next_candidate = candidates[index + 1]
-                        self._log_model_fallback(candidate, next_candidate, e)
-                        continue
-                    if is_transient and candidate.get("source") == "fallback":
-                        exhausted_error = RuntimeError(str(e))
-                        exhausted_error.model_fallback_exhausted = True
-                        raise exhausted_error from e
-                    raise
+                        if (
+                            is_transient
+                            and candidate.get("source") == "fallback"
+                        ):
+                            exhausted_error = RuntimeError(str(e))
+                            exhausted_error.model_fallback_exhausted = True
+                            raise exhausted_error from e
+                        raise
+                if retry_next:
+                    continue
             if last_error_chunk is not None:
                 yield self._format_stream_chunk(last_error_chunk)
                 
@@ -2605,8 +3025,6 @@ class AgentBridge:
         try:
             if context.get("channel_type") != const.WECHAT_GROUP:
                 return query
-            if not conf().get("wechat_group_context_persist_raw_user_only", True):
-                return query
             raw = context.get("wechat_group_user_content")
             if isinstance(raw, str) and raw.strip():
                 return raw
@@ -2809,21 +3227,21 @@ class AgentBridge:
             "reason": str(context.get("wechat_group_session_reason") or ""),
         }
         context["wechat_group_pending_agent_delivery"] = pending
-        if not conf().get("wechat_group_continuation_enabled", False):
+        tool_continuation_enabled = conf().get(
+            "wechat_group_tool_continuation_enabled",
+            False,
+        )
+        if not tool_continuation_enabled:
             return
         try:
             from channel.wechat_group.wechat_group_continuation_store import (
                 build_safe_continuation_capsule,
             )
 
-            ttl_minutes = max(
-                int(conf().get("wechat_group_continuation_ttl_minutes", 10) or 10),
-                1,
-            )
             capsule = build_safe_continuation_capsule(messages)
             if capsule:
                 pending["continuation_capsule"] = capsule
-                pending["continuation_ttl_seconds"] = ttl_minutes * 60
+                pending["continuation_ttl_seconds"] = min(ttl_seconds, 15 * 60)
         except Exception as e:
             logger.warning(
                 "[AgentBridge] Failed to stage WeChat group continuation: %s",

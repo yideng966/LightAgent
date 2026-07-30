@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from agent.memory.conversation_store import ConversationStore
+from bridge.context import Context, ContextType
 from channel.wechat_group.wechat_group_archive import WechatGroupArchive
 from channel.wechat_group.wechat_group_context_policy import WechatGroupContextPolicy
 from channel.wechat_group.wechat_group_humanized_context import (
@@ -45,19 +46,12 @@ class WechatGroupContextV2Test(unittest.TestCase):
         self.original = {
             key: conf().get(key)
             for key in (
-                "wechat_group_context_engine_mode",
-                "wechat_group_recent_context_enabled",
                 "wechat_group_archive_evidence_enabled",
-                "wechat_group_local_summary_enabled",
-                "wechat_group_reply_policy_enabled",
-                "wechat_group_reference_policy_enabled",
-                "wechat_group_link_policy_enabled",
+                "wechat_group_rolling_summary_enabled",
             )
         }
-        conf()["wechat_group_context_engine_mode"] = "v2"
-        conf()["wechat_group_recent_context_enabled"] = True
         conf()["wechat_group_archive_evidence_enabled"] = True
-        conf()["wechat_group_local_summary_enabled"] = True
+        conf()["wechat_group_rolling_summary_enabled"] = False
         self.tempdir = tempfile.TemporaryDirectory()
         self.archive = WechatGroupArchive(
             str(Path(self.tempdir.name) / "archive.db")
@@ -119,6 +113,48 @@ class WechatGroupContextV2Test(unittest.TestCase):
         self.assertNotIn("这个怎么算", block)
         self.assertIn('untrusted="true"', block)
         self.assertEqual(2, snapshot.diagnostics["timeline_event_count"])
+
+    def test_request_sees_every_member_in_room_but_rejects_other_room_collision(self):
+        self.archive.record_message(
+            "msg-charlie",
+            "runtime-room",
+            sender_nickname="Charlie",
+            text="Charlie确认周五晚上发布",
+            created_at=self.now - 10,
+            stable_room_id="wgr_room",
+            stable_member_id="wgm_charlie",
+        )
+        self.archive.record_message(
+            "msg-other-room",
+            "wgr_room",
+            sender_nickname="Mallory",
+            text="另一个群的机密内容",
+            created_at=self.now - 5,
+            stable_room_id="wgr_other",
+            stable_member_id="wgm_mallory",
+        )
+
+        snapshot = WechatGroupRequestSnapshotFactory(
+            self.archive,
+            store=self.store,
+        ).build(
+            make_message(self.now),
+            "这个怎么算",
+            trigger_source="direct_reply",
+            is_free_reply=False,
+            owner_session_id="wechat_group:wgr_room:wgm_alice",
+            thread_id="wgt_new",
+            thread_action="new_thread",
+        )
+
+        block = snapshot.recent_block()
+        self.assertIn("Bob", block)
+        self.assertIn("Charlie确认周五晚上发布", block)
+        self.assertNotIn("另一个群的机密内容", block)
+        self.assertTrue(all(
+            source.startswith(("inbound:", "assistant:"))
+            for source in snapshot.included_source_event_ids
+        ))
 
     def test_resume_thread_excludes_events_already_in_agent_history(self):
         session_id = "wechat_group:wgr_room:wgm_alice"
@@ -204,6 +240,24 @@ class WechatGroupContextV2Test(unittest.TestCase):
             self.archive.get_room_revision("wgr_room"),
             result.metadata["wechat_group_room_revision_before"],
         )
+
+    def test_minimal_builder_failure_context_keeps_same_room_recent_tail(self):
+        from channel.wechat_group.wechat_group_channel import WechatGroupChannel
+
+        channel = WechatGroupChannel.__new__(WechatGroupChannel)
+        channel.archive = self.archive
+        context = Context(ContextType.TEXT, "这个怎么算")
+        context["wechat_group_trigger_source"] = "direct_reply"
+
+        channel._apply_minimal_safe_context(
+            context,
+            make_message(self.now),
+            "这个怎么算",
+        )
+
+        self.assertEqual("minimal", context["wechat_group_context_mode"])
+        self.assertTrue(context["wechat_group_recent_context_injected"])
+        self.assertIn("月卡按自然月计算", context.content)
 
 
 if __name__ == "__main__":

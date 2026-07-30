@@ -16,10 +16,8 @@ from config import conf
 class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
     def setUp(self):
         self._original_config = {
-            "wechat_group_context_persist_raw_user_only": conf().get("wechat_group_context_persist_raw_user_only"),
             "conversation_persistence": conf().get("conversation_persistence"),
         }
-        conf()["wechat_group_context_persist_raw_user_only"] = True
         conf()["conversation_persistence"] = True
 
     def tearDown(self):
@@ -53,16 +51,6 @@ class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
         result = self._bridge()._select_persisted_user_query("enhanced prompt", context)
 
         self.assertEqual("raw user text", result)
-
-    def test_select_persisted_user_query_can_be_disabled(self):
-        conf()["wechat_group_context_persist_raw_user_only"] = False
-        context = Context(ContextType.TEXT, "enhanced")
-        context["channel_type"] = "wechat_group"
-        context["wechat_group_user_content"] = "raw user text"
-
-        result = self._bridge()._select_persisted_user_query("enhanced prompt", context)
-
-        self.assertEqual("enhanced prompt", result)
 
     def test_thread_persistence_keeps_only_first_user_and_final_assistant(self):
         messages = [
@@ -133,7 +121,13 @@ class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
             ))
 
     def test_sanitize_wechat_group_runtime_messages_replaces_current_user_turn(self):
-        enhanced = "<wechat-group-reply-policy>\ninternal\n</wechat-group-reply-policy>\n\nraw user text"
+        enhanced = (
+            "<recent-wechat-group-transcript untrusted=\"true\">\n"
+            "Bob: 同群公开消息\nCharlie: 另一条同群公开消息\n"
+            "</recent-wechat-group-transcript>\n\n"
+            "<wechat-group-reply-policy>\ninternal\n</wechat-group-reply-policy>\n\n"
+            "raw user text"
+        )
         raw = "raw user text"
 
         class FakeAgent:
@@ -157,6 +151,8 @@ class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
         self.assertEqual(raw, agent.messages[-1]["content"][0]["text"])
         self.assertEqual(raw, agent._last_run_new_messages[0]["content"][0]["text"])
         self.assertEqual("older", agent.messages[0]["content"][0]["text"])
+        self.assertNotIn("Bob", str(agent.messages[-1]))
+        self.assertNotIn("Charlie", str(agent._last_run_new_messages[0]))
 
     def test_observe_only_snapshot_restores_messages_last_run_and_executor(self):
         previous_executor = object()
