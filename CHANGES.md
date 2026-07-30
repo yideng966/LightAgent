@@ -2,6 +2,25 @@
 
 ## 2026-07-30
 
+### 修复微信群定向自由回复被 stale 误抑制
+
+- 修复 V2 将全部自由回复都视为 ambient 的问题；发送前 room revision 复核现在只抑制明确分类为 `observe_only` 的环境接话。
+- `new_thread`、`resume_thread` 以及缺少 session action 的自由回复不再仅因生成期间出现后续群消息而被静默丢弃，仍按 room single-flight 顺序进入 sidecar 确认发送。
+- stale 日志增加 session action，便于区分真正过期的环境接话和面向机器人的定向请求；两阶段提交、1.5 秒防抖、队列 TTL、Judge/Scorer、冷却及禁言规则保持不变。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_channel.py`
+- `tests/test_wechat_group_reply_coordinator.py`
+- `plans/20260730_微信群自由回复并发丢失修复.md`
+- `AGENTS.md`
+
+验证记录：
+
+- stale 分类、V2 发送确认、会话策略、上下文、持久化和微信群主通道关联回归共 179 项通过。
+- 微信群主通道 143 项单独运行通过，耗时约 76 秒；Python 编译通过。
+- `git diff --check` 与暂存差异检查通过。
+
 ### 统一微信群 V2 全群上下文并发布 2.1.23
 
 - 微信群上下文引擎固定为 V2，删除 Legacy 运行分支、模式配置、Web 引擎选择和旧轻量拼装；会话作用域继续保留并默认按 `stable_room_id + stable_member_id` 隔离，旧 `group_shared_session = true` 仅在缺少新键时映射为 room scope。

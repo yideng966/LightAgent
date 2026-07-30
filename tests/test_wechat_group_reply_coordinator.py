@@ -7,6 +7,11 @@ from channel.wechat_group.wechat_group_channel import WechatGroupChannel
 from channel.wechat_group.wechat_group_reply_coordinator import (
     WechatGroupReplyCoordinator,
 )
+from channel.wechat_group.wechat_group_session_policy import (
+    ACTION_NEW_THREAD,
+    ACTION_OBSERVE_ONLY,
+    ACTION_RESUME_THREAD,
+)
 
 
 class WechatGroupReplyCoordinatorTest(unittest.TestCase):
@@ -86,6 +91,7 @@ class WechatGroupStaleAmbientTest(unittest.TestCase):
         )
         context = {
             "wechat_group_is_free_reply": True,
+            "wechat_group_session_action": ACTION_OBSERVE_ONLY,
             "wechat_group_stable_room_id": "wgr_room",
             "wechat_group_room_revision_before": {
                 "inbound_cursor": 2,
@@ -93,8 +99,52 @@ class WechatGroupStaleAmbientTest(unittest.TestCase):
             },
         }
 
-        self.assertTrue(channel._should_suppress_stale_ambient(context))
+        with self.assertLogs("log", level="INFO") as captured:
+            self.assertTrue(channel._should_suppress_stale_ambient(context))
         self.assertTrue(context["wechat_group_stale_suppressed"])
+        self.assertIn("action=observe_only", "\n".join(captured.output))
+
+    def test_bot_targeted_free_reply_is_not_suppressed_when_room_revision_changes(self):
+        channel = WechatGroupChannel.__new__(WechatGroupChannel)
+        channel.archive = SimpleNamespace(
+            get_room_revision=lambda _room: self.fail(
+                "bot-targeted free replies must bypass ambient revision checks"
+            )
+        )
+
+        for session_action in (ACTION_NEW_THREAD, ACTION_RESUME_THREAD):
+            with self.subTest(session_action=session_action):
+                context = {
+                    "wechat_group_is_free_reply": True,
+                    "wechat_group_session_action": session_action,
+                    "wechat_group_stable_room_id": "wgr_room",
+                    "wechat_group_room_revision_before": {
+                        "inbound_cursor": 2,
+                        "assistant_cursor": 1,
+                    },
+                }
+
+                self.assertFalse(channel._should_suppress_stale_ambient(context))
+                self.assertNotIn("wechat_group_stale_suppressed", context)
+
+    def test_missing_session_action_is_not_treated_as_ambient(self):
+        channel = WechatGroupChannel.__new__(WechatGroupChannel)
+        channel.archive = SimpleNamespace(
+            get_room_revision=lambda _room: self.fail(
+                "missing classification must not silently suppress a reply"
+            )
+        )
+        context = {
+            "wechat_group_is_free_reply": True,
+            "wechat_group_stable_room_id": "wgr_room",
+            "wechat_group_room_revision_before": {
+                "inbound_cursor": 2,
+                "assistant_cursor": 1,
+            },
+        }
+
+        self.assertFalse(channel._should_suppress_stale_ambient(context))
+        self.assertNotIn("wechat_group_stale_suppressed", context)
 
     def test_direct_request_is_never_suppressed_by_revision_change(self):
         channel = WechatGroupChannel.__new__(WechatGroupChannel)

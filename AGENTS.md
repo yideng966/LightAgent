@@ -348,6 +348,7 @@ docker push yideng966/lightagent:latest
 - room timeline、24 小时 rolling summary 和归档证据必须按当前 `stable_room_id` 汇集本群所有成员的安全公开消息；`stable_member_id` 只用于身份、权限、画像、owner session 和成员私有 Agent thread，不能用于缩小群级上下文查询。其他成员消息可以进入当前请求，但不得写入当前成员的私有 thread。
 - V2 thread 固定只持久化用户原文和最终助手文本，工具原始消息、thinking、增强 Prompt、runtime ID 与媒体路径不得进入可恢复历史；原文持久化不再由用户配置关闭。
 - V2 Agent turn 必须以 sidecar `send_result` 为两阶段提交边界：生成完成后只能写模型/Web 均不可见的 pending 行；仅确认 `sent` 后才允许确认 thread、记录已发送 assistant timeline、保存工具 continuation capsule、确认 Provider continuation anchor 并刷新 Agent 缓存。发送失败、未知、超时、清洗为空、静默或 stale 抑制必须删除本请求 pending 状态且不创建或续期 thread；不得把“已交给 sidecar”当作发送成功。
+- V2 自由回复的 room revision stale 抑制只允许作用于明确分类为 `observe_only` 的 ambient 请求；`new_thread`、`resume_thread` 及缺少 session action 的请求不得仅因生成期间出现后续群消息而静默丢弃，仍须按 room single-flight 和 `send_result` 确认边界完成发送。
 - Provider continuation 只是可选传输优化，默认关闭；只有 Provider 明确实现 capability、请求构造、锚点提取和锚点失效分类合同时才允许启用。锚点必须按 stable account、room、member、owner session、thread、Provider、model、endpoint 和权限指纹严格隔离，失效后同候选只允许无锚点本地重放一次，主备 Provider 不得共用锚点。
 - rolling summary、归档证据、工具续接和 Provider 续接必须可独立关闭；无法获得稳定 outbound message ID 时不得按相似文本伪造 quote-to-thread anchor。
 - Web「群聊 → 拟人化」只保留真实生效的 V2 参数，采用单一页面主滚动；不得加入 `<details>/<summary>` 折叠区、引擎模式选择或完整上下文注入预览，不支持 Provider 续接时不得展示无效开关。

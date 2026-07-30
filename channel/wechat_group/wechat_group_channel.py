@@ -68,6 +68,7 @@ from channel.wechat_group.wechat_group_free_reply_judge import WechatGroupFreeRe
 from channel.wechat_group.wechat_group_free_reply_scorer import WechatGroupFreeReplyScorer
 from channel.wechat_group.wechat_group_free_reply_worker import WechatGroupFreeReplyWorkerPool
 from channel.wechat_group.wechat_group_session_policy import (
+    ACTION_OBSERVE_ONLY,
     WechatGroupSessionPolicy,
 )
 from channel.wechat_group.wechat_group_reply_coordinator import (
@@ -1801,10 +1802,15 @@ class WechatGroupChannel(ChatChannel):
         return False
 
     def _should_suppress_stale_ambient(self, context) -> bool:
-        if context.get("wechat_group_stale_suppressed") is True:
-            return True
         if context.get("wechat_group_is_free_reply") is not True:
             return False
+        session_action = str(
+            context.get("wechat_group_session_action") or ""
+        ).strip()
+        if session_action != ACTION_OBSERVE_ONLY:
+            return False
+        if context.get("wechat_group_stale_suppressed") is True:
+            return True
         before = context.get("wechat_group_room_revision_before")
         if not isinstance(before, dict):
             return False
@@ -1823,8 +1829,9 @@ class WechatGroupChannel(ChatChannel):
             return False
         context["wechat_group_stale_suppressed"] = True
         logger.info(
-            "[wechat_group] stale ambient reply suppressed: room=%s before=%s after=%s request=%s",
+            "[wechat_group] stale ambient reply suppressed: room=%s action=%s before=%s after=%s request=%s",
             room_id,
+            session_action,
             before,
             after,
             context.get("request_id") or "",
