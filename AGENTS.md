@@ -523,7 +523,7 @@ messages:
 - worker 判定通过后，通道用 `wechat_group_force_reply = true` 重新走 `_compose_context()` / `produce()`，绕过通用群聊“必须 @ / 前缀 / 关键词”的过滤，但最终回复仍复用 `ChatChannel`、`Bridge` 和 Agent 主链路。
 - 默认生图触发词必须保守；不要使用 `看`、`找` 这类容易命中“看看”“找到”“找不到”等普通群聊文本的单字前缀，避免自由回复候选被误转成 `ContextType.IMAGE_CREATE`。
 - 自由回复发送时设置 `suppress_mention = true` 和 `no_need_at = true`，因此默认不真实 mention 原发送者；@ 机器人或引用机器人回复仍走直接回复链路，不进入自由回复 worker。
-- 模型判断当前消息并非在问机器人且无需接话时，相关内部判断只能表示静默，不能作为普通文本发到群里。发送层短文本兜底至少要覆盖“没/未 @ 我、不是在问我”与“不用/无需插嘴、接话、回复、回应”等组合，并保留正常长文本解释不会被误拦截的回归测试。
+- 模型判断当前消息并非在问机器人且无需接话时，相关内部判断只能表示静默，不能作为普通文本发到群里。发送层与自由回复本地抑制必须复用 `is_wechat_group_silent_control_text()`（或等价统一 helper），覆盖“没/未 @ 我、不是在问我”与“不用/无需插嘴、接话、回复、回应”等组合，以及“群友/群成员之间互动、互相喊话 + 无需回复”等短小控制说明；只拦截整条由成对括号包裹的短控制文本，普通未包裹文本和长解释不得误拦截，并保留对应回归测试。
 - 情绪服务在消息进入主链路前调用 `observe_message()` 更新 `valence / energy / sociability`；在自由回复本地判定后调用 `adjust_free_reply_decision()` 叠加低社交、低能量、负面情绪加阈值和时段规则等修正。
 - 情绪状态会通过 `<wechat-group-emotion>` 块注入当前 user message，影响模型语气与接话状态感知；每次成功发送回复后调用 `mark_replied()` 记录回复次数并降低 energy，减少连续插话倾向。
 - `wechat_group_free_reply_time_rules_enabled` 与 `wechat_group_free_reply_time_rules` 只作为自由回复调度的时段门控；规则不命中时会给自由回复判定增加 `time_rule_blocked` 抑制，不影响 @ 必回。

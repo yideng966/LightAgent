@@ -2,6 +2,29 @@
 
 ## 2026-07-31
 
+### 修复微信群静默说明误发送
+
+- 微信群发送层与自由回复层恢复共用静默控制文本识别，模型输出“（这是群成员互相喊话，无需回复）”等内部判断时直接静默，不再调用 sidecar 发送，也不会进入自由回复 worker。
+- 识别范围覆盖“群友/群成员之间互动”“无需 AI 回复”“保持安静”等短小控制措辞；发送层静默后不记录助手出站消息，自由回复层保留 `bot_silent_notice` 抑制原因用于排障。
+- 规则仅处理整条由成对括号包裹且不超过 48 字的控制文本；未加括号的普通短句、长文本解释及其他正常群聊回复保持可发送。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_reply_cleanup.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_free_reply.py`
+- `tests/test_wechat_group_channel.py`
+- `tests/test_wechat_group_free_reply.py`
+- `plans/20260731_修复微信群静默说明误发送.md`
+- `AGENTS.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 修复前聚焦回归出现 8 个子用例失败，确认目标原句会进入 `send_text()`、自由回复层缺少 `bot_silent_notice`，且旧规则会误抑制未加括号的普通短句；实现后聚焦 5 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_free_reply tests.test_wechat_group_channel`：198 项通过。
+- 相关 Python 文件语法检查与目标文件 `git diff --check` 通过。
+
 ### 区分微信群入站图片与表情包
 
 - 新增独立 `ContextType.STICKER`，保留 Sidecar 已识别的 `message_type = sticker` 语义，不再把表情包适配为普通图片。

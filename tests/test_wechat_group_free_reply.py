@@ -700,7 +700,7 @@ class WechatGroupFreeReplyDecisionTest(unittest.TestCase):
         cases = [
             ("disabled", {"config": {"enabled": False}}),
             ("self_message", {"kwargs": {"is_self": True}}),
-            ("bot_silent_notice", {"text": "小风（没@我，不插嘴）"}),
+            ("bot_silent_notice", {"text": "（小风没@我，不插嘴）"}),
             ("media_payload", {"text": "小风 <msg><img aeskey=\"abc\" /></msg>", "kwargs": {"message_type": "text"}}),
             ("image_generation_failure_discussion", {"text": "小风 图片生成失败，它说没有绘图密钥"}),
             ("min_interval", {"profile": {"min_interval_seconds": 60}, "state": {"last_triggered_at": 99990}}),
@@ -736,6 +736,11 @@ class WechatGroupFreeReplyDecisionTest(unittest.TestCase):
         for text in (
             "（没@我，不插嘴）",
             "（这不是在问我，是Mr.J在回春希的图，我不用插嘴）",
+            "（这条是群友之间的对话，不是@我，无需接话）",
+            "（这是群友之间的正常互动，无需AI回复）",
+            "（这是群成员互相喊话，无需回复）",
+            "（无需回复，保持安静即可。）",
+            "（无需回复）",
         ):
             with self.subTest(text=text):
                 decision = evaluate_wechat_group_free_reply(

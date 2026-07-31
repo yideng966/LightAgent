@@ -9,6 +9,9 @@ from channel.wechat_group.wechat_group_free_reply_context import (
     analyze_free_reply_addressee,
     is_explicit_open_group_question,
 )
+from channel.wechat_group.wechat_group_reply_cleanup import (
+    is_wechat_group_silent_control_text,
+)
 
 
 FREE_REPLY_ACTIVITY_LEVELS = ["quiet", "normal", "active", "crazy"]
@@ -319,37 +322,7 @@ def _normalize_text(text: str) -> str:
 
 
 def _is_bot_silent_notice_text(text: str) -> bool:
-    value = re.sub(r"\s+", "", str(text or "")).strip()
-    value = value.strip("()（）[]【】{}")
-    if not value or len(value) > 24:
-        return False
-    has_not_addressed_bot = any(marker in value for marker in (
-        "没@我",
-        "没有@我",
-        "未@我",
-        "不是在问我",
-        "不是问我",
-        "没在问我",
-        "没有在问我",
-        "不是对我说",
-        "不是在跟我说",
-        "不是跟我说",
-    ))
-    has_silent_action = any(marker in value for marker in (
-        "不插嘴",
-        "不用插嘴",
-        "无需插嘴",
-        "不接话",
-        "不用接话",
-        "无需接话",
-        "不回复",
-        "不用回复",
-        "无需回复",
-        "不回应",
-        "不用回应",
-        "无需回应",
-    ))
-    return has_not_addressed_bot and has_silent_action
+    return is_wechat_group_silent_control_text(text)
 
 
 def _is_media_payload(text: str, message_type=None) -> bool:
