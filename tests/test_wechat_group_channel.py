@@ -3288,6 +3288,51 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertNotIn("D:/tmp/cat.jpg", context.content)
         self.assertIn("A cat sitting on a desk.", context.content)
 
+    def test_at_image_message_keeps_failure_context_for_explicit_request(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["group_name_white_list"] = []
+        conf()["wechat_group_image_understanding_enabled"] = True
+        conf()["wechat_group_image_understanding_comment_enabled"] = True
+        conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
+        channel = WechatGroupChannel(
+            client=FakeClient(),
+            memory_service=Mock(preview_prompt_memories_sync=Mock(return_value={})),
+        )
+        channel.produce = Mock()
+        msg = Mock(
+            ctype=ContextType.IMAGE,
+            content="D:/tmp/cat.jpg",
+            text="",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=True,
+            is_quote_self=False,
+            is_group=True,
+            at_list=["wxid_bot"],
+            self_display_name="LightBot",
+            create_time=100000,
+            msg_id="msg-image-explicit-failure",
+            message_type="image",
+            media_path="D:/tmp/cat.jpg",
+        )
+
+        with patch(
+            "agent.tools.vision.vision.Vision.execute",
+            return_value=ToolResult.fail("vision backend down"),
+        ) as execute:
+            channel.handle_text(msg)
+
+        execute.assert_called_once()
+        channel.produce.assert_called_once()
+        context = channel.produce.call_args.args[0]
+        self.assertNotEqual(True, context.get("wechat_group_is_free_reply"))
+        self.assertIn("图片理解失败", context.content)
+
     def test_at_sticker_message_does_not_trigger_image_understanding(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["group_name_white_list"] = []
@@ -4426,6 +4471,159 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertNotIn("D:/tmp/cat.jpg", context.content)
         for transport_fragment in ("<?xml", "<img", "hevc_mid_size", "aeskey", "cdnthumburl"):
             self.assertNotIn(transport_fragment, context.content)
+
+    def test_worker_approved_image_free_reply_is_silent_without_usable_vision_summary(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_image_understanding_enabled"] = True
+        conf()["wechat_group_image_understanding_comment_enabled"] = True
+        conf()["wechat_group_free_reply_image_understanding_enabled"] = True
+        conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
+        cases = (
+            ("exception", {"side_effect": RuntimeError("vision backend down")}, "D:/tmp/cat.jpg", True),
+            ("tool_failure", {"return_value": ToolResult.fail("vision backend down")}, "D:/tmp/cat.jpg", True),
+            ("empty_summary", {"return_value": ToolResult.success({"content": ""})}, "D:/tmp/cat.jpg", True),
+            ("missing_media", {"return_value": ToolResult.success({"content": "An older image."})}, "", True),
+        )
+
+        for case_name, vision_behavior, media_path, vision_called in cases:
+            with self.subTest(case=case_name):
+                archive = Mock()
+                archive.get_recent_messages.return_value = [] if media_path else [
+                    {
+                        "message_id": "older-image",
+                        "message_type": "image",
+                        "media_path": "D:/tmp/older.jpg",
+                        "sender_nickname": "Alice",
+                        "sender_id": "wxid_alice",
+                        "created_at": 99999,
+                    }
+                ]
+                archive.get_recent_conversation_messages.return_value = []
+                channel = WechatGroupChannel(
+                    client=FakeClient(),
+                    archive=archive,
+                    memory_service=Mock(preview_prompt_memories_sync=Mock(return_value={})),
+                )
+                channel.produce = Mock()
+                msg = Mock(
+                    ctype=ContextType.IMAGE,
+                    content=media_path,
+                    text=WECHAT_IMAGE_TRANSPORT_XML,
+                    from_user_id="room@@abc",
+                    other_user_id="room@@abc",
+                    other_user_nickname="Test Room",
+                    actual_user_id="wxid_alice",
+                    actual_user_nickname="Alice",
+                    to_user_id="wxid_bot",
+                    to_user_nickname="LightBot",
+                    is_at=False,
+                    is_group=True,
+                    at_list=[],
+                    self_display_name="LightBot",
+                    create_time=100000,
+                    msg_id="msg-image-free-reply-{}".format(case_name),
+                    message_type="image",
+                    media_path=media_path,
+                )
+                task = {
+                    "msg": msg,
+                    "room_id": "room@@abc",
+                    "text": "[image]",
+                    "local_decision": {"triggered": True, "score": 50},
+                }
+
+                with patch("agent.tools.vision.vision.Vision.execute", **vision_behavior) as execute:
+                    channel._submit_free_reply_after_judge(task, {"approved": True, "confidence": 0.9})
+
+                if vision_called:
+                    execute.assert_called_once()
+                else:
+                    execute.assert_not_called()
+                channel.produce.assert_not_called()
+                state = channel.free_reply_state.get("room@@abc")
+                self.assertEqual(0, state["last_triggered_at"])
+                self.assertEqual([], state["recent_triggered_at"])
+                self.assertEqual(0, state["consecutive_triggered"])
+                decision = channel.free_reply_state.last_decision()
+                self.assertFalse(decision["triggered"])
+                self.assertIn("image_understanding_failed", decision["suppressions"])
+
+    def test_worker_approved_text_free_reply_is_silent_when_recent_image_understanding_fails(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_multimodal_context_enabled"] = True
+        conf()["wechat_group_multimodal_image_understanding_context_enabled"] = True
+        conf()["wechat_group_multimodal_free_reply_image_context_enabled"] = True
+        conf()["wechat_group_multimodal_same_sender_window_seconds"] = 120
+        conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
+        conf()["wechat_group_recent_context_enabled"] = False
+        conf()["wechat_group_knowledge_enabled"] = False
+        conf()["wechat_group_profile_enabled"] = False
+        conf()["wechat_group_focus_enabled"] = False
+        conf()["wechat_group_style_enabled"] = False
+        conf()["wechat_group_emotion_enabled"] = False
+        archive = Mock()
+        archive.get_recent_messages.return_value = [
+            {
+                "message_id": "image-before-failed-question",
+                "message_type": "image",
+                "media_path": "D:/tmp/fact.jpg",
+                "sender_nickname": "Alice",
+                "sender_id": "wxid_alice",
+                "created_at": 100000,
+            }
+        ]
+        channel = WechatGroupChannel(
+            client=FakeClient(),
+            archive=archive,
+            memory_service=Mock(preview_prompt_memories_sync=Mock(return_value={})),
+        )
+        channel.produce = Mock()
+        msg = Mock(
+            ctype=ContextType.TEXT,
+            content="这是真的吗",
+            text="这是真的吗",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            create_time=100002,
+            msg_id="msg-free-reply-text-image-failure",
+            message_type="text",
+            media_path="",
+        )
+        task = {
+            "msg": msg,
+            "room_id": "room@@abc",
+            "text": "这是真的吗",
+            "local_decision": {"triggered": True, "score": 60},
+        }
+
+        with patch(
+            "agent.tools.vision.vision.Vision.execute",
+            return_value=ToolResult.fail("vision backend down"),
+        ) as execute:
+            channel._submit_free_reply_after_judge(task, {"approved": True, "confidence": 0.9})
+
+        execute.assert_called_once()
+        channel.produce.assert_not_called()
+        state = channel.free_reply_state.get("room@@abc")
+        self.assertEqual(0, state["last_triggered_at"])
+        self.assertEqual(0, state["consecutive_triggered"])
+        decision = channel.free_reply_state.last_decision()
+        self.assertFalse(decision["triggered"])
+        self.assertIn("image_understanding_failed", decision["suppressions"])
 
     def test_worker_approved_text_free_reply_injects_recent_image_via_global_multimodal_context(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]

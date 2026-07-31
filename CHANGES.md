@@ -28,6 +28,26 @@
 - 消息、传输与多模态 27 项通过；表情包服务、标注与 Agent 工具 35 项通过；Sidecar 61 项通过。
 - `python -X utf8 -m unittest discover -s tests`：1221 项通过，1 项按条件跳过。
 
+### 修复微信群自由回复识图失败仍继续回复
+
+- 自由回复处理当前图片或命中最近图片时，视觉调用异常、工具失败、空摘要或当前图片缺少可用媒体后会在 Agent 入队前静默结束，不再生成“无法识别”等兜底群消息。
+- 失败请求不再调用 `free_reply_state.mark_triggered()`，避免占用自由回复冷却、小时计数和连续回复计数；内部决策保留 `image_understanding_failed` 抑制原因用于排障。
+- 普通纯文本自由回复、图片识别成功及明确 `@` 图片请求保持原行为，不新增配置项或视觉 Provider 改动。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_channel.py`
+- `tests/test_wechat_group_channel.py`
+- `plans/20260731_微信群自由回复图片识别失败静默.md`
+- `AGENTS.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 新增测试在修复前按预期失败，确认识图失败仍会调用 `produce()`；实现静默门禁后定向成功、失败与显式触发组合 6 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_channel`：149 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_multimodal_context_service tests.test_wechat_group_free_reply tests.test_wechat_group_free_reply_worker`：73 项通过，相关回归合计 222 项。
+
 ### 回退代码基线并发布 2.2.0
 
 - 将 `master` 的代码基线恢复到 `172d6f69dbe7e064813e4b028c7a2ca628347126`，排除该基线之后未指定保留的提交。

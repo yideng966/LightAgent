@@ -90,6 +90,7 @@ from agent.protocol.agent_stream import looks_like_scheduler_request
 WECHAT_GROUP_FREE_REPLY_DEBOUNCE_SECONDS = 1.5
 WECHAT_GROUP_SHORT_QUESTION_BOT_FOLLOWUP_SECONDS = 60
 WECHAT_GROUP_FREE_REPLY_MUTE_COMMAND = "闭嘴"
+WECHAT_GROUP_FREE_REPLY_IMAGE_FAILURE_SUPPRESSION = "image_understanding_failed"
 WECHAT_GROUP_VOICE_INTERACTION_FORCE_REPLY = "force_reply"
 WECHAT_GROUP_VOICE_INTERACTION_FREE_REPLY = "free_reply"
 WECHAT_GROUP_VOICE_INTERACTION_IGNORE = "ignore"
@@ -178,6 +179,18 @@ def _wechat_group_stable_member_scope(msg) -> str:
         or _wechat_group_log_value(getattr(msg, "stable_member_id", "")).strip()
         or _wechat_group_log_value(getattr(msg, "actual_user_id", "")).strip()
     )
+
+
+def _should_suppress_free_reply_for_image_failure(context, current_image=False) -> bool:
+    diagnostics = context.get("wechat_group_multimodal_diagnostics")
+    diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
+    if current_image:
+        return (
+            diagnostics.get("reason") != "current_image"
+            or diagnostics.get("summary_generated") is not True
+        )
+    matched_images = context.get("wechat_group_multimodal_matched_images")
+    return bool(matched_images) and diagnostics.get("summary_generated") is not True
 
 
 def _is_wechat_group_silent_reply_text(text: str) -> bool:
@@ -2539,6 +2552,20 @@ class WechatGroupChannel(ChatChannel):
                 context_kwargs["desire_rtype"] = task.get("desire_rtype")
         context = self._compose_context(context_type, content, **context_kwargs)
         if not context:
+            return
+        if _should_suppress_free_reply_for_image_failure(
+            context,
+            current_image=image_understanding_triggered,
+        ):
+            decision = dict(task.get("local_decision") or {})
+            decision["triggered"] = False
+            suppressions = list(decision.get("suppressions") or [])
+            if WECHAT_GROUP_FREE_REPLY_IMAGE_FAILURE_SUPPRESSION not in suppressions:
+                suppressions.append(WECHAT_GROUP_FREE_REPLY_IMAGE_FAILURE_SUPPRESSION)
+            decision["suppressions"] = suppressions
+            decision["timestamp"] = time.time()
+            self.free_reply_state.remember_decision(decision)
+            self._log_free_reply_decision(decision, "image_understanding_failed")
             return
         context["wechat_group_free_reply_triggered"] = True
         context["wechat_group_free_reply_mode"] = reply_mode

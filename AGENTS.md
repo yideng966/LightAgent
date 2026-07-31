@@ -548,6 +548,7 @@ messages:
 - 文本识图意图当前由 `wechat_group_multimodal_context_service._looks_like_image_reference_question()` 判断；后续扩展意图词时应在该服务和对应测试中完成，不要在 `WechatGroupChannel` 中恢复独立判断。
 - 直接图片没有附带文本时，是否自动评论由 `wechat_group_image_understanding_comment_enabled` 控制；总开关由 `wechat_group_image_understanding_enabled` 控制。
 - 图片理解 prompt 来自 `wechat_group_image_understanding_prompt`，为空时使用默认简洁描述提示；相同 `image_path + question` 的结果由 `WechatGroupMultimodalContextService` 按 `wechat_group_image_understanding_cache_minutes` 做短期缓存。
+- 自由回复已经决定处理当前图片或匹配到历史图片后，若视觉调用异常、返回失败状态或没有产生可用摘要，必须在进入 Agent、LLM 和发送链路前静默短路，也不得调用 `free_reply_state.mark_triggered()` 占用冷却或连续回复计数；明确 `@`、引用机器人等显式交互保持现有失败上下文，不得被该自由回复门禁扩大影响。
 
 文本识图请求的图片定位优先级：
 
