@@ -168,14 +168,20 @@ def _is_wechat_group_transient_model_error_text(text) -> bool:
     )
 
 
-def _is_wechat_group_protocol_model_error_text(text) -> bool:
+def _is_wechat_group_internal_agent_error_text(text) -> bool:
     value = str(text or "").strip()
-    lowered = value.lower()
-    return (
-        lowered.startswith("agent error:")
-        and "模型返回了无法安全处理的响应" in value
-        and "status: 422" in lowered
-    )
+    return value.lower().startswith("agent error:")
+
+
+def _is_wechat_group_explicit_reply_context(context) -> bool:
+    if context.get("wechat_group_is_free_reply") is True:
+        return False
+    trigger_source = str(
+        context.get("wechat_group_trigger_source") or ""
+    ).strip().lower()
+    if trigger_source == "free_reply":
+        return False
+    return context.get("wechat_group_force_reply") is True
 
 
 def _wechat_group_log_value(value) -> str:
@@ -1695,25 +1701,9 @@ class WechatGroupChannel(ChatChannel):
         if reply.type in (ReplyType.TEXT, ReplyType.INFO, ReplyType.ERROR):
             if (
                 reply.type == ReplyType.ERROR
-                and _is_wechat_group_protocol_model_error_text(reply.content)
-            ):
-                if context.get("wechat_group_force_reply", False):
-                    reply = Reply(
-                        ReplyType.TEXT,
-                        WECHAT_GROUP_PROTOCOL_MODEL_ERROR_FALLBACK,
-                    )
-                else:
-                    logger.info(
-                        "[wechat_group] internal protocol error reply suppressed: {}".format(
-                            _wechat_group_log_preview(reply.content)
-                        )
-                    )
-                    return
-            if (
-                reply.type == ReplyType.ERROR
                 and _is_wechat_group_transient_model_error_text(reply.content)
             ):
-                if context.get("wechat_group_force_reply", False):
+                if _is_wechat_group_explicit_reply_context(context):
                     reply = Reply(
                         ReplyType.TEXT,
                         WECHAT_GROUP_TRANSIENT_MODEL_ERROR_FALLBACK,
@@ -1721,6 +1711,22 @@ class WechatGroupChannel(ChatChannel):
                 else:
                     logger.info(
                         "[wechat_group] transient model error reply suppressed: {}".format(
+                            _wechat_group_log_preview(reply.content)
+                        )
+                    )
+                    return
+            elif (
+                reply.type == ReplyType.ERROR
+                and _is_wechat_group_internal_agent_error_text(reply.content)
+            ):
+                if _is_wechat_group_explicit_reply_context(context):
+                    reply = Reply(
+                        ReplyType.TEXT,
+                        WECHAT_GROUP_PROTOCOL_MODEL_ERROR_FALLBACK,
+                    )
+                else:
+                    logger.info(
+                        "[wechat_group] internal agent error reply suppressed: {}".format(
                             _wechat_group_log_preview(reply.content)
                         )
                     )

@@ -2,6 +2,24 @@
 
 ## 2026-07-31
 
+### 屏蔽微信群 Agent 技术错误（Issue #26）
+
+- 微信群发送边界会拦截所有以 `Agent error:` 开头的内部技术错误，不再向群内暴露 Provider 异常类名、请求参数、状态码或反序列化细节；明确触发请求只返回简短可读提示。
+- 修复自由回复任务同时携带 `wechat_group_force_reply=True` 时被误判为明确触发的问题；带 `wechat_group_is_free_reply` 或 `free_reply` 触发来源的 ambient 请求遇到内部错误时统一静默。
+- 保留限流、超时等临时模型错误的既有 Token 提示；管理员权限等业务错误和不带 `Agent error:` 前缀的工具错误继续正常发送。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_channel.py`
+- `tests/test_wechat_group_channel.py`
+- `plans/20260731_屏蔽群聊Agent技术错误.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 微信群主通道 153 项、模型回退与流式思考隔离 55 项均通过。
+- Python 编译和 `git diff --check` 通过。
+
 ### 修复普通表情包被直接解读回复（Issue #25）
 
 - 普通未 @ 表情包不再通过 `media_payload_allowed` 自动达到自由回复阈值；启用自由回复图片理解后，系统先把表情包转换为安全短语义，再按现有活跃档位、本地规则、Scorer、兼容 Judge 和 worker 决定是否接话。

@@ -1825,9 +1825,69 @@ class WechatGroupChannelTest(unittest.TestCase):
         channel.send(
             Reply(
                 ReplyType.ERROR,
-                "Agent error: 模型返回了无法安全处理的响应，请稍后重试。 "
-                "(Status: 422, Code: , Type: )",
+                "Agent error: openai.BadRequestError: OpenAIException - Failed to "
+                "deserialize the JSON body into the target type: reasoning_effort: "
+                "unknown variant `none`, expected one of `low`, `medium`, `high` "
+                "(Status: 422, Code: 422, Type: upstream_error)",
             ),
+            context,
+        )
+
+        self.assertEqual(
+            [("send_text", "room@@abc", "刚才的回复没生成完整，请再试一次。", ["wxid_alice"])],
+            client.commands,
+        )
+
+    def test_send_suppresses_issue_agent_error_for_ambient_context(self):
+        error_text = (
+            "Agent error: openai.BadRequestError: OpenAIException - Failed to "
+            "deserialize the JSON body into the target type: reasoning_effort: "
+            "unknown variant `none` (Status: 422, Code: 422, Type: upstream_error)"
+        )
+        ambient_markers = (
+            {
+                "wechat_group_is_free_reply": True,
+                "wechat_group_trigger_source": "image_message",
+            },
+            {"wechat_group_trigger_source": "free_reply"},
+        )
+
+        for marker in ambient_markers:
+            with self.subTest(marker=marker):
+                client = FakeClient()
+                channel = WechatGroupChannel(client=client)
+                context = {
+                    "type": ContextType.TEXT,
+                    "receiver": "room@@abc",
+                    "wechat_group_force_reply": True,
+                    "msg": Mock(
+                        is_group=True,
+                        actual_user_id="wxid_alice",
+                        actual_user_nickname="Alice",
+                    ),
+                    **marker,
+                }
+
+                channel.send(Reply(ReplyType.ERROR, error_text), context)
+
+                self.assertEqual([], client.commands)
+
+    def test_send_forced_unknown_agent_error_uses_readable_hint(self):
+        client = FakeClient()
+        channel = WechatGroupChannel(client=client)
+        context = {
+            "type": ContextType.TEXT,
+            "receiver": "room@@abc",
+            "wechat_group_force_reply": True,
+            "msg": Mock(
+                is_group=True,
+                actual_user_id="wxid_alice",
+                actual_user_nickname="Alice",
+            ),
+        }
+
+        channel.send(
+            Reply(ReplyType.ERROR, "Agent error: Unexpected provider adapter failure"),
             context,
         )
 
