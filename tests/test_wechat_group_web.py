@@ -105,6 +105,7 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_free_reply_mute_minutes": conf().get("wechat_group_free_reply_mute_minutes"),
             "wechat_group_free_reply_mute_mentions_enabled": conf().get("wechat_group_free_reply_mute_mentions_enabled"),
             "wechat_group_free_reply_queue_ttl_seconds": conf().get("wechat_group_free_reply_queue_ttl_seconds"),
+            "wechat_group_free_reply_stale_message_tolerance": conf().get("wechat_group_free_reply_stale_message_tolerance"),
             "wechat_group_free_reply_worker_max_workers": conf().get("wechat_group_free_reply_worker_max_workers"),
             "wechat_group_free_reply_worker_queue_size": conf().get("wechat_group_free_reply_worker_queue_size"),
             "wechat_group_free_reply_llm_judge_enabled": conf().get("wechat_group_free_reply_llm_judge_enabled"),
@@ -1578,6 +1579,7 @@ class WechatGroupWebTest(unittest.TestCase):
                 "wechat_group_free_reply_mute_minutes": "9999",
                 "wechat_group_free_reply_mute_mentions_enabled": True,
                 "wechat_group_free_reply_queue_ttl_seconds": "999",
+                "wechat_group_free_reply_stale_message_tolerance": "999",
                 "wechat_group_free_reply_worker_max_workers": "99",
                 "wechat_group_free_reply_worker_queue_size": "9999",
                 "wechat_group_free_reply_llm_judge_enabled": False,
@@ -1628,6 +1630,7 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual(1440, conf()["wechat_group_free_reply_mute_minutes"])
         self.assertTrue(conf()["wechat_group_free_reply_mute_mentions_enabled"])
         self.assertEqual(600, conf()["wechat_group_free_reply_queue_ttl_seconds"])
+        self.assertEqual(100, conf()["wechat_group_free_reply_stale_message_tolerance"])
         self.assertEqual(8, conf()["wechat_group_free_reply_worker_max_workers"])
         self.assertEqual(1000, conf()["wechat_group_free_reply_worker_queue_size"])
         self.assertFalse(conf()["wechat_group_free_reply_llm_judge_enabled"])
@@ -1978,6 +1981,20 @@ class WechatGroupWebTest(unittest.TestCase):
             console_js,
         )
 
+    def test_console_exposes_and_saves_stale_message_tolerance(self):
+        with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
+            console_js = f.read()
+
+        self.assertIn("free-reply-stale-tolerance", console_js)
+        self.assertIn("free.stale_message_tolerance ?? 5", console_js)
+        self.assertIn("saved.stale_message_tolerance ?? 5", console_js)
+        self.assertIn(
+            "wechat_group_free_reply_stale_message_tolerance: freeReply.stale_message_tolerance",
+            console_js,
+        )
+        self.assertIn("wechat_group_free_reply_stale_tolerance_hint", console_js)
+        self.assertIn('type="number" inputmode="numeric"', console_js)
+
     def test_console_compacts_free_reply_number_fields_in_one_desktop_row(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
             console_js = f.read()
@@ -1992,13 +2009,14 @@ class WechatGroupWebTest(unittest.TestCase):
             "free-reply-hourly-limit",
             "free-reply-consecutive-limit",
             "free-reply-queue-ttl",
+            "free-reply-stale-tolerance",
             "free-reply-worker-max-workers",
             "free-reply-worker-queue-size",
         ]:
             self.assertGreater(console_js.find(field_id, compact_grid_index), compact_grid_index)
 
         self.assertIn(".free-reply-compact-grid", console_css)
-        self.assertIn("repeat(7, minmax(0, 1fr))", console_css)
+        self.assertIn("repeat(8, minmax(0, 1fr))", console_css)
 
     def test_console_renders_free_reply_rules_as_table_with_chinese_labels_and_scores(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:

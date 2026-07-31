@@ -527,6 +527,8 @@ const I18N = {
         wechat_group_free_reply_hourly: '每小时上限',
         wechat_group_free_reply_consecutive: '连续发言上限',
         wechat_group_free_reply_ttl: '排队有效期（秒）',
+        wechat_group_free_reply_stale_tolerance: '允许过期消息数',
+        wechat_group_free_reply_stale_tolerance_hint: '范围 0–100；0 表示有新消息即抑制。',
         wechat_group_free_reply_worker_title: '后台任务池',
         wechat_group_free_reply_worker_max_workers: '后台任务并发数',
         wechat_group_free_reply_worker_queue_size: '队列长度上限',
@@ -1553,6 +1555,8 @@ const I18N = {
         wechat_group_free_reply_hourly: 'Hourly limit',
         wechat_group_free_reply_consecutive: 'Consecutive limit',
         wechat_group_free_reply_ttl: 'Queue TTL (seconds)',
+        wechat_group_free_reply_stale_tolerance: 'Stale message tolerance',
+        wechat_group_free_reply_stale_tolerance_hint: 'Range: 0–100. Set to 0 to suppress after any new message.',
         wechat_group_free_reply_worker_title: 'Worker pool',
         wechat_group_free_reply_worker_max_workers: 'Worker concurrency',
         wechat_group_free_reply_worker_queue_size: 'Queue size limit',
@@ -15951,6 +15955,7 @@ function renderWechatGroupFreeReplySettings(extra = {}) {
                 ${buildFreeReplyNumberField('free-reply-hourly-limit', 'wechat_group_free_reply_hourly', profile.hourly_limit ?? 0, 0, 999, 1)}
                 ${buildFreeReplyNumberField('free-reply-consecutive-limit', 'wechat_group_free_reply_consecutive', profile.consecutive_limit ?? 0, 0, 99, 1)}
                 ${buildFreeReplyNumberField('free-reply-queue-ttl', 'wechat_group_free_reply_ttl', free.queue_ttl_seconds ?? 120, 10, 600, 1)}
+                ${buildFreeReplyNumberField('free-reply-stale-tolerance', 'wechat_group_free_reply_stale_tolerance', free.stale_message_tolerance ?? 5, 0, 100, 1, 'wechat_group_free_reply_stale_tolerance_hint')}
                 ${buildFreeReplyNumberField('free-reply-worker-max-workers', 'wechat_group_free_reply_worker_max_workers', free.worker_max_workers ?? 2, 1, 8, 1)}
                 ${buildFreeReplyNumberField('free-reply-worker-queue-size', 'wechat_group_free_reply_worker_queue_size', free.worker_queue_size ?? 100, 1, 1000, 1)}
             </div>
@@ -16015,7 +16020,7 @@ function buildFreeReplyNumberField(id, labelKey, value, min, max, step, hintKey 
     const hintId = hintKey ? `${id}-hint` : '';
     return `<label class="free-reply-number-field block">
         <span class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t(labelKey)}</span>
-        <input id="${id}" type="number" min="${min}" max="${max}" step="${step}" value="${Number(value)}"
+        <input id="${id}" type="number" inputmode="numeric" min="${min}" max="${max}" step="${step}" value="${Number(value)}"
             ${hintId ? `aria-describedby="${hintId}"` : ''}
             class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors">
         ${hintId ? `<span id="${hintId}" class="block text-xs leading-relaxed text-slate-500 dark:text-slate-400 mt-1.5">${t(hintKey)}</span>` : ''}
@@ -16325,6 +16330,7 @@ function saveWechatGroupSettings() {
                 wechat_group_free_reply_mute_minutes: freeReply.mute_minutes,
                 wechat_group_free_reply_mute_mentions_enabled: freeReply.mute_mentions_enabled,
                 wechat_group_free_reply_queue_ttl_seconds: freeReply.queue_ttl_seconds,
+                wechat_group_free_reply_stale_message_tolerance: freeReply.stale_message_tolerance,
                 wechat_group_free_reply_worker_max_workers: freeReply.worker_max_workers,
                 wechat_group_free_reply_worker_queue_size: freeReply.worker_queue_size,
                 wechat_group_free_reply_llm_judge_enabled: freeReply.llm_judge_enabled,
@@ -16594,6 +16600,7 @@ function readWechatGroupFreeReplySettings(saved = {}) {
             ? !!document.getElementById('free-reply-mute-mentions-enabled').checked
             : saved.mute_mentions_enabled === true,
         queue_ttl_seconds: clampNumber(document.getElementById('free-reply-queue-ttl')?.value, 10, 600, saved.queue_ttl_seconds ?? 120),
+        stale_message_tolerance: clampNumber(document.getElementById('free-reply-stale-tolerance')?.value, 0, 100, saved.stale_message_tolerance ?? 5),
         worker_max_workers: clampNumber(document.getElementById('free-reply-worker-max-workers')?.value, 1, 8, saved.worker_max_workers ?? 2),
         worker_queue_size: clampNumber(document.getElementById('free-reply-worker-queue-size')?.value, 1, 1000, saved.worker_queue_size ?? 100),
         llm_judge_enabled: document.getElementById('free-reply-llm-enabled') ? !!document.getElementById('free-reply-llm-enabled').checked : saved.llm_judge_enabled !== false,

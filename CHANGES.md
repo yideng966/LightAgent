@@ -2,6 +2,34 @@
 
 ## 2026-07-31
 
+### 放宽微信群观察式自由回复过期抑制
+
+- 新增 `wechat_group_free_reply_stale_message_tolerance` 配置，默认允许观察式自由回复生成期间同群新增 5 条入站消息，范围为 0–100；设为 0 时恢复有新消息即抑制的严格行为。
+- 过期量改为按当前稳定群查询快照游标后的实际归档记录，不再把全局自增 ID 间隙误算为本群消息数；期间若已有新的机器人回复，旧候选仍会立即抑制。
+- Web 控制台「群聊 -> 自由回复」新增“允许过期消息数”字段，支持中英文说明、移动端数字键盘、服务端边界裁剪、保存和刷新回显；抑制日志同步记录原因、实际新增条数和阈值。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_archive.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_free_reply.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `config.py`
+- `config-template.json`
+- `tests/test_wechat_group_reply_coordinator.py`
+- `tests/test_wechat_group_channel.py`
+- `tests/test_wechat_group_free_reply.py`
+- `tests/test_wechat_group_web.py`
+- `plans/20260731_放宽微信群自由回复过期抑制.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 自由回复协调、配置、Web 与消息解析回归 181 项，微信群主通道 149 项，确认发送、会话策略、V2 上下文与持久化 32 项均通过。
+- Python 编译、JavaScript 语法、配置模板 JSON 解析和 `git diff --check` 通过。
+- 使用隔离数据目录通过本地 `python app.py` 在 `127.0.0.1:9968` 启动真实 Web 控制台，`/` 与 `/chat` 均返回 HTTP 200；Playwright 在 1440px 桌面亮/暗色和 375px 移动端验证无横向溢出或页面错误，默认值为 5，临时修改为 7 后保存并刷新正确回显，再恢复为 5。验收后仅清理本次临时进程、端口、数据和截图，未连接或操作真实微信群及远端部署环境。
+
 ### 修复微信群图片回复泄漏内部答复规划
 
 - 微信群视觉摘要改为只描述图片中可直接观察到的事实和文字，并由代码在运行时强制追加“不推测意图、不拟写回复、不描述分析过程”等输出边界，避免视觉模型把答复规划混入下游上下文。

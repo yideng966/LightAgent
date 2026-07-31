@@ -355,6 +355,32 @@ class WechatGroupChannelTest(unittest.TestCase):
                 ).fetchone()
             self.assertEqual(("wgr_room", "wgr_room", "room@@new"), row)
 
+    def test_archive_counts_only_same_room_inbound_after_cursor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = WechatGroupArchive(os.path.join(tmp, "archive.db"))
+            archive.record_message(
+                message_id="room-a-before",
+                room_id="room@@a",
+                text="before",
+                stable_room_id="wgr_a",
+            )
+            before = archive.get_room_revision("wgr_a")["inbound_cursor"]
+            archive.record_message(
+                message_id="room-b-after",
+                room_id="room@@b",
+                text="other room",
+                stable_room_id="wgr_b",
+            )
+            archive.record_message(
+                message_id="room-a-after",
+                room_id="room@@a",
+                text="same room",
+                stable_room_id="wgr_a",
+            )
+
+            self.assertEqual(1, archive.count_room_inbound_after_cursor("wgr_a", before))
+            self.assertEqual(0, archive.count_room_inbound_after_cursor("wgr_b", before + 1))
+
     def test_channel_does_not_keep_legacy_image_understanding_builders(self):
         from channel.wechat_group.wechat_group_channel import WechatGroupChannel
 

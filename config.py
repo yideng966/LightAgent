@@ -230,6 +230,7 @@ available_setting = {
     "wechat_group_free_reply_mute_minutes": 10,
     "wechat_group_free_reply_mute_mentions_enabled": False,
     "wechat_group_free_reply_queue_ttl_seconds": 120,
+    "wechat_group_free_reply_stale_message_tolerance": 5,
     "wechat_group_free_reply_worker_max_workers": 2,
     "wechat_group_free_reply_worker_queue_size": 100,
     "wechat_group_free_reply_llm_judge_enabled": True,

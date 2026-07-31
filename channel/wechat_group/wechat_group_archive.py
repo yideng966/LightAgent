@@ -152,6 +152,25 @@ class WechatGroupArchive:
             "assistant_cursor": int((assistant or [0])[0] or 0),
         }
 
+    def count_room_inbound_after_cursor(self, room_id: str, inbound_cursor: int = 0) -> int:
+        """Count stable-room inbound rows newer than the supplied cursor."""
+        scope = str(room_id or "").strip()
+        if not scope:
+            return 0
+        cursor_value = max(int(inbound_cursor or 0), 0)
+        with self._lock, closing(self._connect()) as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) FROM wechat_group_messages
+                WHERE (
+                    stable_room_id = ?
+                    OR (COALESCE(stable_room_id, '') = '' AND room_id = ?)
+                ) AND id > ?
+                """,
+                (scope, scope, cursor_value),
+            ).fetchone()
+        return int((row or [0])[0] or 0)
+
     def record_image_create_usage(
         self,
         room_id: str,

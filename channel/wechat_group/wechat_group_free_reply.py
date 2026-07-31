@@ -249,6 +249,9 @@ def get_wechat_group_free_reply_config() -> dict:
         "mute_minutes": _clamp_int(conf().get("wechat_group_free_reply_mute_minutes", 10), 10, 1, 1440),
         "mute_mentions_enabled": _as_bool(conf().get("wechat_group_free_reply_mute_mentions_enabled", False)),
         "queue_ttl_seconds": _clamp_int(conf().get("wechat_group_free_reply_queue_ttl_seconds", 120), 120, 10, 600),
+        "stale_message_tolerance": _clamp_int(
+            conf().get("wechat_group_free_reply_stale_message_tolerance", 5), 5, 0, 100
+        ),
         "worker_max_workers": _clamp_int(conf().get("wechat_group_free_reply_worker_max_workers", 2), 2, 1, 8),
         "worker_queue_size": _clamp_int(conf().get("wechat_group_free_reply_worker_queue_size", 100), 100, 1, 1000),
         "llm_judge_enabled": _as_bool(conf().get("wechat_group_free_reply_llm_judge_enabled", True)),

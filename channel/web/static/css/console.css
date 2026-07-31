@@ -802,7 +802,7 @@
 
 @media (min-width: 1280px) {
     .free-reply-compact-grid {
-        grid-template-columns: repeat(7, minmax(0, 1fr));
+        grid-template-columns: repeat(8, minmax(0, 1fr));
     }
 
     .free-reply-number-field input {

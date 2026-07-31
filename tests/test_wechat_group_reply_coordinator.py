@@ -2,6 +2,7 @@ import threading
 import time
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from channel.wechat_group.wechat_group_channel import WechatGroupChannel
 from channel.wechat_group.wechat_group_reply_coordinator import (
@@ -81,13 +82,99 @@ class WechatGroupReplyCoordinatorTest(unittest.TestCase):
 
 
 class WechatGroupStaleAmbientTest(unittest.TestCase):
-    def test_ambient_is_suppressed_when_room_revision_changes(self):
+    def test_ambient_is_suppressed_when_inbound_staleness_exceeds_tolerance(self):
+        channel = WechatGroupChannel.__new__(WechatGroupChannel)
+        channel.archive = SimpleNamespace(
+            get_room_revision=lambda _room: {
+                "inbound_cursor": 8,
+                "assistant_cursor": 1,
+            },
+            count_room_inbound_after_cursor=lambda _room, _cursor: 6,
+        )
+        context = {
+            "wechat_group_is_free_reply": True,
+            "wechat_group_session_action": ACTION_OBSERVE_ONLY,
+            "wechat_group_stable_room_id": "wgr_room",
+            "wechat_group_room_revision_before": {
+                "inbound_cursor": 2,
+                "assistant_cursor": 1,
+            },
+        }
+
+        with patch(
+            "channel.wechat_group.wechat_group_channel.get_wechat_group_free_reply_config",
+            return_value={"stale_message_tolerance": 5},
+        ), self.assertLogs("log", level="INFO") as captured:
+            self.assertTrue(channel._should_suppress_stale_ambient(context))
+        self.assertTrue(context["wechat_group_stale_suppressed"])
+        logs = "\n".join(captured.output)
+        self.assertIn("action=observe_only", logs)
+        self.assertIn("reason=inbound_tolerance_exceeded", logs)
+        self.assertIn("stale_inbound_count=6", logs)
+        self.assertIn("tolerance=5", logs)
+
+    def test_ambient_is_allowed_when_inbound_staleness_equals_tolerance(self):
+        channel = WechatGroupChannel.__new__(WechatGroupChannel)
+        channel.archive = SimpleNamespace(
+            get_room_revision=lambda _room: {
+                "inbound_cursor": 7,
+                "assistant_cursor": 1,
+            },
+            count_room_inbound_after_cursor=lambda _room, _cursor: 5,
+        )
+        context = {
+            "wechat_group_is_free_reply": True,
+            "wechat_group_session_action": ACTION_OBSERVE_ONLY,
+            "wechat_group_stable_room_id": "wgr_room",
+            "wechat_group_room_revision_before": {
+                "inbound_cursor": 2,
+                "assistant_cursor": 1,
+            },
+        }
+
+        with patch(
+            "channel.wechat_group.wechat_group_channel.get_wechat_group_free_reply_config",
+            return_value={"stale_message_tolerance": 5},
+        ), self.assertLogs("log", level="INFO") as captured:
+            self.assertFalse(channel._should_suppress_stale_ambient(context))
+        self.assertNotIn("wechat_group_stale_suppressed", context)
+        self.assertIn("stale ambient reply tolerated", "\n".join(captured.output))
+
+    def test_zero_tolerance_preserves_strict_inbound_suppression(self):
         channel = WechatGroupChannel.__new__(WechatGroupChannel)
         channel.archive = SimpleNamespace(
             get_room_revision=lambda _room: {
                 "inbound_cursor": 3,
                 "assistant_cursor": 1,
-            }
+            },
+            count_room_inbound_after_cursor=lambda _room, _cursor: 1,
+        )
+        context = {
+            "wechat_group_is_free_reply": True,
+            "wechat_group_session_action": ACTION_OBSERVE_ONLY,
+            "wechat_group_stable_room_id": "wgr_room",
+            "wechat_group_room_revision_before": {
+                "inbound_cursor": 2,
+                "assistant_cursor": 1,
+            },
+        }
+
+        with patch(
+            "channel.wechat_group.wechat_group_channel.get_wechat_group_free_reply_config",
+            return_value={"stale_message_tolerance": 0},
+        ):
+            self.assertTrue(channel._should_suppress_stale_ambient(context))
+
+    def test_new_assistant_reply_remains_strictly_suppressed(self):
+        channel = WechatGroupChannel.__new__(WechatGroupChannel)
+        channel.archive = SimpleNamespace(
+            get_room_revision=lambda _room: {
+                "inbound_cursor": 2,
+                "assistant_cursor": 2,
+            },
+            count_room_inbound_after_cursor=lambda _room, _cursor: self.fail(
+                "assistant revision changes must bypass inbound tolerance"
+            ),
         )
         context = {
             "wechat_group_is_free_reply": True,
@@ -102,7 +189,35 @@ class WechatGroupStaleAmbientTest(unittest.TestCase):
         with self.assertLogs("log", level="INFO") as captured:
             self.assertTrue(channel._should_suppress_stale_ambient(context))
         self.assertTrue(context["wechat_group_stale_suppressed"])
-        self.assertIn("action=observe_only", "\n".join(captured.output))
+        self.assertIn("reason=assistant_revision_changed", "\n".join(captured.output))
+
+    def test_stale_message_count_failure_is_suppressed(self):
+        channel = WechatGroupChannel.__new__(WechatGroupChannel)
+
+        def fail_count(_room, _cursor):
+            raise RuntimeError("count failed")
+
+        channel.archive = SimpleNamespace(
+            get_room_revision=lambda _room: {
+                "inbound_cursor": 3,
+                "assistant_cursor": 1,
+            },
+            count_room_inbound_after_cursor=fail_count,
+        )
+        context = {
+            "wechat_group_is_free_reply": True,
+            "wechat_group_session_action": ACTION_OBSERVE_ONLY,
+            "wechat_group_stable_room_id": "wgr_room",
+            "wechat_group_room_revision_before": {
+                "inbound_cursor": 2,
+                "assistant_cursor": 1,
+            },
+        }
+
+        with self.assertLogs("log", level="WARNING") as captured:
+            self.assertTrue(channel._should_suppress_stale_ambient(context))
+        self.assertTrue(context["wechat_group_stale_suppressed"])
+        self.assertIn("ambient stale message count failed", "\n".join(captured.output))
 
     def test_bot_targeted_free_reply_is_not_suppressed_when_room_revision_changes(self):
         channel = WechatGroupChannel.__new__(WechatGroupChannel)

@@ -1833,11 +1833,66 @@ class WechatGroupChannel(ChatChannel):
             return True
         if after == before:
             return False
+
+        try:
+            before_inbound = int(before.get("inbound_cursor"))
+            before_assistant = int(before.get("assistant_cursor"))
+            after_inbound = int(after.get("inbound_cursor"))
+            after_assistant = int(after.get("assistant_cursor"))
+        except (AttributeError, TypeError, ValueError) as e:
+            logger.warning("[wechat_group] invalid ambient revision snapshot: {}".format(e))
+            context["wechat_group_stale_suppressed"] = True
+            return True
+
+        stale_inbound_count = None
+        stale_tolerance = None
+        suppression_reason = ""
+        if after_assistant != before_assistant:
+            suppression_reason = "assistant_revision_changed"
+        elif after_inbound < before_inbound:
+            suppression_reason = "inbound_revision_rewound"
+        elif after_inbound == before_inbound:
+            return False
+        else:
+            try:
+                stale_inbound_count = self.archive.count_room_inbound_after_cursor(
+                    room_id,
+                    before_inbound,
+                )
+                stale_tolerance = int(
+                    get_wechat_group_free_reply_config().get(
+                        "stale_message_tolerance",
+                        5,
+                    )
+                )
+            except Exception as e:
+                logger.warning("[wechat_group] ambient stale message count failed: {}".format(e))
+                context["wechat_group_stale_suppressed"] = True
+                return True
+            if stale_inbound_count <= stale_tolerance:
+                logger.info(
+                    "[wechat_group] stale ambient reply tolerated: room=%s action=%s "
+                    "stale_inbound_count=%s tolerance=%s before=%s after=%s request=%s",
+                    room_id,
+                    session_action,
+                    stale_inbound_count,
+                    stale_tolerance,
+                    before,
+                    after,
+                    context.get("request_id") or "",
+                )
+                return False
+            suppression_reason = "inbound_tolerance_exceeded"
+
         context["wechat_group_stale_suppressed"] = True
         logger.info(
-            "[wechat_group] stale ambient reply suppressed: room=%s action=%s before=%s after=%s request=%s",
+            "[wechat_group] stale ambient reply suppressed: room=%s action=%s reason=%s "
+            "stale_inbound_count=%s tolerance=%s before=%s after=%s request=%s",
             room_id,
             session_action,
+            suppression_reason,
+            stale_inbound_count,
+            stale_tolerance,
             before,
             after,
             context.get("request_id") or "",

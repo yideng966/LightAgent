@@ -28,6 +28,7 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
                 "wechat_group_free_reply_mute_minutes",
                 "wechat_group_free_reply_mute_mentions_enabled",
                 "wechat_group_free_reply_queue_ttl_seconds",
+                "wechat_group_free_reply_stale_message_tolerance",
                 "wechat_group_free_reply_worker_max_workers",
                 "wechat_group_free_reply_worker_queue_size",
                 "wechat_group_free_reply_llm_judge_enabled",
@@ -59,6 +60,7 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
         self.assertEqual(10, cfg["mute_minutes"])
         self.assertFalse(cfg["mute_mentions_enabled"])
         self.assertEqual(120, cfg["queue_ttl_seconds"])
+        self.assertEqual(5, cfg["stale_message_tolerance"])
         self.assertEqual(2, cfg["worker_max_workers"])
         self.assertEqual(100, cfg["worker_queue_size"])
         self.assertTrue(cfg["llm_judge_enabled"])
@@ -125,6 +127,7 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
         conf()["wechat_group_free_reply_activity_level"] = "invalid"
         conf()["wechat_group_free_reply_mute_minutes"] = 9999
         conf()["wechat_group_free_reply_queue_ttl_seconds"] = 9999
+        conf()["wechat_group_free_reply_stale_message_tolerance"] = 9999
         conf()["wechat_group_free_reply_worker_max_workers"] = 0
         conf()["wechat_group_free_reply_worker_queue_size"] = 0
         conf()["wechat_group_free_reply_llm_judge_timeout_seconds"] = 999
@@ -139,6 +142,7 @@ class WechatGroupFreeReplyConfigTest(unittest.TestCase):
         self.assertEqual("normal", cfg["activity_level"])
         self.assertEqual(1440, cfg["mute_minutes"])
         self.assertEqual(600, cfg["queue_ttl_seconds"])
+        self.assertEqual(100, cfg["stale_message_tolerance"])
         self.assertEqual(1, cfg["worker_max_workers"])
         self.assertEqual(1, cfg["worker_queue_size"])
         self.assertEqual(30, cfg["llm_judge_timeout_seconds"])

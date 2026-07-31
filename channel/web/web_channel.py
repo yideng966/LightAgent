@@ -4830,6 +4830,7 @@ class ChannelsHandler:
             "wechat_group_free_reply_mute_minutes",
             "wechat_group_free_reply_mute_mentions_enabled",
             "wechat_group_free_reply_queue_ttl_seconds",
+            "wechat_group_free_reply_stale_message_tolerance",
             "wechat_group_free_reply_worker_max_workers",
             "wechat_group_free_reply_worker_queue_size",
             "wechat_group_free_reply_llm_judge_enabled",
@@ -5147,6 +5148,8 @@ class ChannelsHandler:
                 value = cls._clamp_int(value, 1, 1440, 10)
             elif key == "wechat_group_free_reply_queue_ttl_seconds":
                 value = cls._clamp_int(value, 10, 600, 120)
+            elif key == "wechat_group_free_reply_stale_message_tolerance":
+                value = cls._clamp_int(value, 0, 100, 5)
             elif key == "wechat_group_free_reply_worker_max_workers":
                 value = cls._clamp_int(value, 1, 8, 2)
             elif key == "wechat_group_free_reply_worker_queue_size":
