@@ -1,5 +1,32 @@
 # CHANGES
 
+## 2026-07-31
+
+### 回退代码基线并发布 2.2.0
+
+- 将 `master` 的代码基线恢复到 `172d6f69dbe7e064813e4b028c7a2ca628347126`，排除该基线之后未指定保留的提交。
+- 在目标基线上依次重放贡献指南中文化与 Docker 多架构清单清理竞态修复，保留对应发布契约测试和规则说明。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.0`，新增版本化发行说明并记录破坏性回退范围。
+
+关键文件：
+
+- `.github/workflows/deploy-image.yml`
+- `AGENTS.md`
+- `CHANGES.md`
+- `CONTRIBUTING.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.0.md`
+- `plans/20260731_回退并发布2.2.0.md`
+- `tests/test_docker_deployment.py`
+
+验证记录：
+
+- `python scripts/validate_release_notes.py --tag v2.2.0 docs/releases/v2.2.0.md` 通过，两个版本来源均为 `2.2.0`。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- `python -X utf8 -m unittest discover -s tests`：共运行 1211 项，结果 OK，1 项按条件跳过。
+- 目标提交重放顺序、工作区文件范围与 `git diff --check` 通过；未连接、更新或重启远端运行环境。
+
 ## 2026-07-29
 
 ### 修复 Docker 多架构清单发布清理竞态并发布 2.1.21
