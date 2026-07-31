@@ -21,6 +21,16 @@ from config import conf
 
 
 MEMORY_CARD_FILE_SUFFIX = ".memory-card.json"
+WECHAT4U_CONTACT_SYNC_WARNING_WINDOW_SECONDS = 60.0
+WECHAT4U_CONTACT_SYNC_1205_WARNING_MARKERS = (
+    "WARN PuppetWechat4u contactRawPayload(",
+    "AssertionError [ERR_ASSERTION]: 1205 == 0",
+    "wechat4u.batchGetContact() exception",
+)
+
+
+def _is_wechat4u_contact_sync_1205_warning(line: str) -> bool:
+    return all(marker in line for marker in WECHAT4U_CONTACT_SYNC_1205_WARNING_MARKERS)
 
 
 def get_wechat_group_sidecar_memory_prefix() -> str:
@@ -294,10 +304,42 @@ class WechatGroupClient:
     def _read_stderr_loop(self, stderr):
         if not stderr:
             return
+        last_contact_warning_at = None
+        last_contact_warning_reported_at = None
+        suppressed_contact_warning_count = 0
         for line in stderr:
             line = line.strip()
-            if line:
+            if not line:
+                continue
+            if not _is_wechat4u_contact_sync_1205_warning(line):
                 logger.warning("[wechat_group] sidecar stderr: {}".format(line))
+                continue
+
+            now = time.monotonic()
+            starts_new_window = (
+                last_contact_warning_at is None
+                or now - last_contact_warning_at >= WECHAT4U_CONTACT_SYNC_WARNING_WINDOW_SECONDS
+            )
+            if starts_new_window:
+                logger.warning("[wechat_group] sidecar stderr: {}".format(line))
+                last_contact_warning_reported_at = now
+                suppressed_contact_warning_count = 0
+            else:
+                suppressed_contact_warning_count += 1
+                if (
+                    now - last_contact_warning_reported_at
+                    >= WECHAT4U_CONTACT_SYNC_WARNING_WINDOW_SECONDS
+                ):
+                    logger.warning(
+                        "[wechat_group] sidecar stderr: 已合并 {} 条重复的 Wechat4u "
+                        "联系人同步 1205 告警（{} 秒窗口）".format(
+                            suppressed_contact_warning_count,
+                            int(WECHAT4U_CONTACT_SYNC_WARNING_WINDOW_SECONDS),
+                        )
+                    )
+                    last_contact_warning_reported_at = now
+                    suppressed_contact_warning_count = 0
+            last_contact_warning_at = now
 
     def _build_command(self) -> Iterable[str]:
         node = conf().get("wechat_group_sidecar_node") or "node"

@@ -413,6 +413,67 @@ class WechatGroupClientLifecycleTest(unittest.TestCase):
         self.assertIs(new_process, client.process)
         warning.assert_called_once_with("[wechat_group] sidecar stderr: old stderr")
 
+    def test_repeated_wechat4u_contact_sync_1205_warnings_are_aggregated(self):
+        client = WechatGroupClient()
+        stderr = [
+            "22:19:29 WARN PuppetWechat4u contactRawPayload(AssertionError "
+            "[ERR_ASSERTION]: 1205 == 0) wechat4u.batchGetContact() exception: undefined\n",
+            "22:19:31 WARN PuppetWechat4u contactRawPayload(AssertionError "
+            "[ERR_ASSERTION]: 1205 == 0) wechat4u.batchGetContact() exception: undefined\n",
+            "22:20:30 WARN PuppetWechat4u contactRawPayload(AssertionError "
+            "[ERR_ASSERTION]: 1205 == 0) wechat4u.batchGetContact() exception: undefined\n",
+        ]
+
+        with patch.object(client_module.time, "monotonic", side_effect=[0.0, 2.0, 61.0]), \
+                patch.object(client_module.logger, "warning") as warning:
+            client._read_stderr_loop(stderr)
+
+        self.assertEqual(2, warning.call_count)
+        warning.assert_any_call(
+            "[wechat_group] sidecar stderr: "
+            "22:19:29 WARN PuppetWechat4u contactRawPayload(AssertionError "
+            "[ERR_ASSERTION]: 1205 == 0) wechat4u.batchGetContact() exception: undefined"
+        )
+        warning.assert_any_call(
+            "[wechat_group] sidecar stderr: 已合并 2 条重复的 Wechat4u "
+            "联系人同步 1205 告警（60 秒窗口）"
+        )
+
+    def test_wechat4u_contact_sync_warning_after_quiet_window_is_logged_again(self):
+        client = WechatGroupClient()
+        stderr = [
+            "22:19:29 WARN PuppetWechat4u contactRawPayload(AssertionError "
+            "[ERR_ASSERTION]: 1205 == 0) wechat4u.batchGetContact() exception: undefined\n",
+            "22:20:30 WARN PuppetWechat4u contactRawPayload(AssertionError "
+            "[ERR_ASSERTION]: 1205 == 0) wechat4u.batchGetContact() exception: undefined\n",
+        ]
+
+        with patch.object(client_module.time, "monotonic", side_effect=[0.0, 61.0]), \
+                patch.object(client_module.logger, "warning") as warning:
+            client._read_stderr_loop(stderr)
+
+        self.assertEqual(2, warning.call_count)
+        self.assertIn("22:19:29 WARN PuppetWechat4u", warning.call_args_list[0].args[0])
+        self.assertIn("22:20:30 WARN PuppetWechat4u", warning.call_args_list[1].args[0])
+
+    def test_other_sidecar_stderr_is_not_aggregated(self):
+        client = WechatGroupClient()
+        stderr = [
+            "22:19:29 WARN PuppetWechat4u contactRawPayload(AssertionError "
+            "[ERR_ASSERTION]: 1206 == 0) wechat4u.batchGetContact() exception: undefined\n",
+            "sidecar send failed\n",
+        ]
+
+        with patch.object(client_module.logger, "warning") as warning:
+            client._read_stderr_loop(stderr)
+
+        self.assertEqual(2, warning.call_count)
+        self.assertIn("1206 == 0", warning.call_args_list[0].args[0])
+        self.assertEqual(
+            "[wechat_group] sidecar stderr: sidecar send failed",
+            warning.call_args_list[1].args[0],
+        )
+
     def test_client_has_no_in_process_relogin_command(self):
         self.assertFalse(hasattr(WechatGroupClient(), "relogin"))
 

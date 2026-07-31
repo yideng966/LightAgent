@@ -28,6 +28,26 @@
 - 消息、传输与多模态 27 项通过；表情包服务、标注与 Agent 工具 35 项通过；Sidecar 61 项通过。
 - `python -X utf8 -m unittest discover -s tests`：1221 项通过，1 项按条件跳过。
 
+### 合并微信群 Wechat4u 联系人同步重复告警
+
+- 针对 `wechat4u.batchGetContact()` 返回 `1205` 时每 2 秒重复出现的同类 sidecar 告警，保留首条记录并在 60 秒窗口内合并重复项，持续发生时输出带计数的摘要。
+- 其他 sidecar stderr（包括不同状态码、进程错误和发送错误）继续逐条记录；不改变联系人同步重试、登录态或消息收发行为。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_client.py`
+- `tests/test_wechat_group_client.py`
+- `plans/20260731_微信群联系人同步告警降噪.md`
+- `AGENTS.md`
+- `CHANGES.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest tests.test_wechat_group_client`：22 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_channel`：150 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_web`：119 项通过。
+- 目标 Python 文件语法检查与本任务文件 `git diff --check` 通过。
+
 ### 修复微信群自由回复识图失败仍继续回复
 
 - 自由回复处理当前图片或命中最近图片时，视觉调用异常、工具失败、空摘要或当前图片缺少可用媒体后会在 Agent 入队前静默结束，不再生成“无法识别”等兜底群消息。

@@ -370,6 +370,7 @@ docker push yideng966/lightagent:latest
 7. 涉及群选择时优先使用 `wechat_group_stable_room_ids` 做精确限制；`wechat_group_room_ids` 只保留为 runtime legacy 快照；`group_name_white_list: ["ALL_GROUP"]` 只适合开发测试，不应作为长期生产默认。
 8. 修改后至少运行 `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`。涉及二维码、连接状态或通道页时，在 Web 控制台完成对应验证。
 9. 外部真实链路仍需手动验证：启动后打开通道管理，选择“个人微信群”，扫码登录，在目标群 @ 机器人确认能收到回复，并确认回复真实 @ 到发送者。
+10. sidecar stderr 的已知 Wechat4u 联系人同步 `1205` 告警只能按完整特征精确限频；必须保留首条和周期摘要，其他状态码、进程错误及发送错误继续逐条记录，不得通过全局降级日志或停止联系人重试来掩盖故障。
 
 ### 个人微信群 LLM 请求上下文链路
 
