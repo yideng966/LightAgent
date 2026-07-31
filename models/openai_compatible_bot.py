@@ -112,15 +112,22 @@ class OpenAICompatibleBot:
             # set of OpenAI-compatible request controls. Keeping these options
             # request-scoped prevents scorer-specific reasoning settings from
             # changing the main chat model's behavior.
+            provider_type = str(kwargs.get("provider_type") or "")
             request_options = kwargs.get("request_options")
             if isinstance(request_options, dict):
                 for key in ("reasoning_effort", "response_format"):
                     if request_options.get(key) is not None:
-                        request_params[key] = request_options[key]
+                        value = request_options[key]
+                        if (
+                            key == "reasoning_effort"
+                            and value == "none"
+                            and provider_type.startswith("custom")
+                        ):
+                            value = "low"
+                        request_params[key] = value
 
             # 自定义兼容端点遵循统一思考开关；原生适配器和 OpenAI
             # 官方端点继续使用各自既有请求契约。
-            provider_type = str(kwargs.get("provider_type") or "")
             thinking = kwargs.get("thinking")
             if (
                 provider_type.startswith("custom")

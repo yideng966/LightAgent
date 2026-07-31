@@ -56,6 +56,31 @@ class TestOpenAICompatibleMessageConversion(unittest.TestCase):
         self.assertNotIn("unsupported", request_params)
         self.assertNotIn("request_options", request_params)
 
+    def test_custom_none_reasoning_effort_is_sent_as_low(self):
+        bot = OpenAICompatibleBot()
+        bot.get_api_config = Mock(return_value={
+            "api_key": "test-key",
+            "api_base": "https://example.test/v1",
+            "model": "test-model",
+        })
+        bot._handle_sync_response = Mock(return_value={
+            "choices": [{"message": {"content": "answer"}}],
+        })
+        request_options = {"reasoning_effort": "none"}
+
+        bot.call_with_tools(
+            [{"role": "user", "content": "describe image"}],
+            provider_type="custom:provider01",
+            channel_type="wechat_group",
+            thinking={"type": "disabled"},
+            request_options=request_options,
+        )
+
+        request_params = bot._handle_sync_response.call_args.args[0]
+        self.assertEqual("low", request_params["reasoning_effort"])
+        self.assertEqual({"type": "disabled"}, request_params["thinking"])
+        self.assertEqual({"reasoning_effort": "none"}, request_options)
+
     def test_request_options_are_absent_from_regular_calls(self):
         bot = OpenAICompatibleBot()
         bot.get_api_config = Mock(return_value={

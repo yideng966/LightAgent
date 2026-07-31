@@ -2,6 +2,23 @@
 
 ## 2026-07-31
 
+### 兼容自定义模型低推理等级
+
+- 修复自定义 OpenAI 兼容端点拒绝 `reasoning_effort=none`（仅接受 `low`、`medium`、`high`）导致微信群图片请求返回 422 的问题；出站请求现在发送 `low`。
+- `none` 继续只作为 LightAgent 内部的请求级禁用思考标记，端点仍会收到 `thinking={"type":"disabled"}`，不会因参数转换重新暴露图片思考内容；原生 OpenAI 及其他 Provider 请求保持不变。
+
+关键文件：
+
+- `models/openai_compatible_bot.py`
+- `tests/test_openai_compatible_messages.py`
+- `plans/20260731_兼容自定义模型低推理等级.md`
+- `AGENTS.md`
+
+验证记录：
+
+- OpenAI 兼容消息、模型回退、流式思考隔离、微信群自由回复 Scorer 和文本路由共 99 项通过。
+- Python 编译和 `git diff --check` 通过。
+
 ### 屏蔽微信群 Agent 技术错误（Issue #26）
 
 - 微信群发送边界会拦截所有以 `Agent error:` 开头的内部技术错误，不再向群内暴露 Provider 异常类名、请求参数、状态码或反序列化细节；明确触发请求只返回简短可读提示。
