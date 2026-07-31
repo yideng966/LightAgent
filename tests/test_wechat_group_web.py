@@ -266,7 +266,7 @@ class WechatGroupWebTest(unittest.TestCase):
             {
                 "understanding_enabled": True,
                 "comment_enabled": True,
-                "understanding_prompt": "请简洁描述这张图片中的关键信息，并指出可能需要回复的内容。",
+                "understanding_prompt": "请客观、简洁地描述这张图片中可直接观察到的关键信息和文字。",
                 "cache_minutes": 30,
                 "free_reply_understanding_enabled": False,
                 "create_hourly_limit": 5,

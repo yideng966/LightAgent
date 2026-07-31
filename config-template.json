@@ -129,7 +129,7 @@
   "wechat_group_profile_evolution_batch_message_limit": 200,
   "wechat_group_image_understanding_enabled": true,
   "wechat_group_image_understanding_comment_enabled": true,
-  "wechat_group_image_understanding_prompt": "请简洁描述这张图片中的关键信息，并指出可能需要回复的内容。",
+  "wechat_group_image_understanding_prompt": "请客观、简洁地描述这张图片中可直接观察到的关键信息和文字。",
   "wechat_group_image_understanding_cache_minutes": 30,
   "wechat_group_free_reply_image_understanding_enabled": false,
   "wechat_group_multimodal_context_enabled": true,

@@ -17,6 +17,16 @@ from config import conf
 IMAGE_UNDERSTANDING_FAILURE_SUMMARY = "图片理解失败：视觉模型调用失败。"
 IMAGE_UNDERSTANDING_EMPTY_SUMMARY = "图片理解未返回内容。"
 IMAGE_REFERENCE_AMBIGUOUS_SUMMARY = "图片引用无法唯一定位，不得猜测图片内容；请让用户重新引用目标图片或重新发送。"
+LEGACY_IMAGE_UNDERSTANDING_DEFAULT_PROMPT = (
+    "请简洁描述这张图片中的关键信息，并指出可能需要回复的内容。"
+)
+IMAGE_UNDERSTANDING_DEFAULT_PROMPT = (
+    "请客观、简洁地描述这张图片中可直接观察到的关键信息和文字。"
+)
+IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT = (
+    "输出约束：只陈述图片中可直接观察到的事实和文字，控制在120字以内；"
+    "不要推测发送者意图，不要拟写回复，不要描述分析过程。"
+)
 
 
 def _as_bool(value, default=False) -> bool:
@@ -35,6 +45,16 @@ def _clamp_int(value, default: int, minimum: int, maximum: int) -> int:
     except Exception:
         number = int(default)
     return max(int(minimum), min(int(maximum), number))
+
+
+def resolve_wechat_group_image_understanding_prompt(configured_prompt) -> str:
+    """保留用户关注点，并在运行时应用不可配置的图片摘要边界。"""
+    prompt = str(configured_prompt or "").strip()
+    if not prompt or prompt == LEGACY_IMAGE_UNDERSTANDING_DEFAULT_PROMPT:
+        prompt = IMAGE_UNDERSTANDING_DEFAULT_PROMPT
+    if prompt.endswith(IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT):
+        return prompt
+    return "{}\n{}".format(prompt, IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT)
 
 
 def get_wechat_group_multimodal_context_config() -> Dict[str, Any]:
@@ -446,9 +466,8 @@ class WechatGroupMultimodalContextService:
         image_path = str(item.get("media_path") or "").strip()
         if not image_path:
             return ""
-        question = (
+        question = resolve_wechat_group_image_understanding_prompt(
             conf().get("wechat_group_image_understanding_prompt")
-            or "请简洁描述这张图片中的关键信息，并指出可能需要回复的内容。"
         )
         summary = self._get_image_summary(image_path, question)
         lines = ["[image_understanding]"]

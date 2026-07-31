@@ -15,8 +15,10 @@ class ChunkedThinkingModel(LLMModel):
         super().__init__(model="unit-test-model")
         self.deltas = deltas
         self.channel_type = channel_type
+        self.requests = []
 
     def call_stream(self, request):
+        self.requests.append(request)
         for index, delta in enumerate(self.deltas):
             yield {
                 "choices": [
@@ -29,6 +31,21 @@ class ChunkedThinkingModel(LLMModel):
 
 
 class TestAgentStreamThinkingFilter(unittest.TestCase):
+    @staticmethod
+    def _capture_request(context):
+        model = ChunkedThinkingModel([{"content": "最终答复"}])
+        executor = AgentStreamExecutor(
+            agent=None,
+            model=model,
+            system_prompt="",
+            tools=[],
+            messages=[],
+            context=context,
+        )
+        with patch("config.conf", return_value={"enable_thinking": True}):
+            executor._call_llm_stream(retry_on_empty=False)
+        return model.requests[0]
+
     @staticmethod
     def _run(
         deltas,
@@ -190,6 +207,47 @@ class TestAgentStreamThinkingFilter(unittest.TestCase):
         self.assertEqual("最终答复", content)
         self.assertEqual("最终答复", self._event_text(events, "message_update"))
         self.assertNotIn(private_reasoning, str(messages))
+
+    def test_wechat_group_image_message_disables_thinking_for_request(self):
+        request = self._capture_request({
+            "channel_type": "wechat_group",
+            "wechat_group_trigger_source": "image_message",
+        })
+
+        self.assertEqual(
+            {"reasoning_effort": "none"},
+            request.request_options,
+        )
+
+    def test_wechat_group_matched_image_disables_thinking_for_text_request(self):
+        request = self._capture_request({
+            "channel_type": "wechat_group",
+            "wechat_group_trigger_source": "direct_reply",
+            "wechat_group_multimodal_matched_images": [
+                {"message_id": "image-1"}
+            ],
+        })
+
+        self.assertEqual(
+            {"reasoning_effort": "none"},
+            request.request_options,
+        )
+
+    def test_regular_wechat_group_text_keeps_global_thinking_behavior(self):
+        request = self._capture_request({
+            "channel_type": "wechat_group",
+            "wechat_group_trigger_source": "direct_reply",
+        })
+
+        self.assertEqual({}, getattr(request, "request_options", {}))
+
+    def test_web_request_ignores_wechat_image_marker(self):
+        request = self._capture_request({
+            "channel_type": "web",
+            "wechat_group_trigger_source": "image_message",
+        })
+
+        self.assertEqual({}, getattr(request, "request_options", {}))
 
     def test_wechat_group_preserves_normal_multi_paragraph_reply(self):
         normal_reply = (

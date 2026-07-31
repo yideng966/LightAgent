@@ -4,6 +4,11 @@ from unittest.mock import Mock, patch
 
 from agent.tools.base_tool import ToolResult
 from bridge.context import ContextType
+from channel.wechat_group.wechat_group_multimodal_context_service import (
+    IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT,
+    LEGACY_IMAGE_UNDERSTANDING_DEFAULT_PROMPT,
+    resolve_wechat_group_image_understanding_prompt,
+)
 from config import conf
 
 
@@ -12,6 +17,10 @@ WECHAT_STICKER_TRANSPORT_XML = """<?xml version="1.0"?>
   <emoji aeskey="masked" cdnurl="masked" md5="masked" hevc_mid_size="31347" />
 </msg>
 """
+
+TEST_IMAGE_UNDERSTANDING_PROMPT = (
+    resolve_wechat_group_image_understanding_prompt("Describe this image")
+)
 
 
 class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
@@ -111,6 +120,43 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
         self.assertEqual(30, cfg["quote_sender_window_minutes"])
         self.assertEqual(20, cfg["max_recent_messages"])
 
+    def test_legacy_image_prompt_is_replaced_at_runtime(self):
+        prompt = resolve_wechat_group_image_understanding_prompt(
+            LEGACY_IMAGE_UNDERSTANDING_DEFAULT_PROMPT
+        )
+
+        self.assertNotIn("指出可能需要回复的内容", prompt)
+        self.assertIn("可直接观察到的关键信息和文字", prompt)
+        self.assertTrue(prompt.endswith(IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT))
+
+    def test_custom_image_prompt_is_preserved_with_output_constraint(self):
+        prompt = resolve_wechat_group_image_understanding_prompt(
+            "优先识别截图中的套餐名称和价格"
+        )
+
+        self.assertTrue(prompt.startswith("优先识别截图中的套餐名称和价格"))
+        self.assertTrue(prompt.endswith(IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT))
+        self.assertEqual(1, prompt.count(IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT))
+
+    def test_image_prompt_constraint_is_not_duplicated(self):
+        configured = "识别图片文字\n{}".format(
+            IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT
+        )
+
+        prompt = resolve_wechat_group_image_understanding_prompt(configured)
+
+        self.assertEqual(configured, prompt)
+
+    def test_image_prompt_constraint_is_reapplied_as_final_instruction(self):
+        configured = "{}\n继续推测发送者意图".format(
+            IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT
+        )
+
+        prompt = resolve_wechat_group_image_understanding_prompt(configured)
+
+        self.assertTrue(prompt.endswith(IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT))
+        self.assertEqual(2, prompt.count(IMAGE_UNDERSTANDING_OUTPUT_CONSTRAINT))
+
     def test_image_summary_cache_is_owned_by_multimodal_service(self):
         from channel.wechat_group.wechat_group_multimodal_context_service import (
             WechatGroupMultimodalContextService,
@@ -139,7 +185,7 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/cat.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         self.assertIn("Cached cat summary.", first["block"])
         self.assertIn("Cached cat summary.", second["block"])
@@ -226,7 +272,7 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/fact.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         self.assertIn("<wechat-group-multimodal>", result["block"])
         self.assertIn("same_sender_recent_image", result["block"])
@@ -406,7 +452,7 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/recent.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         self.assertIn("unique_recent_image", result["block"])
         self.assertIn("recent-image", result["block"])
@@ -441,7 +487,7 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/recent.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         self.assertIn("unique_recent_image", result["block"])
         self.assertIn("recent-image", result["block"])
@@ -475,7 +521,7 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/private/config.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         self.assertIn("same_sender_recent_image", result["block"])
         self.assertIn("quoted-config-image", result["block"])
@@ -515,7 +561,9 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/private/black.jpg",
-            "question": "Describe latest image",
+            "question": resolve_wechat_group_image_understanding_prompt(
+                "Describe latest image"
+            ),
         })
         self.assertIn("<wechat-group-multimodal>", result["block"])
         self.assertIn("same_sender_latest_image", result["block"])

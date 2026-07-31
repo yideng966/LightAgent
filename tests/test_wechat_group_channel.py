@@ -21,6 +21,9 @@ from channel.wechat_group.wechat_group_channel import (
 )
 from channel.wechat_group.wechat_group_archive import WechatGroupArchive
 from channel.wechat_group.wechat_group_message import WechatGroupMessage
+from channel.wechat_group.wechat_group_multimodal_context_service import (
+    resolve_wechat_group_image_understanding_prompt,
+)
 from common import const
 from config import conf
 
@@ -30,6 +33,10 @@ WECHAT_IMAGE_TRANSPORT_XML = """<?xml version="1.0"?>
   <img aeskey="masked" cdnthumburl="masked" md5="masked" hevc_mid_size="31347" />
 </msg>
 """
+
+TEST_IMAGE_UNDERSTANDING_PROMPT = (
+    resolve_wechat_group_image_understanding_prompt("Describe this image")
+)
 
 
 class FakeClient:
@@ -3411,7 +3418,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/cat.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
@@ -3716,7 +3723,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         )
         execute.assert_called_once_with({
             "image": "D:/tmp/recent.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
@@ -3782,7 +3789,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/recent.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
@@ -3863,7 +3870,7 @@ class WechatGroupChannelTest(unittest.TestCase):
         )
         execute.assert_called_once_with({
             "image": "D:/tmp/quoted.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         context = channel.produce.call_args.args[0]
         self.assertIn("quoted_image", context.content)
@@ -3943,7 +3950,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/quoted-sender.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         content = channel.produce.call_args.args[0].content
         self.assertIn("quoted_sender_recent_image", content)
@@ -4468,7 +4475,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/cat.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
@@ -4550,7 +4557,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/fact.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]
@@ -4624,7 +4631,7 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         execute.assert_called_once_with({
             "image": "D:/tmp/recent.jpg",
-            "question": "Describe this image",
+            "question": TEST_IMAGE_UNDERSTANDING_PROMPT,
         })
         channel.produce.assert_called_once()
         context = channel.produce.call_args.args[0]

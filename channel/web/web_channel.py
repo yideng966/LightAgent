@@ -4553,7 +4553,7 @@ class ChannelsHandler:
                 "comment_enabled": conf().get("wechat_group_image_understanding_comment_enabled", True),
                 "understanding_prompt": conf().get(
                     "wechat_group_image_understanding_prompt",
-                    "请简洁描述这张图片中的关键信息，并指出可能需要回复的内容。",
+                    "请客观、简洁地描述这张图片中可直接观察到的关键信息和文字。",
                 ),
                 "cache_minutes": conf().get("wechat_group_image_understanding_cache_minutes", 30),
                 "free_reply_understanding_enabled": conf().get("wechat_group_free_reply_image_understanding_enabled", False),

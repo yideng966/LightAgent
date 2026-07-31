@@ -2,6 +2,31 @@
 
 ## 2026-07-31
 
+### 修复微信群图片回复泄漏内部答复规划
+
+- 微信群视觉摘要改为只描述图片中可直接观察到的事实和文字，并由代码在运行时强制追加“不推测意图、不拟写回复、不描述分析过程”等输出边界，避免视觉模型把答复规划混入下游上下文。
+- 已部署实例中仍保存旧默认视觉提示词时，会在实际请求阶段自动替换为新版客观提示词，无需用户修改本地 `config.json`；自定义关注点继续保留，持久化配置不会被自动覆写。
+- 携带当前图片或已匹配图片摘要的微信群 Agent 请求会按请求关闭模型思考，并通过不可变请求源传递给全部主备候选；普通微信群文本、Web 和其他渠道继续遵循全局思考开关。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_multimodal_context_service.py`
+- `agent/protocol/agent_stream.py`
+- `config.py`
+- `config-template.json`
+- `channel/web/web_channel.py`
+- `tests/test_wechat_group_multimodal_context_service.py`
+- `tests/test_agent_stream_thinking_filter.py`
+- `tests/test_agent_model_fallback.py`
+- `plans/20260731_微信群图片回复思考泄漏修复.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 图片提示词兼容与多模态上下文 18 项、Agent 思考隔离/主备路由/OpenAI 兼容请求 60 项、微信群主通道 148 项、Web 配置接口 119 项均通过。
+- 全量回归运行 1315 项，仅有未修改的 `tests.test_wechat_group_free_reply_judge` 中 2 个“立即追问”既有失败，另有 1 项条件跳过；该文件单独运行结果一致，本次未新增失败。
+- Python 编译与 `git diff --check` 通过；本次未连接、更新或重启远端 Docker，也未操作真实微信群。
+
 ### 修复微信群回复暴露不可读成员编码
 
 - 微信群回复清洗会移除正文开头的 32 位以上十六进制成员编码或 `wxid_` 内部 ID，正常可读的 `@昵称` 保持不变；清洗结果同时用于实际发送、归档和后续上下文，避免内部编码再次回灌。

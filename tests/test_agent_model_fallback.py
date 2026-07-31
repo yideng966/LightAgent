@@ -251,6 +251,41 @@ class TestAgentModelFallback(unittest.TestCase):
         self.assertIn("只输出面向用户的最终答复", backup.calls[0]["system"])
         self.assertNotIn("<final_response>", backup.calls[0]["system"])
 
+    def test_wechat_group_request_option_disables_thinking_with_global_toggle_on(self):
+        from bridge.agent_bridge import AgentLLMModel
+
+        config = FakeConfig({
+            "model": "primary-model",
+            "bot_type": "custom:primary",
+            "model_fallbacks": [],
+            "use_linkai": False,
+            "linkai_api_key": "",
+            "enable_thinking": True,
+            "reasoning_effort": "high",
+        })
+        primary = FakeBot(stream_chunks=[{
+            "choices": [{
+                "delta": {"content": "最终答复"},
+                "finish_reason": "stop",
+            }],
+        }])
+        request = self._request()
+        request.request_options = {"reasoning_effort": "none"}
+
+        with patch("bridge.agent_bridge.conf", return_value=config):
+            with patch("models.bot_factory.create_bot", return_value=primary):
+                model = AgentLLMModel(bridge=None)
+                model.channel_type = "wechat_group"
+                chunks = list(model.call_stream(request))
+
+        self.assertEqual("最终答复", chunks[0]["choices"][0]["delta"]["content"])
+        self.assertEqual({"type": "disabled"}, primary.calls[0]["thinking"])
+        self.assertEqual(
+            {"reasoning_effort": "none"},
+            primary.calls[0]["request_options"],
+        )
+        self.assertNotIn("reasoning_effort", primary.calls[0])
+
     def test_wechat_group_extracts_send_message_and_drops_outside_analysis(self):
         from bridge.agent_bridge import AgentLLMModel
 

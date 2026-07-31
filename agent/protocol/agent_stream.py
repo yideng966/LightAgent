@@ -567,14 +567,34 @@ class AgentStreamExecutor:
             except Exception as e:
                 logger.error(f"Event callback error: {e}")
     
+    def _llm_request_options(self) -> Dict[str, Any]:
+        """为微信群图片上下文关闭当前请求的模型思考。"""
+        if self._current_channel_type() != "wechat_group" or self.context is None:
+            return {}
+        try:
+            trigger_source = str(
+                self.context.get("wechat_group_trigger_source") or ""
+            ).strip()
+            matched_images = self.context.get(
+                "wechat_group_multimodal_matched_images"
+            )
+        except Exception:
+            return {}
+        if trigger_source == "image_message" or bool(matched_images):
+            return {"reasoning_effort": "none"}
+        return {}
+
     def _is_thinking_enabled(self) -> bool:
         """Whether deep-thinking mode is on at the model layer.
 
         Mirrors the global toggle used by ``bridge.agent_bridge`` when deciding
-        whether to send ``thinking={"type": "enabled"}`` to the model. Used for
-        logging and reasoning-update event emission across all channels.
+        whether to send ``thinking={"type": "enabled"}`` to the model, including
+        request-scoped image overrides. Used for logging and reasoning-update
+        event emission across all channels.
         """
         from config import conf
+        if self._llm_request_options().get("reasoning_effort") == "none":
+            return False
         return bool(conf().get("enable_thinking", False))
 
     def _current_channel_type(self) -> str:
@@ -1243,6 +1263,7 @@ class AgentStreamExecutor:
             stream=True,
             tools=tools_schema,
             system=self.system_prompt,
+            request_options=self._llm_request_options(),
             source_metadata=source_metadata,
             provider_continuation_context=self._provider_continuation_context(),
             require_finish_tool=bool(
