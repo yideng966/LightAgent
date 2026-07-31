@@ -1728,6 +1728,58 @@ class WechatGroupChannelTest(unittest.TestCase):
             client.commands,
         )
 
+    def test_send_suppresses_internal_protocol_error_when_not_forced(self):
+        client = FakeClient()
+        channel = WechatGroupChannel(client=client)
+        context = {
+            "type": ContextType.TEXT,
+            "receiver": "room@@abc",
+            "msg": Mock(
+                is_group=True,
+                actual_user_id="wxid_alice",
+                actual_user_nickname="Alice",
+            ),
+        }
+
+        channel.send(
+            Reply(
+                ReplyType.ERROR,
+                "Agent error: 模型返回了无法安全处理的响应，请稍后重试。 "
+                "(Status: 422, Code: , Type: )",
+            ),
+            context,
+        )
+
+        self.assertEqual([], client.commands)
+
+    def test_send_forced_internal_protocol_error_uses_readable_hint(self):
+        client = FakeClient()
+        channel = WechatGroupChannel(client=client)
+        context = {
+            "type": ContextType.TEXT,
+            "receiver": "room@@abc",
+            "wechat_group_force_reply": True,
+            "msg": Mock(
+                is_group=True,
+                actual_user_id="wxid_alice",
+                actual_user_nickname="Alice",
+            ),
+        }
+
+        channel.send(
+            Reply(
+                ReplyType.ERROR,
+                "Agent error: 模型返回了无法安全处理的响应，请稍后重试。 "
+                "(Status: 422, Code: , Type: )",
+            ),
+            context,
+        )
+
+        self.assertEqual(
+            [("send_text", "room@@abc", "刚才的回复没生成完整，请再试一次。", ["wxid_alice"])],
+            client.commands,
+        )
+
     def test_send_text_reply_can_simulate_typing_delay(self):
         conf()["wechat_group_free_reply_typing_delay_enabled"] = True
         conf()["wechat_group_free_reply_typing_chars_per_second"] = 7

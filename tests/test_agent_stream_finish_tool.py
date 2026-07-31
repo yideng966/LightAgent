@@ -28,10 +28,11 @@ class FakeSearchTool(BaseTool):
 
 
 class ScriptedToolModel(LLMModel):
-    def __init__(self, second_turn):
+    def __init__(self, second_turn, third_turn=None):
         super().__init__(model="unit-test-model")
         self.channel_type = "wechat_group"
         self.second_turn = second_turn
+        self.third_turn = third_turn
         self.requests = []
 
     def call_stream(self, request):
@@ -51,14 +52,17 @@ class ScriptedToolModel(LLMModel):
                 }],
             }
             return
-        yield self.second_turn
+        if len(self.requests) == 2 or self.third_turn is None:
+            yield self.second_turn
+            return
+        yield self.third_turn
 
 
 class AgentStreamFinishToolTest(unittest.TestCase):
     @staticmethod
-    def _executor(second_turn):
+    def _executor(second_turn, third_turn=None):
         events = []
-        model = ScriptedToolModel(second_turn)
+        model = ScriptedToolModel(second_turn, third_turn)
         executor = AgentStreamExecutor(
             agent=None,
             model=model,
@@ -100,22 +104,39 @@ class AgentStreamFinishToolTest(unittest.TestCase):
         self.assertEqual(final_text, executor.messages[-1]["content"][-1]["text"])
         self.assertIn(final_text, str(events))
 
-    def test_plain_progress_text_after_tool_result_is_rejected(self):
+    def test_plain_progress_text_after_tool_result_is_hidden_and_retried(self):
         intermediate = "搜到了一些相关信息，但不太完整。让我看看更具体的内容。"
-        executor, model, events = self._executor({
-            "choices": [{
-                "delta": {"content": intermediate},
-                "finish_reason": "stop",
-            }],
-        })
+        final_text = "显卡价格较2025年618上涨约20%。"
+        executor, model, events = self._executor(
+            {
+                "choices": [{
+                    "delta": {"content": intermediate},
+                    "finish_reason": "stop",
+                }],
+            },
+            {
+                "choices": [{
+                    "delta": {"content": final_text},
+                    "finish_reason": "stop",
+                }],
+            },
+        )
 
         with patch("config.conf", return_value={"enable_thinking": False}):
-            with self.assertRaisesRegex(RuntimeError, "finish tool"):
-                executor.run_stream("现在显卡涨价多少？")
+            result = executor.run_stream("现在显卡涨价多少？")
 
-        self.assertEqual(2, len(model.requests))
+        self.assertEqual(final_text, result)
+        self.assertEqual(3, len(model.requests))
+        self.assertTrue(model.requests[1].require_finish_tool)
+        self.assertFalse(model.requests[2].require_finish_tool)
+        self.assertNotIn(
+            AGENT_FINISH_TOOL_NAME,
+            {tool["name"] for tool in model.requests[2].tools},
+        )
         self.assertNotIn(intermediate, str(executor.messages))
         self.assertNotIn(intermediate, str(events))
+        self.assertIn(final_text, str(executor.messages))
+        self.assertIn(final_text, str(events))
 
 
 if __name__ == "__main__":

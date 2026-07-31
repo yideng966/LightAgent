@@ -823,7 +823,7 @@ class AgentStreamExecutor:
                             # 再调用一次 LLM
                             assistant_msg, tool_calls = self._call_llm_stream(
                                 retry_on_empty=False,
-                                require_finish_tool=require_finish_tool,
+                                require_finish_tool=False,
                             )
                             final_response = assistant_msg
                             
@@ -1168,8 +1168,9 @@ class AgentStreamExecutor:
             max_retries: Maximum number of retries for API errors
             _overflow_retry: Internal flag indicating this is a retry after context overflow
             _tools_disabled_retry: Internal flag indicating this is a retry without tools
-            require_finish_tool: Require the internal native finish tool after a
-                WeChat group tool round instead of accepting plain progress text
+            require_finish_tool: Prefer the internal native finish tool after a
+                WeChat group tool round; unsupported plain text is hidden and
+                retried once with an explicit final-response prompt
         
         Returns:
             (response_text, tool_calls)
@@ -1601,10 +1602,48 @@ class AgentStreamExecutor:
             full_content = message.strip()
             tool_calls = []
             logger.info("[Agent] accepted native finish tool response")
-        elif require_finish_tool and not tool_calls:
-            raise RuntimeError(
-                "model returned plain text after tool execution; finish tool required"
+        elif require_finish_tool and not tool_calls and full_content.strip():
+            logger.info(
+                "[Agent] model returned plain text instead of native finish tool; "
+                "requesting one hidden final-response retry"
             )
+            self._emit_event("message_end", {
+                "content": "",
+                "tool_calls": [],
+                "final_response_retry": True,
+            })
+            retry_prompt = {
+                "role": "user",
+                "content": [{
+                    "type": "text",
+                    "text": _t(
+                        "工具已经执行完成。请现在只输出完整、自包含、可直接发送给用户的最终答复；"
+                        "如果信息仍不足，请继续调用所需工具。不要描述计划、进度或内部过程。",
+                        "The tools have finished. Now provide only the complete, self-contained "
+                        "final answer that can be sent directly to the user. If more information "
+                        "is still needed, call the required tool. Do not describe plans, progress, "
+                        "or internal reasoning.",
+                    ),
+                }],
+            }
+            self.messages.append(retry_prompt)
+            try:
+                return self._call_llm_stream(
+                    retry_on_empty=True,
+                    retry_count=retry_count,
+                    max_retries=max_retries,
+                    _overflow_retry=_overflow_retry,
+                    require_finish_tool=False,
+                )
+            finally:
+                for index, message in enumerate(self.messages):
+                    if message is retry_prompt:
+                        self.messages.pop(index)
+                        logger.debug(
+                            "[Agent] Removed hidden final-response retry prompt "
+                            "from message history"
+                        )
+                        break
 
         if defer_message_updates and tool_calls:
             if full_content.strip():

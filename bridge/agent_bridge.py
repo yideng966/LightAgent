@@ -1190,8 +1190,6 @@ class TextModelRouter(LLMModel):
 
         if not content.strip():
             return "empty response", "", [], ""
-        if bool(getattr(request, "require_finish_tool", False)):
-            return "missing required finish tool call", "", [], ""
         final_text, protocol_reason, protocol_kind = (
             cls._extract_wechat_group_final_content(content)
         )
@@ -1406,7 +1404,11 @@ class TextModelRouter(LLMModel):
                     )
                     for chunk in normalized_chunks:
                         yield chunk
-                    self._stage_provider_continuation(candidate_request)
+                    if not (
+                        bool(getattr(candidate_request, "require_finish_tool", False))
+                        and protocol_kind != "tool_calls"
+                    ):
+                        self._stage_provider_continuation(candidate_request)
                     return
                 except Exception as exc:
                     if isinstance(exc, AgentCancelledError):

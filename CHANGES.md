@@ -2,6 +2,30 @@
 
 ## 2026-07-31
 
+### 修复微信群工具完成协议兼容性回归
+
+- 修复 `v2.1.26` 中多种自定义模型完成贴纸搜索、贴纸发送等工具后，因返回普通纯文本而未调用内部完成工具，被连续误判为候选故障并最终发送 422 技术错误的问题。
+- 缺少内部完成工具不再触发备用模型切换；第一次纯文本会被隐藏，系统在当前健康候选链上追加一次仅要求最终答复的重试，临时提示和首段文本不会进入 Agent 历史、渠道事件或 Provider continuation。
+- 微信群发送边界新增内部协议错误保护：明确触发请求只返回简短可读提示，自由回复等 ambient 请求静默丢弃，不再向群内暴露 `Agent error`、状态码和内部错误措辞；业务错误仍正常发送。
+
+关键文件：
+
+- `agent/protocol/agent_stream.py`
+- `bridge/agent_bridge.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `tests/test_agent_stream_finish_tool.py`
+- `tests/test_agent_model_fallback.py`
+- `tests/test_wechat_group_channel.py`
+- `plans/20260731_选择性回退微信群回复处理至2.1.18.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 远端容器只读日志确认实际失败原因均为 `missing required finish tool call`，涉及多个正常返回纯文本的自定义模型，并非 Provider 故障。
+- 完成工具、候选路由、思考隔离、持久化与发送边界定向回归 68 项通过；全量回归运行 1305 项，仅有未修改的自由回复 Judge 中 2 个既有失败，另有 1 项条件跳过，本次没有新增失败。
+- Python 编译与 `git diff --check` 通过；隔离数据目录下的本地 Web-only `python app.py` 在 `127.0.0.1:9955` 启动成功，`/` 与 `/chat` 均返回 HTTP 200，验收后进程、端口和临时目录已清理。
+- 本次只读调查远端日志，未更新或重启远端容器；线上修复需在新镜像发布并部署后生效。
+
 ### 选择性恢复微信群纯文本回复并收紧最终结果边界
 
 - 微信群不再强制模型输出 `<final_response>`，普通纯文本重新作为合法最终答复；仍兼容确定性提取 `<send><message>`、`<send message="...">` 和 JSON `send.message`，且不会读取或发送 Provider 路径、JSON `path` 等其他字段。

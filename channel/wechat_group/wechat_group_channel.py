@@ -107,6 +107,7 @@ WECHAT_GROUP_DEFAULT_IMAGE_REPLY_QUESTION = "请根据这张图片作出简短�
 WECHAT_GROUP_MEMBERSHIP_EVENT_TTL_SECONDS = 600
 WECHAT_GROUP_MEMBERSHIP_EVENT_CACHE_SIZE = 512
 WECHAT_GROUP_TRANSIENT_MODEL_ERROR_FALLBACK = "别@我了哥，没Token了。"
+WECHAT_GROUP_PROTOCOL_MODEL_ERROR_FALLBACK = "刚才的回复没生成完整，请再试一次。"
 _WECHAT_GROUP_TRANSIENT_MODEL_STATUS_RE = re.compile(
     r"(?:status|http)\s*[:=]?\s*(?:408|429|500|502|503|504)\b",
     re.IGNORECASE,
@@ -160,6 +161,16 @@ def _is_wechat_group_transient_model_error_text(text) -> bool:
     return any(
         keyword in lowered
         for keyword in _WECHAT_GROUP_TRANSIENT_MODEL_ERROR_KEYWORDS
+    )
+
+
+def _is_wechat_group_protocol_model_error_text(text) -> bool:
+    value = str(text or "").strip()
+    lowered = value.lower()
+    return (
+        lowered.startswith("agent error:")
+        and "模型返回了无法安全处理的响应" in value
+        and "status: 422" in lowered
     )
 
 
@@ -1671,6 +1682,22 @@ class WechatGroupChannel(ChatChannel):
         if self._should_suppress_stale_ambient(context):
             return
         if reply.type in (ReplyType.TEXT, ReplyType.INFO, ReplyType.ERROR):
+            if (
+                reply.type == ReplyType.ERROR
+                and _is_wechat_group_protocol_model_error_text(reply.content)
+            ):
+                if context.get("wechat_group_force_reply", False):
+                    reply = Reply(
+                        ReplyType.TEXT,
+                        WECHAT_GROUP_PROTOCOL_MODEL_ERROR_FALLBACK,
+                    )
+                else:
+                    logger.info(
+                        "[wechat_group] internal protocol error reply suppressed: {}".format(
+                            _wechat_group_log_preview(reply.content)
+                        )
+                    )
+                    return
             if (
                 reply.type == ReplyType.ERROR
                 and _is_wechat_group_transient_model_error_text(reply.content)

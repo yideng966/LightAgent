@@ -554,7 +554,7 @@ class TestAgentModelFallback(unittest.TestCase):
             chunks[0]["choices"][0]["delta"]["content"],
         )
 
-    def test_wechat_group_after_tool_requires_native_finish_tool(self):
+    def test_wechat_group_after_tool_plain_text_keeps_current_candidate(self):
         from agent.protocol.models import (
             AGENT_FINISH_TOOL_NAME,
             build_agent_finish_tool_schema,
@@ -593,14 +593,19 @@ class TestAgentModelFallback(unittest.TestCase):
         request.require_finish_tool = True
 
         with patch("bridge.agent_bridge.conf", return_value=config):
-            with patch("models.bot_factory.create_bot", side_effect=[primary, backup]):
+            with patch(
+                "models.bot_factory.create_bot",
+                side_effect=[primary, backup],
+            ) as create_bot:
                 model = AgentLLMModel(bridge=None)
                 model.channel_type = "wechat_group"
-                chunks = list(model.call_stream(request))
+                with patch.object(model, "_stage_provider_continuation") as stage_anchor:
+                    chunks = list(model.call_stream(request))
 
-        self.assertNotIn(intermediate, str(chunks))
-        tool_call = chunks[0]["choices"][0]["delta"]["tool_calls"][0]
-        self.assertEqual(AGENT_FINISH_TOOL_NAME, tool_call["function"]["name"])
+        self.assertEqual(intermediate, chunks[0]["choices"][0]["delta"]["content"])
+        self.assertEqual(1, create_bot.call_count)
+        self.assertEqual([], backup.calls)
+        stage_anchor.assert_not_called()
 
     def test_wechat_group_strips_single_terminal_eos_without_fallback(self):
         from bridge.agent_bridge import AgentLLMModel
