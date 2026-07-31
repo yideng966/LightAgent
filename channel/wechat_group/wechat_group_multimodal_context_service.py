@@ -353,8 +353,11 @@ class WechatGroupMultimodalContextService:
 
     @staticmethod
     def _current_image_item(msg) -> Optional[Dict[str, Any]]:
-        message_type = str(getattr(msg, "message_type", "") or "").lower()
-        if message_type != "image" and getattr(msg, "ctype", None) != ContextType.IMAGE:
+        message_type = project_wechat_message_type(
+            getattr(msg, "message_type", ""),
+            getattr(msg, "text", ""),
+        )
+        if message_type != "image":
             return None
         media_path = str(getattr(msg, "media_path", "") or getattr(msg, "content", "") or "").strip()
         if not media_path:

@@ -146,6 +146,28 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
         self.assertNotIn("D:/tmp/cat.jpg", first["block"])
         self.assertNotIn("D:/tmp/cat.jpg", second["block"])
 
+    def test_current_sticker_is_not_treated_as_image_even_with_legacy_context_type(self):
+        from channel.wechat_group.wechat_group_multimodal_context_service import (
+            WechatGroupMultimodalContextService,
+        )
+
+        conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
+        msg = self._image_msg(media_path="D:/tmp/sticker.gif")
+        msg.message_type = "sticker"
+        service = WechatGroupMultimodalContextService(Mock(get_recent_messages=Mock(return_value=[])))
+
+        with patch("agent.tools.vision.vision.Vision.execute") as execute:
+            result = service.build_context(
+                msg,
+                query="请根据这张图片作出简短回应。",
+                trigger_source="image_message",
+                now=100000,
+            )
+
+        execute.assert_not_called()
+        self.assertEqual([], result["matched_images"])
+        self.assertNotEqual("current_image", result["diagnostics"].get("reason"))
+
     def test_image_summary_failure_returns_diagnostic_text_without_path_leak(self):
         from channel.wechat_group.wechat_group_multimodal_context_service import (
             WechatGroupMultimodalContextService,

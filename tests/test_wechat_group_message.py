@@ -42,6 +42,37 @@ class WechatGroupMessageTest(unittest.TestCase):
         self.assertEqual(["wxid_bot"], msg.at_list)
         self.assertFalse(msg.my_msg)
 
+    def test_parse_image_and_sticker_use_distinct_context_types(self):
+        base = {
+            "type": SidecarEventType.MESSAGE,
+            "timestamp": 1710000000,
+            "room_id": "room@@abc",
+            "room_name": "测试群",
+            "sender_id": "wxid_alice",
+            "sender_name": "Alice",
+            "self_id": "wxid_bot",
+            "self_name": "LightBot",
+            "text": "",
+        }
+
+        image = WechatGroupMessage(parse_sidecar_event({
+            **base,
+            "message_id": "msg-image",
+            "message_type": "image",
+            "file_path": "D:/tmp/image.jpg",
+        }))
+        sticker = WechatGroupMessage(parse_sidecar_event({
+            **base,
+            "message_id": "msg-sticker",
+            "message_type": "sticker",
+            "file_path": "D:/tmp/sticker.gif",
+        }))
+
+        self.assertEqual(ContextType.IMAGE, image.ctype)
+        self.assertEqual(ContextType.STICKER, sticker.ctype)
+        self.assertEqual("D:/tmp/image.jpg", image.content)
+        self.assertEqual("D:/tmp/sticker.gif", sticker.content)
+
     def test_parse_self_message_marks_my_msg(self):
         raw = {
             "type": "message",

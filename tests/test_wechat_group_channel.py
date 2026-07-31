@@ -3288,6 +3288,45 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertNotIn("D:/tmp/cat.jpg", context.content)
         self.assertIn("A cat sitting on a desk.", context.content)
 
+    def test_at_sticker_message_does_not_trigger_image_understanding(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["group_name_white_list"] = []
+        conf()["wechat_group_image_understanding_enabled"] = True
+        conf()["wechat_group_image_understanding_comment_enabled"] = True
+        conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
+        channel = WechatGroupChannel(
+            client=FakeClient(),
+            memory_service=Mock(preview_prompt_memories_sync=Mock(return_value={})),
+        )
+        channel.produce = Mock()
+        msg = Mock(
+            ctype=ContextType.IMAGE,
+            content="D:/tmp/sticker.gif",
+            text="[动画表情]",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=True,
+            is_quote_self=False,
+            is_group=True,
+            at_list=["wxid_bot"],
+            self_display_name="LightBot",
+            create_time=100000,
+            msg_id="msg-sticker",
+            message_type="sticker",
+            media_path="D:/tmp/sticker.gif",
+        )
+
+        with patch("agent.tools.vision.vision.Vision.execute") as execute:
+            channel.handle_text(msg)
+
+        execute.assert_not_called()
+        channel.produce.assert_not_called()
+
     def test_at_image_message_uses_readable_default_question(self):
         import channel.wechat_group.wechat_group_channel as wechat_group_channel
 
@@ -3474,6 +3513,50 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertNotIn("D:/tmp/cat.jpg", task["text"])
         self.assertTrue(task["local_decision"]["triggered"])
         self.assertIn("media_payload_allowed", task["local_decision"]["reasons"])
+
+    def test_non_at_sticker_does_not_enter_image_free_reply_when_enabled(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["group_name_white_list"] = []
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_activity_level"] = "normal"
+        conf()["wechat_group_emotion_enabled"] = False
+        conf()["wechat_group_image_understanding_enabled"] = True
+        conf()["wechat_group_free_reply_image_understanding_enabled"] = True
+        archive = Mock(get_recent_messages=Mock(return_value=[]))
+        channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+        channel.produce = Mock()
+        channel.free_reply_worker = Mock(submit=Mock(return_value=True))
+        channel._ensure_free_reply_worker_started = Mock()
+        msg = Mock(
+            ctype=ContextType.IMAGE,
+            content="D:/tmp/sticker.gif",
+            text="[动画表情]",
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            create_time=100000,
+            msg_id="msg-sticker-free-reply",
+            message_type="sticker",
+            media_path="D:/tmp/sticker.gif",
+            my_msg=False,
+        )
+
+        with patch("agent.tools.vision.vision.Vision.execute") as execute:
+            channel.handle_text(msg)
+
+        execute.assert_not_called()
+        channel.produce.assert_not_called()
+        channel._ensure_free_reply_worker_started.assert_not_called()
+        channel.free_reply_worker.submit.assert_not_called()
 
     def test_non_at_image_free_reply_does_not_treat_windows_media_path_as_sensitive(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]

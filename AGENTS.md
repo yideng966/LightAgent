@@ -539,6 +539,7 @@ messages:
 
 - 当群内直接发送图片并触发机器人回复时，`WechatGroupChannel` 只负责把本轮转换为文本回复上下文并进入 `_compose_context()`；当前图片由 `WechatGroupMultimodalContextService` 作为 `current_image` 优先生成视觉摘要并注入 `<wechat-group-multimodal>`。
 - Wechaty 对图片或贴纸上报的 `message.text()` 可能是含 `aeskey`、`cdnthumburl`、`hevc_mid_size` 等字段的传输层 XML；该原文只允许用于协议处理和归档，不得作为 `context.content`、`wechat_group_user_content` 或 Agent 会话用户消息。图片当前轮用户内容必须使用显式语义文本，视觉事实只来自统一多模态摘要。
+- 入站图片与表情包必须保持独立类型：sidecar 的 `message_type = sticker` 在 Python 中映射为 `ContextType.STICKER`，只进入归档和按配置启用的表情包素材收集，不得进入当前图片理解、图片自由回复、`current_image` 候选或 Agent/Vision 回复链路；图片业务判断必须以投影后的 `message_type = image` 为准，不能仅凭历史兼容的 `ctype = IMAGE` 放宽。
 - 微信群表情包素材的 `description` 不得持久化传输层 XML、纯数字消息 ID 或长哈希文件名；无法同步生成语义时使用安全占位描述。历史素材批量生成语义必须复用现有 `Vision`，执行前备份 SQLite，逐条条件更新且失败项保持原值以支持续跑；GIF 应先转换为静态多帧联系图，避免兼容接口直接解析动画失败。
 - `wechat_group_sticker_send` 成功后只发送表情包媒体；即使 Agent 最终文本包含文件名或占位说明，也不得作为 `text_content` 先发。该规则不影响普通图片或文件的显式图文回复。
 - 上述边界同样适用于引用消息、recent transcript、焦点栈、画像 LLM 提取及贴纸 Agent 工具；即使媒体下载失败或既有数据库已保存污染内容，媒体消息也必须投影为语义占位符，不能回退注入原始 `text` 或 XML。历史归档可能把图片/贴纸 XML 误标为 `message_type = text`，模型边界不得只信任类型字段，还必须识别正文中的微信媒体传输载荷。

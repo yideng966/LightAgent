@@ -2,6 +2,32 @@
 
 ## 2026-07-31
 
+### 区分微信群入站图片与表情包
+
+- 新增独立 `ContextType.STICKER`，保留 Sidecar 已识别的 `message_type = sticker` 语义，不再把表情包适配为普通图片。
+- 微信群通道与多模态服务统一按投影后的真实消息类型判断图片；明确触发和非明确触发的表情包继续归档、按配置自动收集，但不再进入图片自由回复、`current_image` 或 Vision 链路。
+- 保持普通图片直接识图、图片自由回复、历史图片引用、表情包描述管理及素材搜索发送行为不变，并增加旧式 `ctype = IMAGE` 表情包也无法绕过边界的回归测试。
+
+关键文件：
+
+- `bridge/context.py`
+- `channel/wechat_group/wechat_group_message.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_multimodal_context_service.py`
+- `tests/test_wechat_group_message.py`
+- `tests/test_wechat_group_channel.py`
+- `tests/test_wechat_group_multimodal_context_service.py`
+- `plans/20260731_微信群图片与表情包入站分类修复.md`
+- `AGENTS.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 4 个新增测试在旧实现下出现 1 个错误和 3 个失败，分别确认缺少独立类型、明确表情包触发 Vision、非明确表情包进入图片自由回复、旧式上下文绕过多模态边界；实现后全部通过。
+- `python -m unittest tests.test_wechat_group_channel`：149 项通过。
+- 消息、传输与多模态 27 项通过；表情包服务、标注与 Agent 工具 35 项通过；Sidecar 61 项通过。
+- `python -X utf8 -m unittest discover -s tests`：1221 项通过，1 项按条件跳过。
+
 ### 回退代码基线并发布 2.2.0
 
 - 将 `master` 的代码基线恢复到 `172d6f69dbe7e064813e4b028c7a2ca628347126`，排除该基线之后未指定保留的提交。

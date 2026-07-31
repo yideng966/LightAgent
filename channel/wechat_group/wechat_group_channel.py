@@ -244,6 +244,13 @@ def _is_archived_image_message(item) -> bool:
     )
 
 
+def _project_inbound_message_type(msg) -> str:
+    return project_wechat_message_type(
+        getattr(msg, "message_type", ""),
+        getattr(msg, "text", ""),
+    )
+
+
 def select_wechat_group_agent_history_mode(
     trigger_source: str,
     text: str,
@@ -1113,7 +1120,10 @@ class WechatGroupChannel(ChatChannel):
             return
         if self._should_suppress_at_during_free_reply_mute(msg):
             return
-        if msg.ctype == ContextType.IMAGE:
+        projected_message_type = _project_inbound_message_type(msg)
+        if projected_message_type == "sticker":
+            return
+        if projected_message_type == "image":
             if not direct_reply:
                 if not conf().get("wechat_group_free_reply_image_understanding_enabled", False):
                     return
@@ -1879,7 +1889,7 @@ class WechatGroupChannel(ChatChannel):
 
     @staticmethod
     def _infer_multimodal_trigger_source(msg: WechatGroupMessage) -> str:
-        if str(getattr(msg, "message_type", "") or "").lower() == "image" or getattr(msg, "ctype", None) == ContextType.IMAGE:
+        if _project_inbound_message_type(msg) == "image":
             return "image_message"
         if getattr(msg, "is_quote_self", False) is True:
             return "quote_self"
@@ -2494,14 +2504,17 @@ class WechatGroupChannel(ChatChannel):
         voice_transcription = task.get("voice_transcription")
         context_type = ContextType.TEXT if voice_transcription is not None else msg.ctype
         content = voice_transcription if voice_transcription is not None else msg.content
+        projected_message_type = _project_inbound_message_type(msg)
+        if projected_message_type == "sticker":
+            return
         image_understanding_triggered = False
-        if msg.ctype == ContextType.IMAGE:
+        if projected_message_type == "image":
             if not conf().get("wechat_group_free_reply_image_understanding_enabled", False):
                 return
             content = self._build_image_reply_content()
             context_type = ContextType.TEXT
             image_understanding_triggered = True
-        trigger_source = "image_message" if msg.ctype == ContextType.IMAGE else "free_reply"
+        trigger_source = "image_message" if projected_message_type == "image" else "free_reply"
         reply_mode = str((llm_decision or {}).get("reply_mode") or "")
         history_mode = select_wechat_group_agent_history_mode(
             trigger_source,

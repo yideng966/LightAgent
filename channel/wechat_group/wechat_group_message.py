@@ -11,7 +11,7 @@ from channel.wechat_group.protocol import SidecarEvent
 _MESSAGE_TYPE_TO_CONTEXT = {
     "text": ContextType.TEXT,
     "image": ContextType.IMAGE,
-    "sticker": ContextType.IMAGE,
+    "sticker": ContextType.STICKER,
     "voice": ContextType.VOICE,
     "audio": ContextType.VOICE,
     "file": ContextType.FILE,
