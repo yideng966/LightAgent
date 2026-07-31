@@ -353,9 +353,6 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             def _build_style_context_block(self, msg):
                 return "<wechat-group-style>\nconcise\n</wechat-group-style>"
 
-            def _build_emotion_context_block(self, msg):
-                return "<wechat-group-emotion>\ncalm\n</wechat-group-emotion>"
-
             def _build_multimodal_context(self, msg, query, trigger_source, include_quote=True):
                 return {"block": "", "diagnostics": {}, "matched_images": []}
 
@@ -422,9 +419,6 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             def _build_style_context_block(self, msg):
                 return ""
 
-            def _build_emotion_context_block(self, msg):
-                return ""
-
             def _build_multimodal_context(self, msg, query, trigger_source, include_quote=True):
                 return {"block": "", "diagnostics": {}, "matched_images": []}
 
@@ -476,9 +470,6 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             def _build_style_context_block(self, msg):
                 return ""
 
-            def _build_emotion_context_block(self, msg):
-                return ""
-
             def _build_multimodal_context(self, msg, query, trigger_source, include_quote=True):
                 return {"block": "", "diagnostics": {}, "matched_images": []}
 
@@ -528,9 +519,6 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
             def _build_style_context_block(self, msg):
                 return ""
 
-            def _build_emotion_context_block(self, msg):
-                return ""
-
             def _build_multimodal_context(self, msg, query, trigger_source, include_quote=True):
                 return {"block": "", "diagnostics": {}, "matched_images": []}
 
@@ -570,9 +558,6 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
                 return ""
 
             def _build_style_context_block(self, msg):
-                return ""
-
-            def _build_emotion_context_block(self, msg):
                 return ""
 
             def _build_multimodal_context(self, msg, query, trigger_source, include_quote=True):
@@ -639,9 +624,6 @@ class WechatGroupHumanizedContextBuilderTest(unittest.TestCase):
                 return ""
 
             def _build_style_context_block(self, msg):
-                return ""
-
-            def _build_emotion_context_block(self, msg):
                 return ""
 
             def _build_multimodal_context(self, msg, query, trigger_source, include_quote=True):

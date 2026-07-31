@@ -40,7 +40,6 @@ class WechatGroupRecentContextTest(unittest.TestCase):
             "wechat_group_focus_stale_rounds": conf().get("wechat_group_focus_stale_rounds"),
             "wechat_group_focus_min_keywords": conf().get("wechat_group_focus_min_keywords"),
             "wechat_group_style_enabled": conf().get("wechat_group_style_enabled"),
-            "wechat_group_emotion_enabled": conf().get("wechat_group_emotion_enabled"),
             "wechat_group_rolling_summary_enabled": conf().get("wechat_group_rolling_summary_enabled"),
         }
         conf()["wechat_group_rolling_summary_enabled"] = False
@@ -596,7 +595,6 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_style_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         archive = WechatGroupArchive(self.db_path)
         archive.record_message("msg-old-1", "room@@abc", "测试群", "wxid_a", "A", "text", "难受 她不爱我了", created_at=1000)
         archive.record_message("msg-old-2", "room@@abc", "测试群", "wxid_b", "B", "text", "xx不爱你了吗", created_at=1001)
@@ -636,7 +634,6 @@ class WechatGroupRecentContextTest(unittest.TestCase):
         conf()["wechat_group_knowledge_enabled"] = False
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_style_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         archive = WechatGroupArchive(self.db_path)
         archive.record_message("msg-prev-1", "room@@abc", "测试群", "wxid_bob", "Bob", "text", "发布窗口是周五晚上", created_at=1000)
         archive.record_message("msg-prev-2", "room@@abc", "测试群", "wxid_alice", "Alice", "text", "回归还没过", created_at=1001)
@@ -698,53 +695,7 @@ class WechatGroupRecentContextTest(unittest.TestCase):
 
         self.assertNotIn("<wechat-group-memory>", context.content)
 
-    def test_channel_injects_emotion_block_before_request(self):
-        class FakeEmotionService:
-            def build_prompt_block(self, room_id, now=None):
-                return (
-                    "<wechat-group-emotion>\n"
-                    "valence: 0.1\n"
-                    "energy: 0.7\n"
-                    "sociability: 0.8\n"
-                    "interpreted_state: engaged\n"
-                    "</wechat-group-emotion>"
-                )
-
-            def observe_message(self, room_id, text, is_at=False, now=None):
-                return {}
-
-        conf()["wechat_group_room_ids"] = ["room@@abc"]
-        conf()["wechat_group_emotion_enabled"] = True
-        channel = WechatGroupChannel(
-            client=Mock(),
-            archive=WechatGroupArchive(self.db_path),
-            emotion_service=FakeEmotionService(),
-        )
-        msg = WechatGroupMessage(parse_sidecar_event({
-            "type": "message",
-            "message_id": "msg-current",
-            "room_id": "room@@abc",
-            "room_name": "测试群",
-            "sender_id": "wxid_alice",
-            "sender_name": "Alice",
-            "self_id": "wxid_bot",
-            "self_name": "LightBot",
-            "text": "@LightBot 总结一下",
-            "is_at": True,
-            "at_list": ["wxid_bot"],
-            "timestamp": 1010,
-        }))
-
-        context = self._refresh_v2_context(
-            channel,
-            channel._compose_context(ContextType.TEXT, msg.content, isgroup=True, msg=msg),
-        )
-
-        emotion_index = context.content.index("<wechat-group-emotion>")
-        request_index = context.content.rindex("总结一下")
-        self.assertLess(emotion_index, request_index)
-
-    def test_channel_injects_style_between_memory_and_emotion(self):
+    def test_channel_injects_style_between_memory_and_request(self):
         class FakeContextService:
             def build_prompt_block(self, **kwargs):
                 return (
@@ -764,29 +715,13 @@ class WechatGroupRecentContextTest(unittest.TestCase):
                     "</wechat-group-style>"
                 )
 
-        class FakeEmotionService:
-            def build_prompt_block(self, room_id, now=None):
-                return (
-                    "<wechat-group-emotion>\n"
-                    "valence: 0.1\n"
-                    "energy: 0.7\n"
-                    "sociability: 0.8\n"
-                    "interpreted_state: engaged\n"
-                    "</wechat-group-emotion>"
-                )
-
-            def observe_message(self, room_id, text, is_at=False, now=None):
-                return {}
-
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["wechat_group_style_enabled"] = True
-        conf()["wechat_group_emotion_enabled"] = True
         style_service = FakeStyleService()
         channel = WechatGroupChannel(
             client=Mock(),
             archive=WechatGroupArchive(self.db_path),
             memory_service=FakeContextService(),
-            emotion_service=FakeEmotionService(),
         )
         channel.style_service = style_service
         msg = WechatGroupMessage(parse_sidecar_event({
@@ -811,11 +746,9 @@ class WechatGroupRecentContextTest(unittest.TestCase):
 
         memory_index = context.content.index("<wechat-group-memory>")
         style_index = context.content.index("<wechat-group-style>")
-        emotion_index = context.content.index("<wechat-group-emotion>")
         request_index = context.content.rindex("总结一下")
         self.assertLess(memory_index, style_index)
-        self.assertLess(style_index, emotion_index)
-        self.assertLess(emotion_index, request_index)
+        self.assertLess(style_index, request_index)
         self.assertEqual("room@@abc", style_service.args[1])
 
     def test_channel_sets_wechat_group_memory_tool_metadata(self):

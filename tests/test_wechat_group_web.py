@@ -152,15 +152,6 @@ class WechatGroupWebTest(unittest.TestCase):
             "wechat_group_style_candidate_min_evidence": conf().get("wechat_group_style_candidate_min_evidence"),
             "wechat_group_style_learning_batch_limit": conf().get("wechat_group_style_learning_batch_limit"),
             "wechat_group_style_auto_apply_enabled": conf().get("wechat_group_style_auto_apply_enabled"),
-            "wechat_group_emotion_enabled": conf().get("wechat_group_emotion_enabled"),
-            "wechat_group_emotion_decay_minutes": conf().get("wechat_group_emotion_decay_minutes"),
-            "wechat_group_emotion_default_valence": conf().get("wechat_group_emotion_default_valence"),
-            "wechat_group_emotion_default_energy": conf().get("wechat_group_emotion_default_energy"),
-            "wechat_group_emotion_default_sociability": conf().get("wechat_group_emotion_default_sociability"),
-            "wechat_group_free_reply_time_rules_enabled": conf().get("wechat_group_free_reply_time_rules_enabled"),
-            "wechat_group_free_reply_time_rules": conf().get("wechat_group_free_reply_time_rules"),
-            "wechat_group_free_reply_typing_delay_enabled": conf().get("wechat_group_free_reply_typing_delay_enabled"),
-            "wechat_group_free_reply_typing_chars_per_second": conf().get("wechat_group_free_reply_typing_chars_per_second"),
             "wechat_group_sticker_enabled": conf().get("wechat_group_sticker_enabled"),
             "wechat_group_sticker_auto_collect_enabled": conf().get("wechat_group_sticker_auto_collect_enabled"),
             "wechat_group_sticker_context_limit": conf().get("wechat_group_sticker_context_limit"),
@@ -320,20 +311,7 @@ class WechatGroupWebTest(unittest.TestCase):
             },
             item["extra"]["style"],
         )
-        self.assertEqual(
-            {
-                "enabled": True,
-                "decay_minutes": 10,
-                "default_valence": 0,
-                "default_energy": 0.5,
-                "default_sociability": 0.45,
-                "free_reply_time_rules_enabled": False,
-                "free_reply_time_rules": [],
-                "free_reply_typing_delay_enabled": True,
-                "free_reply_typing_chars_per_second": 7,
-            },
-            item["extra"]["emotion"],
-        )
+        self.assertNotIn("emotion", item["extra"])
         self.assertEqual(
             {
                 "enabled": True,
@@ -1494,7 +1472,6 @@ class WechatGroupWebTest(unittest.TestCase):
             "/api/wechat-group/members?stable_room_id=",
             "/api/wechat-group/focus/active?stable_room_id=",
             "/api/wechat-group/styles/active?stable_room_id=",
-            "/api/wechat-group/emotion/state?stable_room_id=",
             "/api/wechat-group/stickers/list?stable_room_id=",
             "stable_member_id: stableMemberId",
             "member.identity_status === 'confirmed'",
@@ -1826,15 +1803,6 @@ class WechatGroupWebTest(unittest.TestCase):
                 "wechat_group_style_candidate_min_evidence": "0",
                 "wechat_group_style_learning_batch_limit": "88",
                 "wechat_group_style_auto_apply_enabled": True,
-                "wechat_group_emotion_enabled": False,
-                "wechat_group_emotion_decay_minutes": "0",
-                "wechat_group_emotion_default_valence": "-2",
-                "wechat_group_emotion_default_energy": "2",
-                "wechat_group_emotion_default_sociability": "-1",
-                "wechat_group_free_reply_time_rules_enabled": True,
-                "wechat_group_free_reply_time_rules": [{"start": "09:00", "end": "18:00", "days": ["mon", "fri"]}],
-                "wechat_group_free_reply_typing_delay_enabled": False,
-                "wechat_group_free_reply_typing_chars_per_second": "0",
                 "wechat_group_sticker_enabled": False,
                 "wechat_group_sticker_auto_collect_enabled": False,
                 "wechat_group_sticker_context_limit": "0",
@@ -1892,15 +1860,6 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual(1, conf()["wechat_group_style_candidate_min_evidence"])
         self.assertEqual(88, conf()["wechat_group_style_learning_batch_limit"])
         self.assertTrue(conf()["wechat_group_style_auto_apply_enabled"])
-        self.assertFalse(conf()["wechat_group_emotion_enabled"])
-        self.assertEqual(1, conf()["wechat_group_emotion_decay_minutes"])
-        self.assertEqual(-1.0, conf()["wechat_group_emotion_default_valence"])
-        self.assertEqual(1.0, conf()["wechat_group_emotion_default_energy"])
-        self.assertEqual(0.0, conf()["wechat_group_emotion_default_sociability"])
-        self.assertTrue(conf()["wechat_group_free_reply_time_rules_enabled"])
-        self.assertEqual([{"start": "09:00", "end": "18:00", "days": ["mon", "fri"]}], conf()["wechat_group_free_reply_time_rules"])
-        self.assertFalse(conf()["wechat_group_free_reply_typing_delay_enabled"])
-        self.assertEqual(1, conf()["wechat_group_free_reply_typing_chars_per_second"])
         self.assertFalse(conf()["wechat_group_sticker_enabled"])
         self.assertFalse(conf()["wechat_group_sticker_auto_collect_enabled"])
         self.assertEqual(1, conf()["wechat_group_sticker_context_limit"])
@@ -2181,108 +2140,6 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual({"running": True}, extra["free_reply"]["worker"])
         self.assertEqual({"scored": 3}, extra["free_reply"]["scorer"])
 
-    def test_wechat_group_emotion_state_api_uses_service_and_running_status(self):
-        from channel.web.web_channel import WechatGroupEmotionHandler
-
-        class FakeEmotionService:
-            def get_state(self, room_id, now=None):
-                self.args = (room_id, now)
-                return {
-                    "room_id": room_id,
-                    "valence": 0.1,
-                    "energy": 0.6,
-                    "sociability": 0.55,
-                    "last_decay_at": 100,
-                    "last_reply_at": 90,
-                    "reply_count_1h": 2,
-                    "updated_at": 100,
-                }
-
-            def interpret_state(self, state):
-                self.interpreted = state
-                return "steady"
-
-        running = Mock(free_reply_status=Mock(return_value={
-            "last_decision": {"room_id": "room@@abc", "triggered": False},
-            "worker": {"running": True},
-        }))
-        handler = WechatGroupEmotionHandler()
-        fake = FakeEmotionService()
-        with patch("channel.web.web_channel._require_auth"), \
-                patch.object(WechatGroupEmotionHandler, "_get_emotion_service", return_value=fake), \
-                patch.object(WechatGroupEmotionHandler, "_get_running_channel", return_value=running), \
-                patch("channel.web.web_channel.web.input", return_value=types.SimpleNamespace(room_id="room@@abc", now="123")):
-            result = json.loads(handler.GET("state"))
-
-        self.assertEqual("success", result["status"])
-        self.assertEqual("room@@abc", result["state"]["room_id"])
-        self.assertEqual("steady", result["state"]["interpreted_state"])
-        self.assertEqual({"room_id": "room@@abc", "triggered": False}, result["last_decision"])
-        self.assertEqual(("room@@abc", 123), fake.args)
-
-    def test_wechat_group_emotion_reset_api_uses_service(self):
-        from channel.web.web_channel import WechatGroupEmotionHandler
-
-        class FakeEmotionService:
-            def reset_state(self, room_id, now=None):
-                self.args = (room_id, now)
-                return {
-                    "room_id": room_id,
-                    "valence": 0.0,
-                    "energy": 0.5,
-                    "sociability": 0.45,
-                }
-
-            def interpret_state(self, state):
-                return "steady"
-
-        body = {"room_id": "room@@abc", "now": 234}
-        handler = WechatGroupEmotionHandler()
-        fake = FakeEmotionService()
-        with patch("channel.web.web_channel._require_auth"), \
-                patch.object(WechatGroupEmotionHandler, "_get_emotion_service", return_value=fake), \
-                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")):
-            result = json.loads(handler.POST("reset"))
-
-        self.assertEqual("success", result["status"])
-        self.assertEqual("steady", result["state"]["interpreted_state"])
-        self.assertEqual(("room@@abc", 234), fake.args)
-
-    def test_wechat_group_emotion_config_api_updates_settings(self):
-        from channel.web.web_channel import WechatGroupEmotionHandler
-        from config import conf
-
-        handler = WechatGroupEmotionHandler()
-        body = {
-            "wechat_group_emotion_enabled": False,
-            "wechat_group_emotion_decay_minutes": "0",
-            "wechat_group_emotion_default_valence": "2",
-            "wechat_group_emotion_default_energy": "-1",
-            "wechat_group_emotion_default_sociability": "9",
-            "wechat_group_free_reply_time_rules_enabled": True,
-            "wechat_group_free_reply_time_rules": [
-                {"start": "22:00", "end": "23:30", "days": ["sat", "sun"]},
-            ],
-            "wechat_group_free_reply_typing_delay_enabled": False,
-            "wechat_group_free_reply_typing_chars_per_second": "0",
-        }
-        with tempfile.TemporaryDirectory() as tmpdir, \
-                patch("channel.web.web_channel._require_auth"), \
-                patch("channel.web.web_channel.web.data", return_value=json.dumps(body).encode("utf-8")), \
-                patch("channel.web.web_channel.get_data_root", return_value=tmpdir):
-            result = json.loads(handler.POST("config"))
-
-        self.assertEqual("success", result["status"])
-        self.assertFalse(conf()["wechat_group_emotion_enabled"])
-        self.assertEqual(1, conf()["wechat_group_emotion_decay_minutes"])
-        self.assertEqual(1.0, conf()["wechat_group_emotion_default_valence"])
-        self.assertEqual(0.0, conf()["wechat_group_emotion_default_energy"])
-        self.assertEqual(1.0, conf()["wechat_group_emotion_default_sociability"])
-        self.assertTrue(conf()["wechat_group_free_reply_time_rules_enabled"])
-        self.assertEqual([{"start": "22:00", "end": "23:30", "days": ["sat", "sun"]}], conf()["wechat_group_free_reply_time_rules"])
-        self.assertFalse(conf()["wechat_group_free_reply_typing_delay_enabled"])
-        self.assertEqual(1, conf()["wechat_group_free_reply_typing_chars_per_second"])
-
     def test_wechat_group_style_candidates_api_uses_service(self):
         from channel.web.web_channel import WechatGroupStylesHandler
 
@@ -2546,29 +2403,25 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertEqual("unknown action: preview", result["message"])
         self.assertFalse(fake.called)
 
-    def test_console_contains_wechat_group_emotion_panel(self):
+    def test_wechat_group_emotion_surface_is_removed(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
             console_js = f.read()
+        with open("channel/web/web_channel.py", "r", encoding="utf-8") as f:
+            web_channel = f.read()
 
-        self.assertIn("groups_nav_emotion", console_js)
-        self.assertIn("buildGroupsEmotionPanel", console_js)
-        self.assertIn("saveGroupsEmotionConfig", console_js)
-        self.assertIn("resetGroupsEmotionState", console_js)
-        self.assertIn("/api/wechat-group/emotion/state", console_js)
-        self.assertIn("/api/wechat-group/emotion/config", console_js)
-        self.assertIn("/api/wechat-group/emotion/reset", console_js)
-
-    def test_console_formats_wechat_group_emotion_state_for_display(self):
-        with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
-            console_js = f.read()
-
-        self.assertIn("formatGroupsEmotionMetricValue", console_js)
-        self.assertIn(".toFixed(2)", console_js)
-        self.assertIn("translateGroupsEmotionState", console_js)
-        self.assertIn("groups_emotion_state_withdrawn", console_js)
-        self.assertIn("groups_emotion_state_engaged", console_js)
-        self.assertIn("groups_emotion_state_guarded", console_js)
-        self.assertIn("groups_emotion_state_steady", console_js)
+        removed_markers = (
+            "groups_nav_emotion",
+            "buildGroupsEmotionPanel",
+            "saveGroupsEmotionConfig",
+            "/api/wechat-group/emotion/",
+            "WechatGroupEmotionHandler",
+            "wechat_group_emotion_enabled",
+            "wechat_group_free_reply_time_rules_enabled",
+            "wechat_group_free_reply_typing_delay_enabled",
+        )
+        for marker in removed_markers:
+            self.assertNotIn(marker, console_js)
+            self.assertNotIn(marker, web_channel)
 
     def test_console_contains_wechat_group_style_panel(self):
         with open("channel/web/static/js/console.js", "r", encoding="utf-8") as f:
@@ -2688,7 +2541,6 @@ class WechatGroupWebTest(unittest.TestCase):
             "buildGroupsSectionButton('free_reply'",
             "buildGroupsSectionButton('focus'",
             "buildGroupsSectionButton('style'",
-            "buildGroupsSectionButton('emotion'",
             "buildGroupsSectionButton('sticker'",
             "buildGroupsSectionButton('image'",
             "buildGroupsSectionButton('persona'",

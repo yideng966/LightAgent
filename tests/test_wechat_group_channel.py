@@ -156,9 +156,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             "wechat_group_focus_stale_rounds": conf().get("wechat_group_focus_stale_rounds"),
             "wechat_group_focus_min_keywords": conf().get("wechat_group_focus_min_keywords"),
             "wechat_group_style_enabled": conf().get("wechat_group_style_enabled"),
-            "wechat_group_emotion_enabled": conf().get("wechat_group_emotion_enabled"),
-            "wechat_group_free_reply_typing_delay_enabled": conf().get("wechat_group_free_reply_typing_delay_enabled"),
-            "wechat_group_free_reply_typing_chars_per_second": conf().get("wechat_group_free_reply_typing_chars_per_second"),
             "wechat_group_response_cleanup_max_chars": conf().get("wechat_group_response_cleanup_max_chars"),
             "wechat_group_image_understanding_enabled": conf().get("wechat_group_image_understanding_enabled"),
             "wechat_group_image_understanding_comment_enabled": conf().get("wechat_group_image_understanding_comment_enabled"),
@@ -186,7 +183,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             "tools": conf().get("tools"),
         }
         conf()["wechat_group_rolling_summary_enabled"] = False
-        conf()["wechat_group_free_reply_typing_delay_enabled"] = False
 
     def tearDown(self):
         for key, value in self._original_config.items():
@@ -1602,7 +1598,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             "（无需回复）",
         ):
             with self.subTest(text=text):
-                conf()["wechat_group_free_reply_typing_delay_enabled"] = False
                 client = FakeClient()
                 channel = WechatGroupChannel(client=client)
                 context = {
@@ -1616,7 +1611,6 @@ class WechatGroupChannelTest(unittest.TestCase):
                 self.assertEqual([], client.commands)
 
     def test_send_internal_non_reply_reason_is_not_sent_to_group(self):
-        conf()["wechat_group_free_reply_typing_delay_enabled"] = False
         client = FakeClient()
         channel = WechatGroupChannel(client=client)
         context = {
@@ -1633,7 +1627,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertEqual([], client.commands)
 
     def test_send_long_text_containing_silent_phrase_is_not_suppressed(self):
-        conf()["wechat_group_free_reply_typing_delay_enabled"] = False
         client = FakeClient()
         channel = WechatGroupChannel(client=client)
         context = {
@@ -1650,7 +1643,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         )
 
     def test_send_unwrapped_silent_phrase_is_not_treated_as_internal_control(self):
-        conf()["wechat_group_free_reply_typing_delay_enabled"] = False
         client = FakeClient()
         channel = WechatGroupChannel(client=client)
         context = {
@@ -1813,34 +1805,8 @@ class WechatGroupChannelTest(unittest.TestCase):
             client.commands,
         )
 
-    def test_send_text_reply_can_simulate_typing_delay(self):
-        conf()["wechat_group_free_reply_typing_delay_enabled"] = True
-        conf()["wechat_group_free_reply_typing_chars_per_second"] = 7
-        client = FakeClient()
-        channel = WechatGroupChannel(client=client)
-        context = {
-            "type": ContextType.TEXT,
-            "receiver": "room@@abc",
-            "msg": Mock(
-                is_group=True,
-                actual_user_id="wxid_alice",
-                actual_user_nickname="Alice",
-            ),
-        }
-
-        with patch("channel.wechat_group.wechat_group_channel.time.sleep") as sleep:
-            channel.send(Reply(ReplyType.TEXT, "1234567"), context)
-
-        self.assertIn(call(1.0), sleep.call_args_list)
-        self.assertEqual(
-            [("send_text", "room@@abc", "1234567", ["wxid_alice"])],
-            client.commands,
-        )
-
-    def test_send_cleans_text_before_typing_and_archive(self):
+    def test_send_cleans_text_before_delivery_and_archive(self):
         conf()["wechat_group_response_cleanup_max_chars"] = 200
-        conf()["wechat_group_free_reply_typing_delay_enabled"] = True
-        conf()["wechat_group_free_reply_typing_chars_per_second"] = 7
         client = FakeClient()
         archive = Mock()
         channel = WechatGroupChannel(client=client, archive=archive)
@@ -1856,14 +1822,12 @@ class WechatGroupChannelTest(unittest.TestCase):
         }
         content = "<wechat-group-reply-policy>\ninternal\n</wechat-group-reply-policy>\nI can help with that: ship Friday"
 
-        with patch("channel.wechat_group.wechat_group_channel.time.sleep") as sleep:
-            channel.send(Reply(ReplyType.TEXT, content), context)
+        channel.send(Reply(ReplyType.TEXT, content), context)
 
         self.assertEqual(
             [("send_text", "room@@abc", "ship Friday", ["wxid_alice"])],
             client.commands,
         )
-        self.assertIn(call(len("ship Friday") / 7.0), sleep.call_args_list)
         archive.record_assistant_reply.assert_called_once()
         self.assertEqual("ship Friday", archive.record_assistant_reply.call_args.kwargs["content"])
 
@@ -2183,7 +2147,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         channel._build_focus_context_block = Mock(return_value="")
         channel._build_memory_context_block = Mock(return_value="")
         channel._build_style_context_block = Mock(return_value="")
-        channel._build_emotion_context_block = Mock(return_value="")
         channel._build_multimodal_context = Mock(return_value={"block": "", "diagnostics": {}, "matched_images": []})
         channel._record_inbound_message = Mock()
         msg = Mock(
@@ -2516,7 +2479,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_activity_level"] = "normal"
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient())
         channel.produce = Mock()
         channel.free_reply_worker = Mock()
@@ -2541,7 +2503,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_scorer_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         archive = Mock(spec=WechatGroupArchive)
         archive.get_recent_messages.return_value = [{
             "message_id": "previous",
@@ -2595,7 +2556,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_activity_level"] = "normal"
-        conf()["wechat_group_emotion_enabled"] = False
         archive = Mock(get_recent_messages=Mock(return_value=[]))
         channel = WechatGroupChannel(client=FakeClient(), archive=archive)
         channel.produce = Mock()
@@ -2650,7 +2610,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["wgr_room"]
         conf()["wechat_group_free_reply_activity_level"] = "normal"
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient(), archive=Mock(get_recent_messages=Mock(return_value=[])))
         channel.free_reply_state.mark_triggered("wgr_room", now=1000)
         msg = Mock(
@@ -2691,7 +2650,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_stable_room_ids"] = ["wgr_room"]
         conf()["wechat_group_blocked_stable_member_ids"] = ["wgm_alice"]
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient(), archive=Mock(get_recent_messages=Mock(return_value=[])))
         msg = Mock(
             ctype=ContextType.TEXT,
@@ -2730,7 +2688,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_scorer_enabled"] = True
         conf()["wechat_group_free_reply_scorer_context_limit"] = 12
-        conf()["wechat_group_emotion_enabled"] = False
         recent = [{
             "message_id": "m0",
             "sender_id": "wxid_alice",
@@ -2799,7 +2756,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_scorer_enabled"] = True
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(
             client=FakeClient(),
             archive=Mock(get_recent_messages=Mock(return_value=[])),
@@ -2837,7 +2793,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_scorer_enabled"] = True
-        conf()["wechat_group_emotion_enabled"] = False
         for text in ("人呢", "嗯？", "？"):
             with self.subTest(text=text):
                 archive = Mock(spec=WechatGroupArchive)
@@ -2891,7 +2846,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_scorer_enabled"] = True
-        conf()["wechat_group_emotion_enabled"] = False
         archive = Mock(spec=WechatGroupArchive)
         archive.get_recent_messages.return_value = []
         archive.get_recent_conversation_messages.return_value = [
@@ -2948,7 +2902,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_scorer_enabled"] = True
-        conf()["wechat_group_emotion_enabled"] = False
         archive = Mock(spec=WechatGroupArchive)
         archive.get_recent_messages.return_value = []
         archive.get_recent_conversation_messages.return_value = [{
@@ -2994,7 +2947,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             "stable_member_id": "wgm_alice",
             "identity_status": "confirmed",
         }]
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient(), archive=Mock(get_recent_messages=Mock(return_value=[])))
         channel.produce = Mock()
         msg = Mock(
@@ -3037,7 +2989,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             "stable_member_id": "wgm_alice",
             "identity_status": "confirmed",
         }]
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient(), archive=Mock(get_recent_messages=Mock(return_value=[])))
         msg = Mock(
             ctype=ContextType.TEXT,
@@ -3076,7 +3027,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_stable_room_ids"] = ["wgr_room"]
         conf()["wechat_group_blocked_sender_ids"] = ["wxid_alice_old"]
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient(), archive=Mock(get_recent_messages=Mock(return_value=[])))
         msg = Mock(
             ctype=ContextType.TEXT,
@@ -3121,7 +3071,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
         conf()["wechat_group_style_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         archive = Mock()
         archive.get_recent_messages.return_value = [
             {"message_type": "image", "media_path": "D:/tmp/cat.jpg", "sender_id": "wxid_alice"},
@@ -3168,43 +3117,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertIn("force_keyword_match", decision["reasons"])
         self.assertIn("image_context_unavailable", decision["suppressions"])
 
-    def test_free_reply_is_suppressed_when_emotion_service_blocks(self):
-        class FakeEmotionService:
-            def observe_message(self, room_id, text, is_at=False, now=None):
-                return {"room_id": room_id}
-
-            def adjust_free_reply_decision(self, decision, room_id, now=None):
-                adjusted = dict(decision)
-                adjusted["triggered"] = False
-                adjusted["suppressions"] = list(adjusted.get("suppressions") or []) + ["emotion_low_sociability"]
-                adjusted["emotion"] = {"interpreted_state": "withdrawn"}
-                return adjusted
-
-        conf()["wechat_group_room_ids"] = ["room@@abc"]
-        conf()["wechat_group_free_reply_enabled"] = True
-        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
-        conf()["wechat_group_emotion_enabled"] = True
-        channel = WechatGroupChannel(client=FakeClient(), emotion_service=FakeEmotionService())
-        channel.produce = Mock()
-        channel.free_reply_worker = Mock()
-        msg = Mock(
-            ctype=ContextType.TEXT,
-            content="谁能帮我总结一下刚才群里讨论的方案？",
-            text="谁能帮我总结一下刚才群里讨论的方案？",
-            message_type="text",
-            other_user_id="room@@abc",
-            other_user_nickname="测试群",
-            actual_user_id="wxid_alice",
-            actual_user_nickname="Alice",
-            is_at=False,
-            create_time=100000,
-        )
-
-        channel.handle_text(msg)
-
-        channel.free_reply_worker.submit.assert_not_called()
-        channel.produce.assert_not_called()
-
     def test_at_message_does_not_enter_free_reply_worker(self):
         channel = WechatGroupChannel(client=FakeClient())
         channel.free_reply_worker = Mock()
@@ -3224,7 +3136,6 @@ class WechatGroupChannelTest(unittest.TestCase):
     def test_exact_at_mute_command_silently_mutes_current_stable_room(self):
         conf()["wechat_group_free_reply_mute_minutes"] = 15
         conf()["wechat_group_free_reply_mute_mentions_enabled"] = True
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient())
         channel.produce = Mock()
         channel.free_reply_worker = Mock()
@@ -3277,7 +3188,6 @@ class WechatGroupChannelTest(unittest.TestCase):
 
     def test_mute_mentions_switch_suppresses_at_in_current_room(self):
         conf()["wechat_group_free_reply_mute_mentions_enabled"] = True
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient())
         channel._compose_context = Mock()
         channel.produce = Mock()
@@ -3311,7 +3221,6 @@ class WechatGroupChannelTest(unittest.TestCase):
 
     def test_mute_mentions_switch_off_keeps_at_reply_behavior(self):
         conf()["wechat_group_free_reply_mute_mentions_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(client=FakeClient())
         channel._compose_context = Mock(return_value={"receiver": "room@@runtime", "msg": Mock()})
         channel.produce = Mock()
@@ -3467,7 +3376,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
         conf()["wechat_group_style_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         channel = WechatGroupChannel(
             client=FakeClient(),
             memory_service=Mock(preview_prompt_memories_sync=Mock(return_value={})),
@@ -3598,7 +3506,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_activity_level"] = "normal"
-        conf()["wechat_group_emotion_enabled"] = False
         conf()["wechat_group_image_understanding_enabled"] = True
         conf()["wechat_group_free_reply_image_understanding_enabled"] = True
         archive = Mock(get_recent_messages=Mock(return_value=[]))
@@ -3648,7 +3555,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_free_reply_enabled"] = True
         conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
         conf()["wechat_group_free_reply_activity_level"] = "normal"
-        conf()["wechat_group_emotion_enabled"] = False
         conf()["wechat_group_image_understanding_enabled"] = True
         conf()["wechat_group_free_reply_image_understanding_enabled"] = True
         archive = Mock(get_recent_messages=Mock(return_value=[]))
@@ -4112,7 +4018,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_voice_interaction_mode"] = "ignore"
         channel = WechatGroupChannel(client=FakeClient())
         channel._log_inbound_message = Mock()
-        channel._observe_emotion = Mock()
         channel._compose_context = Mock()
         channel.produce = Mock()
 
@@ -4135,7 +4040,6 @@ class WechatGroupChannelTest(unittest.TestCase):
                 channel.handle_text(msg)
 
         self.assertEqual(3, channel._log_inbound_message.call_count)
-        channel._observe_emotion.assert_not_called()
         channel._compose_context.assert_not_called()
         channel.produce.assert_not_called()
 
@@ -4147,7 +4051,6 @@ class WechatGroupChannelTest(unittest.TestCase):
             channel = WechatGroupChannel(client=FakeClient(), archive=archive)
             channel._resolve_message_identity = Mock(return_value={})
             channel._is_selected_room = Mock(return_value=True)
-            channel._observe_emotion = Mock()
             channel._compose_context = Mock()
             channel.produce = Mock()
             event = parse_sidecar_event({
@@ -4175,7 +4078,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertIsNotNone(archived)
         self.assertEqual("audio", archived["message_type"])
         self.assertEqual("D:/tmp/voice.silk", archived["media_path"])
-        channel._observe_emotion.assert_not_called()
         channel._compose_context.assert_not_called()
         channel.produce.assert_not_called()
 
@@ -4336,7 +4238,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         channel._build_focus_context_block = Mock(return_value="")
         channel._build_memory_context_block = Mock(return_value="")
         channel._build_style_context_block = Mock(return_value="")
-        channel._build_emotion_context_block = Mock(return_value="")
         channel.archive.get_message_by_id = Mock(return_value={
             "message_id": "quoted-1",
             "message_type": "text",
@@ -4397,7 +4298,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         channel._build_focus_context_block = Mock(return_value="")
         channel._build_memory_context_block = Mock(return_value="")
         channel._build_style_context_block = Mock(return_value="")
-        channel._build_emotion_context_block = Mock(return_value="")
         msg = Mock(
             ctype=ContextType.FILE,
             content="D:/tmp/demo.mp4",
@@ -4533,7 +4433,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
         conf()["wechat_group_style_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         archive = Mock()
         archive.get_recent_messages.return_value = [
             {
@@ -4608,7 +4507,6 @@ class WechatGroupChannelTest(unittest.TestCase):
         conf()["wechat_group_profile_enabled"] = False
         conf()["wechat_group_focus_enabled"] = False
         conf()["wechat_group_style_enabled"] = False
-        conf()["wechat_group_emotion_enabled"] = False
         archive = Mock()
         archive.get_recent_messages.return_value = [
             {

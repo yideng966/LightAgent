@@ -2,6 +2,33 @@
 
 ## 2026-07-31
 
+### 删除微信群情绪与主动性功能（Issue #24）
+
+- 删除微信群情绪状态服务、SQLite 存储、消息观察、回复记录、自由回复情绪调节和 `<wechat-group-emotion>` 上下文注入；自由回复继续只由现有本地规则、Scorer、兼容 Judge 与 worker 决定。
+- 删除 Web 控制台“情绪与主动性”导航、状态面板、状态读取/重置/保存 API，以及对应中英文界面状态；群聊管理其余页面保持不变。
+- 删除 5 个 `wechat_group_emotion_*` 默认配置、自由回复时段规则配置和打字延迟配置；升级时不主动删除用户数据目录中的历史数据库文件，新版本不再读取或写入它。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_humanized_context.py`
+- `channel/wechat_group/wechat_group_emotion_service.py`（删除）
+- `channel/wechat_group/wechat_group_emotion_store.py`（删除）
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `config.py`
+- `config-template.json`
+- `tests/test_wechat_group_channel.py`
+- `tests/test_wechat_group_context.py`
+- `tests/test_wechat_group_web.py`
+- `plans/20260731_删除情绪与主动性.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 微信群上下文、拟人化与 V2 策略 47 项，主通道与确认发送 151 项，Web 配置与页面 116 项均通过。
+- Python 编译、JavaScript 语法、配置模板 JSON 解析和 `git diff --check` 通过。
+
 ### 放宽微信群观察式自由回复过期抑制
 
 - 新增 `wechat_group_free_reply_stale_message_tolerance` 配置，默认允许观察式自由回复生成期间同群新增 5 条入站消息，范围为 0–100；设为 0 时恢复有新消息即抑制的严格行为。

@@ -393,7 +393,7 @@ docker push yideng966/lightagent:latest
 2. `WechatGroupChannel._compose_context()` 先调用 `super()._compose_context()`，继续执行原 `ChatChannel` 群白名单、触发词、@ 去除、`session_id`、`receiver` 和插件事件逻辑。每个 `Context` 实例必须有独立 `kwargs`，不能复用可变默认字典，避免调度任务、自由回复等标记污染后续消息。
 3. 微信群通道随后写入服务端元数据，例如 runtime/stable account、room、member 身份，`wechat_group_user_content`、`wechat_group_trigger_source`、`wechat_group_owner_session_id`、`wechat_group_thread_id`、`wechat_group_session_action`、`wechat_group_agent_history_mode`、`request_id` 和 `intent_requires_scheduler`。其中 `wechat_group_user_content` 必须保存用户原文，用于后续原文持久化。
 4. `_record_inbound_message()` 先把本轮消息写入归档；随后 `WechatGroupHumanizedContextBuilder` 构造 prompt 时必须用 `exclude_message_id` 排除本轮消息，避免把用户刚问的问题当成证据。
-5. 微信群通道通过 `WechatGroupHumanizedContextBuilder` 在 `context.content` 前追加微信群专属上下文，包括 `<wechat-group-admin-policy>`、`<wechat-group-mention-verification>`、`<wechat-group-reply-policy>`、`<wechat-group-persona>`、`<wechat-group-rolling-summary>`、`<recent-wechat-group-transcript>`、按需的 `<wechat-group-archive-evidence>`、`<wechat-group-focus>`、`<wechat-group-memory>`、安全工具续接、`<wechat-group-style>`、`<wechat-group-emotion>`、`<wechat-group-reference-policy>` 与 `<wechat-group-multimodal>`。
+5. 微信群通道通过 `WechatGroupHumanizedContextBuilder` 在 `context.content` 前追加微信群专属上下文，包括 `<wechat-group-admin-policy>`、`<wechat-group-mention-verification>`、`<wechat-group-reply-policy>`、`<wechat-group-persona>`、`<wechat-group-rolling-summary>`、`<recent-wechat-group-transcript>`、按需的 `<wechat-group-archive-evidence>`、`<wechat-group-focus>`、`<wechat-group-memory>`、安全工具续接、`<wechat-group-style>`、`<wechat-group-reference-policy>` 与 `<wechat-group-multimodal>`。
 6. Builder 会把不可变 RequestSnapshot 和注入结果回填到 `context` 元数据，例如 `wechat_group_context_mode`、room revision、来源事件计数、rolling summary revision、`wechat_group_archive_evidence_injected`、`wechat_group_recent_context_injected`、`wechat_group_memory_injected`、`wechat_group_multimodal_diagnostics` 和 `wechat_group_multimodal_matched_images`，供发送复核、去重、诊断和测试使用。
 7. `ChatChannel._generate_reply()` 调用 `super().build_reply_content(context.content, context)`。
 8. 当 `agent` 配置为 `true` 时，`Channel.build_reply_content()` 进入 `Bridge.fetch_agent_reply()`，由 Agent 模式请求 LLM。
@@ -478,10 +478,6 @@ messages:
   当前群近期形成的表达风格和语气偏好。只影响回复风格，不替代事实、权限或记忆。
   </wechat-group-style>
 
-  <wechat-group-emotion>
-  当前群运行时情绪状态，例如 valence、energy、sociability 和最近回复节奏。只用于调节语气和接话倾向。
-  </wechat-group-emotion>
-
   <wechat-group-multimodal>
   当前图片、引用图片、视频、转发或链接等多模态上下文摘要。真实 media_path 只传给 Vision 或相关服务，不写入 prompt。
   </wechat-group-multimodal>
@@ -517,14 +513,11 @@ messages:
 - 技能、工具 schema、运行时信息和上下文压缩逻辑仍由 Agent 主链路处理。
 - 自主进化仍会记录微信群用户轮次并参与 idle evolution；群聊场景通常不设置主动推送 `receiver`，避免进化结果主动打扰群。
 
-### 个人微信群自由回复与情绪主动性链路
-
-微信群自由回复和“情绪与主动性”不是两套互相竞争的回复引擎，而是串联关系：
+### 个人微信群自由回复链路
 
 - 自由回复负责判断普通非 @ 群消息“要不要接话”。默认配置 `wechat_group_free_reply_enabled = false`，只有开启后且当前群命中 `wechat_group_free_reply_stable_room_ids`（或迁移期 legacy runtime 快照）时，普通非 @ 文本才会进入自由回复判定；`wechat_group_free_reply_names` 只用于发现待确认候选，不得直接放行自由回复。
 - 单群自由回复档位使用 `wechat_group_free_reply_stable_room_activity_levels` 按 `stable_room_id` 精确覆盖；未配置单群档位时回退全局 `wechat_group_free_reply_activity_level`，再回退 `normal`。runtime room ID 和群名不得作为新映射键；四套 `wechat_group_free_reply_profiles` 仍为全局共享参数，群只选择档位，不复制或覆盖 profile 数值。
 - 任意群成员真实 @ 机器人且去除机器人 @ 前缀后文本精确等于“闭嘴”时，通道必须静默消费命令，并按当前 stable room 暂停普通自由回复；稳定群不可用时才回退 runtime room。禁言时长读取 `wechat_group_free_reply_mute_minutes`（默认 10 分钟，范围 1–1440）；`wechat_group_free_reply_mute_mentions_enabled` 默认关闭，开启后禁言有效期内的新 @ 消息也必须静默忽略，但引用和拍一拍不受影响。命令识别必须先于 @ 禁言门禁，本地评分和 worker 最终放行处也必须检查禁言状态，确保重复命令可续期并避免已排队候选延迟发言。
-- 情绪与主动性负责维护当前群的运行时情绪状态，并影响自由回复概率、回复节奏和最终 LLM 上下文。默认配置 `wechat_group_emotion_enabled = true`；它本身不会独立发起群消息，也不绕过自由回复或 @ 必回链路。
 - 普通非 @ 文本先经过 `evaluate_wechat_group_free_reply()` 本地评分、群范围、冷却、小时上限、连续上限、低信息和风险抑制；本地通过后进入 `WechatGroupFreeReplyWorkerPool`，再由 `WechatGroupFreeReplyJudge` 做轻量 LLM JSON 二次判定。
 - 自由回复 LLM Scorer 必须复用共享 `TextModelRouter.complete()`，并通过 Web 控制台「模型管理 -> LLM Scorer」能力卡单独选择 Provider 和模型；微信群通道只负责提示词装配、严格 JSON 解析与失败回落，不得维护独立 API Base、API Key、超时、Temperature 或模型 HTTP 调用。
 - Scorer 显式选择的 `custom:<id>` 不存在或缺少 API Base 时必须失败闭合，不得隐式回退到主聊天 Provider；自定义 Provider 被 Scorer 使用时，Web 模型管理必须阻止删除并提示先切换 Scorer Provider。模型管理更新凭据并重置共享 Router 后，Scorer 下一次请求必须重新获取当前 Router，不得长期持有旧 Bot 或旧凭据。
@@ -536,11 +529,7 @@ messages:
 - 确定性 `ContextType.IMAGE_CREATE` 请求必须保留去前缀后的 `wechat_group_user_content` 原文并绕过文本型 V2 上下文增强；报告、权限和其他文本门禁只能扫描该原文，不能扫描包含 rolling summary、人设或近期群聊的增强 Prompt，避免生图被误判为群聊报告。
 - 自由回复发送时设置 `suppress_mention = true` 和 `no_need_at = true`，因此默认不真实 mention 原发送者；@ 机器人或引用机器人回复仍走直接回复链路，不进入自由回复 worker。
 - 模型判断当前消息并非在问机器人且无需接话时，相关内部判断只能表示静默，不能作为普通文本发到群里。发送层短文本兜底至少要覆盖“没/未 @ 我、不是在问我”与“不用/无需插嘴、接话、回复、回应”等组合，并保留正常长文本解释不会被误拦截的回归测试。
-- 情绪服务在消息进入主链路前调用 `observe_message()` 更新 `valence / energy / sociability`；在自由回复本地判定后调用 `adjust_free_reply_decision()` 叠加低社交、低能量、负面情绪加阈值和时段规则等修正。
-- 情绪状态会通过 `<wechat-group-emotion>` 块注入当前 user message，影响模型语气与接话状态感知；每次成功发送回复后调用 `mark_replied()` 记录回复次数并降低 energy，减少连续插话倾向。
-- `wechat_group_free_reply_time_rules_enabled` 与 `wechat_group_free_reply_time_rules` 只作为自由回复调度的时段门控；规则不命中时会给自由回复判定增加 `time_rule_blocked` 抑制，不影响 @ 必回。
-- `wechat_group_free_reply_typing_delay_enabled` 和 `wechat_group_free_reply_typing_chars_per_second` 当前在微信群文本发送路径统一生效，不只影响自由回复；如需限定为自由回复专属延迟，需要单独改造发送上下文判断。
-- 两者的设计边界是“自由回复决定是否接话，情绪主动性只调节接话门槛、时段和上下文”。后续不要新增第二套独立主动发言调度器；若要扩大主动发言能力，必须先更新本节规则和对应计划文档，并补充防刷屏、跨群隔离和 @ 必回不受影响的回归测试。
+- 微信群不再维护独立情绪状态、时段主动性规则或打字延迟，也不向当前消息注入情绪块；自由回复只能由现有本地规则、Scorer、兼容 Judge 和 worker 决定。后续若要扩大主动发言能力，必须先更新本节规则和对应计划文档，并补充防刷屏、跨群隔离和 @ 必回不受影响的回归测试。
 
 ### 个人微信群图片理解链路
 

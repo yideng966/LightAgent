@@ -484,7 +484,6 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
   <wechat-group-topic>...</wechat-group-topic>
   <wechat-group-style>...</wechat-group-style>
   <wechat-group-knowledge>...</wechat-group-knowledge>
-  <wechat-group-emotion>...</wechat-group-emotion>
   <wechat-group-multimodal>...</wechat-group-multimodal>
   <wechat-group-image>...</wechat-group-image>
   用户本次去掉开头 @ 后的真实问题
@@ -507,15 +506,14 @@ LightAgent 同时提供会话记忆、长期记忆和知识库能力。
 - 群友画像学习、常用词噪声过滤、按群展示画像出现范围。
 - 话题追踪：活动话题持久化、消息归属、摘要历史、上下文注入。
 - 风格卡片：候选学习、审核启用、上下文注入。
-- 情绪与主动性：群情绪状态、能量衰减、时段规则、typing delay、自由回复压制。
 - 表情包资产：自动收集、哈希去重、按群搜索、人工编辑描述、Vision 批量补全、线上候选补充、停用、每日发送限制、Agent scoped tools。
 - 图片理解：复用 `agent.tools.vision.vision.Vision`；视觉摘要在运行时强制保持客观且不拟写回复，携带图片上下文的群回复请求会关闭模型思考，已部署的旧默认提示词无需手动迁移。
 - 文本识图请求可按引用消息、引用发送者、最近图片三层优先级定位目标图片。
 - 多模态上下文：引用消息、合并转发预览、视频文本上下文。
-- 自由回复：非 @ 消息进入队列，按活跃档位、本地规则、LLM 判断、情绪和时间规则决定是否回复；自由回复群可按稳定群 ID 单独选择档位，未指定时继承全局档位，四套档位参数继续全局共享。观察式回复生成期间默认允许同群新增 5 条消息，超过后才按过期回复抑制，可在 Web 控制台调整为 0–100。
+- 自由回复：非 @ 消息进入队列，按活跃档位、本地规则和 LLM 判断决定是否回复；自由回复群可按稳定群 ID 单独选择档位，未指定时继承全局档位，四套档位参数继续全局共享。观察式回复生成期间默认允许同群新增 5 条消息，超过后才按过期回复抑制，可在 Web 控制台调整为 0–100。
 - 自由回复图片理解独立开关，默认关闭，避免自动增加视觉模型调用。
 - 入群欢迎与离群通知：监听 Wechaty `room-join` / `room-leave`，支持全局默认和按稳定群“跟随全局 / 自定义 / 关闭”，每类消息可选择文本或本地图片。
-- Web 群聊管理页：基础设置、群聊开关、进退群消息、人设、永久记忆、群友画像、话题、风格、情绪、表情包、图片与多模态配置。
+- Web 群聊管理页：基础设置、群聊开关、进退群消息、人设、永久记忆、群友画像、话题、风格、表情包、图片与多模态配置。
 
 ### 进退群消息
 
@@ -634,7 +632,7 @@ python -m unittest tests.test_wechat_group_message tests.test_wechat_group_chann
 微信群拟人化、记忆、画像和多模态相关扩展回归：
 
 ```powershell
-python -m unittest tests.test_wechat_group_context tests.test_wechat_group_topic_service tests.test_wechat_group_style_service tests.test_wechat_group_emotion_service tests.test_wechat_group_sticker_service tests.test_wechat_group_memory_ui
+python -m unittest tests.test_wechat_group_context tests.test_wechat_group_topic_service tests.test_wechat_group_style_service tests.test_wechat_group_sticker_service tests.test_wechat_group_memory_ui
 ```
 
 前端脚本静态检查：

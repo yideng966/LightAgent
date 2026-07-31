@@ -213,7 +213,6 @@ class WechatGroupContextV2Test(unittest.TestCase):
             archive=self.archive,
             _build_memory_context_block=Mock(return_value=""),
             _build_style_context_block=Mock(return_value=""),
-            _build_emotion_context_block=Mock(return_value=""),
             _build_multimodal_context=Mock(return_value={"block": "", "diagnostics": {}}),
             _resolve_focus_context=Mock(return_value={}),
             _build_focus_context_block=Mock(return_value=""),

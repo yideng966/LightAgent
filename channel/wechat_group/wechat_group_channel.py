@@ -17,7 +17,6 @@ from channel.wechat_group.wechat_group_client import (
     get_wechat_group_sidecar_memory_path,
 )
 from channel.wechat_group.wechat_group_context_service import WechatGroupContextService
-from channel.wechat_group.wechat_group_emotion_service import WechatGroupEmotionService
 from channel.wechat_group.wechat_group_identity_service import WechatGroupIdentityService
 from channel.wechat_group.wechat_group_message import WechatGroupMessage
 from channel.wechat_group.wechat_group_membership_notice import (
@@ -249,7 +248,6 @@ class WechatGroupChannel(ChatChannel):
         archive=None,
         memory_service=None,
         focus_service=None,
-        emotion_service=None,
         style_service=None,
         sticker_service=None,
         multimodal_context_service=None,
@@ -267,7 +265,6 @@ class WechatGroupChannel(ChatChannel):
         self.archive = archive or WechatGroupArchive()
         self.memory_service = memory_service
         self.focus_service = focus_service
-        self.emotion_service = emotion_service
         self.style_service = style_service
         self.sticker_service = sticker_service
         self.multimodal_context_service = multimodal_context_service
@@ -1181,7 +1178,6 @@ class WechatGroupChannel(ChatChannel):
                 )
             )
             return
-        self._observe_emotion(msg)
         is_pat_self = getattr(msg, "is_pat_self", False) is True
         direct_reply = (
             getattr(msg, "is_at", False) is True
@@ -1726,7 +1722,6 @@ class WechatGroupChannel(ChatChannel):
             if _is_wechat_group_silent_reply_text(reply.content):
                 logger.info("[wechat_group] silent reply notice suppressed")
                 return
-            self._simulate_typing_delay_if_needed(reply)
             mention_ids = self._build_reply_mentions(context)
             if not self._send_text_reply(receiver, reply.content, mention_ids):
                 return
@@ -1766,7 +1761,6 @@ class WechatGroupChannel(ChatChannel):
         else:
             logger.warning("[wechat_group] unsupported reply type: {}".format(reply.type))
             return
-        self._record_emotion_reply(context)
         self._record_sticker_reply(reply, context)
 
     def _send_text_reply(self, receiver: str, content: str, mention_ids) -> bool:
@@ -2256,15 +2250,6 @@ class WechatGroupChannel(ChatChannel):
             logger.warning("[wechat_group] failed to build memory context: {}".format(e))
             return ""
 
-    def _build_emotion_context_block(self, msg: WechatGroupMessage) -> str:
-        if not conf().get("wechat_group_emotion_enabled", True):
-            return ""
-        try:
-            return self._get_emotion_service().build_prompt_block(_wechat_group_stable_room_scope(msg), now=msg.create_time)
-        except Exception as e:
-            logger.warning("[wechat_group] failed to build emotion context: {}".format(e))
-            return ""
-
     def _build_style_context_block(self, msg: WechatGroupMessage) -> str:
         if not conf().get("wechat_group_style_enabled", True):
             return ""
@@ -2339,11 +2324,6 @@ class WechatGroupChannel(ChatChannel):
             self.focus_service = WechatGroupFocusService()
         return self.focus_service
 
-    def _get_emotion_service(self):
-        if self.emotion_service is None:
-            self.emotion_service = WechatGroupEmotionService()
-        return self.emotion_service
-
     def _get_style_service(self):
         if self.style_service is None:
             self.style_service = WechatGroupStyleService()
@@ -2358,37 +2338,6 @@ class WechatGroupChannel(ChatChannel):
         if self.multimodal_context_service is None:
             self.multimodal_context_service = WechatGroupMultimodalContextService(self.archive)
         return self.multimodal_context_service
-
-    def _observe_emotion(self, msg: WechatGroupMessage):
-        if not conf().get("wechat_group_emotion_enabled", True):
-            return
-        text = getattr(msg, "text", None) or getattr(msg, "content", "")
-        if not str(text or "").strip():
-            return
-        try:
-            self._get_emotion_service().observe_message(
-                room_id=_wechat_group_stable_room_scope(msg),
-                text=text,
-                is_at=bool(getattr(msg, "is_at", False)),
-                now=getattr(msg, "create_time", None),
-            )
-        except Exception as e:
-            logger.warning("[wechat_group] failed to observe emotion: {}".format(e))
-
-    def _record_emotion_reply(self, context):
-        if not conf().get("wechat_group_emotion_enabled", True):
-            return
-        room_id = context.get("wechat_group_stable_room_id") or context.get("wechat_group_stable_receiver") or context.get("receiver") or context.get("wechat_group_room_id") or ""
-        if not room_id:
-            return
-        msg = context.get("msg")
-        try:
-            self._get_emotion_service().mark_replied(
-                room_id=room_id,
-                now=getattr(msg, "create_time", None) if msg else None,
-            )
-        except Exception as e:
-            logger.warning("[wechat_group] failed to record emotion reply: {}".format(e))
 
     def _collect_sticker_from_message(self, msg: WechatGroupMessage):
         if not conf().get("wechat_group_sticker_enabled", True):
@@ -2595,21 +2544,6 @@ class WechatGroupChannel(ChatChannel):
         actual_user_id = getattr(msg, "actual_user_id", None)
         return [actual_user_id] if actual_user_id else []
 
-    @staticmethod
-    def _simulate_typing_delay_if_needed(reply):
-        if not conf().get("wechat_group_free_reply_typing_delay_enabled", True):
-            return
-        content = str(getattr(reply, "content", "") or "")
-        if not content:
-            return
-        try:
-            chars_per_second = max(int(conf().get("wechat_group_free_reply_typing_chars_per_second", 7) or 7), 1)
-        except Exception:
-            chars_per_second = 7
-        delay_seconds = min(len(content) / float(chars_per_second), 8.0)
-        if delay_seconds > 0:
-            time.sleep(delay_seconds)
-
     def _create_free_reply_worker(self):
         cfg = get_wechat_group_free_reply_config()
         return WechatGroupFreeReplyWorkerPool(
@@ -2736,15 +2670,6 @@ class WechatGroupChannel(ChatChannel):
                 if "image_context_unavailable" not in suppressions:
                     suppressions.append("image_context_unavailable")
                 decision["suppressions"] = suppressions
-            if conf().get("wechat_group_emotion_enabled", True):
-                try:
-                    decision = self._get_emotion_service().adjust_free_reply_decision(
-                        decision,
-                        room_id=room_scope or msg.other_user_id,
-                        now=getattr(msg, "create_time", None) or time.time(),
-                    )
-                except Exception as e:
-                    logger.warning("[wechat_group] failed to adjust free reply by emotion: {}".format(e))
         suppressions = list(decision.get("suppressions") or [])
         if (
             cfg.get("scorer_enabled")

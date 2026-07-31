@@ -48,9 +48,7 @@ class WechatGroupConfirmedSendTest(unittest.TestCase):
         channel.client = FakeClient(status)
         channel.archive = Mock()
         channel.archive.record_assistant_reply.return_value = 1
-        channel._simulate_typing_delay_if_needed = lambda _reply: None
         channel._build_reply_mentions = lambda _context: ["runtime-member"]
-        channel._record_emotion_reply = lambda _context: None
         channel._record_sticker_reply = lambda _reply, _context: None
         channel._wechat_group_rolling_summary_service = None
         channel._schedule_rolling_summary = lambda _stable_room_id: None

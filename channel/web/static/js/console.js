@@ -337,8 +337,6 @@ const I18N = {
         groups_nav_focus_hint: '活动焦点与归档',
         groups_nav_style: '风格卡片',
         groups_nav_style_hint: '候选、审核与启用',
-        groups_nav_emotion: '情绪与主动性',
-        groups_nav_emotion_hint: '情绪状态与节奏',
         groups_nav_sticker: '表情包',
         groups_nav_sticker_hint: '资产与停用管理',
         groups_nav_persona: '人设设定',
@@ -635,46 +633,6 @@ const I18N = {
         groups_style_reject: '拒绝',
         groups_style_disable: '停用',
         groups_style_review_saved: '风格卡片已更新',
-        groups_emotion_title: '情绪与主动性',
-        groups_emotion_desc: '查看当前群情绪状态，调整时段规则与打字节奏。',
-        groups_emotion_room: '目标群',
-        groups_emotion_room_hint: '情绪状态按群 ID 隔离，切换群可查看实时状态。',
-        groups_emotion_empty: '请先在“群聊开关”里选择至少一个目标群。',
-        groups_emotion_loading: '正在读取当前群情绪状态...',
-        groups_emotion_state: '当前情绪',
-        groups_emotion_interpreted_state: '解释状态',
-        groups_emotion_reply_count: '近 1 小时回复数',
-        groups_emotion_last_reply: '最近回复时间',
-        groups_emotion_last_decision: '最近自由回复决策',
-        groups_emotion_enabled: '启用情绪模型',
-        groups_emotion_enabled_hint: '关闭后不再根据群状态调节主动性。',
-        groups_emotion_decay_minutes: '衰减周期（分钟）',
-        groups_emotion_decay_minutes_hint: '多久向默认情绪回归一次。',
-        groups_emotion_default_valence: '默认情绪正负值',
-        groups_emotion_default_energy: '默认活跃度',
-        groups_emotion_default_sociability: '默认社交倾向',
-        groups_emotion_time_rules_enabled: '启用时段规则',
-        groups_emotion_time_rules_enabled_hint: '未命中的时间段会抑制自由回复。',
-        groups_emotion_time_rules: '时段规则 JSON',
-        groups_emotion_time_rules_hint: '示例：[{"days":["mon","tue"],"start":"09:00","end":"18:00"}]',
-        groups_emotion_typing_delay_enabled: '启用打字延迟',
-        groups_emotion_typing_delay_enabled_hint: '文本回复前按字符数模拟自然等待。',
-        groups_emotion_typing_chars_per_second: '打字速度（字/秒）',
-        groups_emotion_typing_chars_per_second_hint: '值越小，发送前等待越久。',
-        groups_emotion_refresh: '刷新状态',
-        groups_emotion_reset: '重置当前群状态',
-        groups_emotion_reset_confirm: '确定将当前群情绪状态恢复到默认值吗？',
-        groups_emotion_reset_done: '当前群情绪状态已重置',
-        groups_emotion_save: '保存情绪配置',
-        groups_emotion_saved: '情绪配置已保存',
-        groups_emotion_metric_valence: '情绪正负值',
-        groups_emotion_metric_energy: '活跃度',
-        groups_emotion_metric_sociability: '社交倾向',
-        groups_emotion_state_withdrawn: '收敛',
-        groups_emotion_state_engaged: '积极',
-        groups_emotion_state_guarded: '谨慎',
-        groups_emotion_state_steady: '平稳',
-        groups_emotion_time_rules_invalid: '时段规则 JSON 格式不正确',
         groups_sticker_title: '表情包',
         groups_sticker_desc: '管理当前群沉淀的表情包资产，支持编辑描述并用图片理解补全待处理项。',
         groups_sticker_room: '目标群',
@@ -1365,8 +1323,6 @@ const I18N = {
         groups_nav_focus_hint: 'Active focus and archive',
         groups_nav_style: 'Style cards',
         groups_nav_style_hint: 'Review and activate',
-        groups_nav_emotion: 'Emotion',
-        groups_nav_emotion_hint: 'State and pacing',
         groups_nav_sticker: 'Stickers',
         groups_nav_sticker_hint: 'Assets and disable',
         groups_nav_persona: 'Persona',
@@ -1663,46 +1619,6 @@ const I18N = {
         groups_style_reject: 'Reject',
         groups_style_disable: 'Disable',
         groups_style_review_saved: 'Style card updated',
-        groups_emotion_title: 'Emotion and pacing',
-        groups_emotion_desc: 'Inspect the current room emotion state and tune time rules plus typing delay.',
-        groups_emotion_room: 'Target room',
-        groups_emotion_room_hint: 'Emotion state is isolated by room_id; switch rooms to inspect runtime state.',
-        groups_emotion_empty: 'Select at least one target room in "Group switches" first.',
-        groups_emotion_loading: 'Loading current room emotion state...',
-        groups_emotion_state: 'Current emotion',
-        groups_emotion_interpreted_state: 'Interpreted state',
-        groups_emotion_reply_count: 'Replies in last hour',
-        groups_emotion_last_reply: 'Last reply at',
-        groups_emotion_last_decision: 'Latest free-reply decision',
-        groups_emotion_enabled: 'Enable emotion model',
-        groups_emotion_enabled_hint: 'Disable runtime emotion-based proactivity tuning.',
-        groups_emotion_decay_minutes: 'Decay window (minutes)',
-        groups_emotion_decay_minutes_hint: 'How often the room state drifts back to defaults.',
-        groups_emotion_default_valence: 'Default valence',
-        groups_emotion_default_energy: 'Default energy',
-        groups_emotion_default_sociability: 'Default sociability',
-        groups_emotion_time_rules_enabled: 'Enable time rules',
-        groups_emotion_time_rules_enabled_hint: 'Free replies are suppressed outside matched windows.',
-        groups_emotion_time_rules: 'Time-rule JSON',
-        groups_emotion_time_rules_hint: 'Example: [{"days":["mon","tue"],"start":"09:00","end":"18:00"}]',
-        groups_emotion_typing_delay_enabled: 'Enable typing delay',
-        groups_emotion_typing_delay_enabled_hint: 'Wait before text replies based on message length.',
-        groups_emotion_typing_chars_per_second: 'Typing speed (chars/s)',
-        groups_emotion_typing_chars_per_second_hint: 'Lower values create longer delays.',
-        groups_emotion_refresh: 'Refresh state',
-        groups_emotion_reset: 'Reset current room state',
-        groups_emotion_reset_confirm: 'Reset the current room emotion state back to defaults?',
-        groups_emotion_reset_done: 'Current room emotion state reset',
-        groups_emotion_save: 'Save emotion settings',
-        groups_emotion_saved: 'Emotion settings saved',
-        groups_emotion_metric_valence: 'Valence',
-        groups_emotion_metric_energy: 'Energy',
-        groups_emotion_metric_sociability: 'Sociability',
-        groups_emotion_state_withdrawn: 'Withdrawn',
-        groups_emotion_state_engaged: 'Engaged',
-        groups_emotion_state_guarded: 'Guarded',
-        groups_emotion_state_steady: 'Steady',
-        groups_emotion_time_rules_invalid: 'Time-rule JSON is invalid',
         groups_sticker_title: 'Stickers',
         groups_sticker_desc: 'Manage collected room stickers, edit descriptions, and fill pending descriptions with vision.',
         groups_sticker_room: 'Target room',
@@ -10460,14 +10376,6 @@ let groupsProfilesState = {
     evolutionDirty: false,
     evolutionAction: '',
 };
-let groupsEmotionState = {
-    selectedRoomId: '',
-    loadedRoomId: '',
-    loading: false,
-    state: null,
-    lastDecision: {},
-    worker: {},
-};
 let groupsFocusState = {
     selectedRoomId: '',
     loadedKey: '',
@@ -10692,7 +10600,6 @@ function buildGroupsMobileSectionSelect() {
         ['voice_interaction', 'groups_nav_voice_interaction'],
         ['focus', 'groups_nav_focus'],
         ['style', 'groups_nav_style'],
-        ['emotion', 'groups_nav_emotion'],
         ['sticker', 'groups_nav_sticker'],
         ['image', 'groups_nav_image'],
         ['persona', 'groups_nav_persona'],
@@ -10729,7 +10636,6 @@ function renderGroupsView(options = {}) {
             ${buildGroupsSectionButton('voice_interaction', 'fa-microphone-lines', 'groups_nav_voice_interaction', 'groups_nav_voice_interaction_hint')}
             ${buildGroupsSectionButton('focus', 'fa-list-check', 'groups_nav_focus', 'groups_nav_focus_hint')}
             ${buildGroupsSectionButton('style', 'fa-masks-theater', 'groups_nav_style', 'groups_nav_style_hint')}
-            ${buildGroupsSectionButton('emotion', 'fa-heart-pulse', 'groups_nav_emotion', 'groups_nav_emotion_hint')}
             ${buildGroupsSectionButton('sticker', 'fa-face-laugh-squint', 'groups_nav_sticker', 'groups_nav_sticker_hint')}
             ${buildGroupsSectionButton('image', 'fa-image', 'groups_nav_image', 'groups_nav_image_hint')}
             ${buildGroupsSectionButton('persona', 'fa-user-pen', 'groups_nav_persona', 'groups_nav_persona_hint')}
@@ -10754,7 +10660,6 @@ function renderGroupsView(options = {}) {
             ${groupsActiveSection === 'voice_interaction' ? buildGroupsVoiceInteractionPanel(extra) : ''}
             ${groupsActiveSection === 'focus' ? buildGroupsFocusPanel(extra) : ''}
             ${groupsActiveSection === 'style' ? buildGroupsStylePanel(extra) : ''}
-            ${groupsActiveSection === 'emotion' ? buildGroupsEmotionPanel(extra) : ''}
             ${groupsActiveSection === 'sticker' ? buildGroupsStickerPanel(extra) : ''}
             ${groupsActiveSection === 'image' ? buildGroupsImagePanel(extra) : ''}
             ${groupsActiveSection === 'persona' ? buildGroupsPersonaPanel(extra) : ''}
@@ -10772,9 +10677,6 @@ function renderGroupsView(options = {}) {
     }
     if (groupsActiveSection === 'style') {
         ensureGroupsStyleLoaded(extra);
-    }
-    if (groupsActiveSection === 'emotion') {
-        ensureGroupsEmotionLoaded(extra);
     }
     if (groupsActiveSection === 'sticker') {
         ensureGroupsStickerLoaded(extra);
@@ -12612,7 +12514,7 @@ function buildGroupsReportPanel(extra = {}) {
             </div><p class="text-xs text-slate-500 dark:text-slate-400 mt-3">${t('groups_report_enabled_hint')}</p>
         </section>
         <section class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" aria-live="polite">
-            ${buildGroupsReportMetric(t('groups_report_archive'), `${Number(archive.message_count || 0)} 条`, archive.first_created_at ? `${formatGroupsEmotionTimestamp(Number(archive.first_created_at || 0))}` : '-')}
+            ${buildGroupsReportMetric(t('groups_report_archive'), `${Number(archive.message_count || 0)} 条`, archive.first_created_at ? `${formatGroupsTimestamp(Number(archive.first_created_at || 0))}` : '-')}
             ${buildGroupsReportMetric(t('groups_report_latest'), overview.latest_report?.report_type || '-', overview.latest_report?.generated_at || '-')}
             ${buildGroupsReportMetric(t('groups_report_delivery'), overview.latest_delivery?.state || '-', overview.latest_delivery?.sent_at || '-')}
             ${buildGroupsReportMetric(t('groups_report_scheduler'), syncStatus, settings.schedule_sync_error || '-')}
@@ -12879,7 +12781,7 @@ function renderGroupsFocusCard(focus) {
             <div><span class="text-slate-500 dark:text-slate-400">${t('groups_focus_frame_keywords')}:</span> ${renderGroupsFocusInlineList(keywords)}</div>
             <div><span class="text-slate-500 dark:text-slate-400">${t('groups_focus_frame_participants')}:</span> ${renderGroupsFocusInlineList(participants)}</div>
             <div><span class="text-slate-500 dark:text-slate-400">${t('groups_focus_frame_conclusions')}:</span> ${renderGroupsFocusInlineList(conclusions)}</div>
-            <div><span class="text-slate-500 dark:text-slate-400">${t('groups_focus_frame_updated_at')}:</span> ${escapeHtml(formatGroupsEmotionTimestamp(focus?.last_seen_at))}</div>
+            <div><span class="text-slate-500 dark:text-slate-400">${t('groups_focus_frame_updated_at')}:</span> ${escapeHtml(formatGroupsTimestamp(focus?.last_seen_at))}</div>
         </div>
     </div>`;
 }
@@ -13015,7 +12917,7 @@ function buildGroupsStylePanel(extra) {
                         class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/5 cursor-pointer transition-colors">${t('groups_style_refresh')}</button>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
-                    ${summaryItems.map(([label, value]) => buildGroupsEmotionMetric(label, value)).join('')}
+                    ${summaryItems.map(([label, value]) => buildGroupsMetric(label, value)).join('')}
                 </div>
             </div>
             ${contentHtml}
@@ -13061,58 +12963,7 @@ function renderGroupsStyleCard(card, mode) {
     </div>`;
 }
 
-function ensureGroupsEmotionLoaded(extra) {
-    const rooms = getGroupsManagedRooms(extra || {});
-    if (!rooms.length) return;
-    if (!groupsEmotionState.selectedRoomId || !rooms.some(item => item.id === groupsEmotionState.selectedRoomId)) {
-        groupsEmotionState.selectedRoomId = rooms[0].id;
-        groupsEmotionState.loadedRoomId = '';
-        groupsEmotionState.state = null;
-    }
-    if (groupsEmotionState.loading) return;
-    if (groupsEmotionState.loadedRoomId === groupsEmotionState.selectedRoomId && groupsEmotionState.state) return;
-    refreshGroupsEmotionState(groupsEmotionState.selectedRoomId);
-}
-
-function selectGroupsEmotionRoom(roomId) {
-    groupsEmotionState.selectedRoomId = String(roomId || '');
-    groupsEmotionState.loadedRoomId = '';
-    groupsEmotionState.state = null;
-    renderGroupsView();
-    if (groupsEmotionState.selectedRoomId) {
-        refreshGroupsEmotionState(groupsEmotionState.selectedRoomId);
-    }
-}
-
-function refreshGroupsEmotionState(roomId) {
-    const targetRoomId = String(roomId || groupsEmotionState.selectedRoomId || '').trim();
-    if (!targetRoomId) return;
-    groupsEmotionState.loading = true;
-    groupsEmotionState.selectedRoomId = targetRoomId;
-    renderGroupsView();
-    fetch(`/api/wechat-group/emotion/state?stable_room_id=${encodeURIComponent(targetRoomId)}&room_id=${encodeURIComponent(targetRoomId)}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.status !== 'success') throw new Error(data.message || 'emotion load failed');
-            groupsEmotionState.state = data.state || null;
-            groupsEmotionState.lastDecision = data.last_decision || {};
-            groupsEmotionState.worker = data.worker || {};
-            groupsEmotionState.loadedRoomId = targetRoomId;
-        })
-        .catch(err => {
-            showGroupsStatus(err.message || 'groups_load_failed', true);
-            groupsEmotionState.state = null;
-            groupsEmotionState.lastDecision = {};
-            groupsEmotionState.worker = {};
-            groupsEmotionState.loadedRoomId = targetRoomId;
-        })
-        .finally(() => {
-            groupsEmotionState.loading = false;
-            renderGroupsView();
-        });
-}
-
-function formatGroupsEmotionTimestamp(value) {
+function formatGroupsTimestamp(value) {
     const ts = Number(value || 0);
     if (!Number.isFinite(ts) || ts <= 0) return '-';
     try {
@@ -13122,196 +12973,12 @@ function formatGroupsEmotionTimestamp(value) {
     }
 }
 
-function renderGroupsEmotionDecision(decision = {}) {
-    if (!decision || !Object.keys(decision).length) {
-        return `<p class="text-xs text-slate-500 dark:text-slate-400">${t('wechat_group_free_reply_no_decision')}</p>`;
-    }
-    const reasons = Array.isArray(decision.reasons) ? decision.reasons : [];
-    const suppressions = Array.isArray(decision.suppressions) ? decision.suppressions : [];
-    return `<div class="space-y-2 text-xs text-slate-600 dark:text-slate-300">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-            <span>${t('wechat_group_free_reply_decision_score')}: ${escapeHtml(String(decision.score ?? 0))}</span>
-            <span>${t('wechat_group_free_reply_decision_threshold')}: ${escapeHtml(String(decision.threshold ?? 0))}</span>
-            <span>${t('wechat_group_free_reply_level')}: ${escapeHtml(translateWechatGroupActivityLevel(decision.activity_level || '-'))}</span>
-        </div>
-        <div><span class="text-slate-500 dark:text-slate-400">${t('wechat_group_free_reply_decision_reasons')}：</span>${reasons.length ? reasons.map(item => `<span class="inline-block rounded bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-300 px-1.5 py-0.5 mr-1 mb-1">${escapeHtml(String(item))}</span>`).join('') : '-'}</div>
-        <div><span class="text-slate-500 dark:text-slate-400">${t('wechat_group_free_reply_decision_suppressions')}：</span>${suppressions.length ? suppressions.map(item => `<span class="inline-block rounded bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-300 px-1.5 py-0.5 mr-1 mb-1">${escapeHtml(String(item))}</span>`).join('') : '-'}</div>
-        <div class="break-words"><span class="text-slate-500 dark:text-slate-400">${t('wechat_group_free_reply_decision_preview')}：</span>${escapeHtml(String(decision.text_preview || ''))}</div>
-    </div>`;
-}
-
-function buildGroupsEmotionPanel(extra) {
-    const emotion = extra.emotion || {};
-    const rooms = getGroupsManagedRooms(extra);
-    const selectedRoomId = groupsEmotionState.selectedRoomId || (rooms[0]?.id || '');
-    const state = groupsEmotionState.state || {};
-    const loading = groupsEmotionState.loading;
-    const rulesJson = JSON.stringify(Array.isArray(emotion.free_reply_time_rules) ? emotion.free_reply_time_rules : [], null, 2);
-    const roomOptions = rooms.length
-        ? rooms.map(room => `<option value="${escapeHtml(room.id)}" ${room.id === selectedRoomId ? 'selected' : ''}>${escapeHtml(room.name || room.id)}</option>`).join('')
-        : '';
-    const stateHtml = !rooms.length
-        ? `<p class="text-sm text-slate-500 dark:text-slate-400">${t('groups_emotion_empty')}</p>`
-        : loading
-            ? `<p class="text-sm text-slate-500 dark:text-slate-400"><i class="fas fa-spinner fa-spin mr-2"></i>${t('groups_emotion_loading')}</p>`
-            : `<div class="grid grid-cols-2 xl:grid-cols-5 gap-3">
-                ${buildGroupsEmotionMetric(t('groups_emotion_metric_valence'), state.valence, 'number')}
-                ${buildGroupsEmotionMetric(t('groups_emotion_metric_energy'), state.energy, 'number')}
-                ${buildGroupsEmotionMetric(t('groups_emotion_metric_sociability'), state.sociability, 'number')}
-                ${buildGroupsEmotionMetric(t('groups_emotion_reply_count'), state.reply_count_1h)}
-                ${buildGroupsEmotionMetric(t('groups_emotion_interpreted_state'), state.interpreted_state || '-', 'state')}
-            </div>
-            <div class="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                ${t('groups_emotion_last_reply')}：${escapeHtml(formatGroupsEmotionTimestamp(state.last_reply_at))}
-            </div>`;
-    return `<div class="h-full w-full space-y-4">
-        ${buildGroupsPanelTitle('fa-heart-pulse', 'groups_emotion_title', 'groups_emotion_desc')}
-        <div class="grid grid-cols-1 xl:grid-cols-[minmax(260px,0.8fr)_minmax(0,1.2fr)] gap-4">
-            <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 space-y-3">
-                <div>
-                    <label class="block text-sm font-medium text-slate-800 dark:text-slate-100 mb-1.5">${t('groups_emotion_room')}</label>
-                    <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">${t('groups_emotion_room_hint')}</p>
-                    <select id="groups-emotion-room" onchange="selectGroupsEmotionRoom(this.value)"
-                        class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500">
-                        ${roomOptions}
-                    </select>
-                </div>
-                <div class="flex flex-wrap gap-2">
-                    <button type="button" onclick="refreshGroupsEmotionState()"
-                        class="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/10 text-xs text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-white/5 cursor-pointer transition-colors">${t('groups_emotion_refresh')}</button>
-                    <button type="button" onclick="resetGroupsEmotionState()"
-                        class="px-3 py-1.5 rounded-lg border border-amber-200 dark:border-amber-900/30 text-xs text-amber-600 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/10 cursor-pointer transition-colors">${t('groups_emotion_reset')}</button>
-                </div>
-            </div>
-            <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
-                <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">${t('groups_emotion_state')}</h4>
-                ${stateHtml}
-            </div>
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            ${buildGroupsImageToggle('groups-emotion-enabled', 'groups_emotion_enabled', 'groups_emotion_enabled_hint', emotion.enabled !== false)}
-            ${buildGroupsImageToggle('groups-emotion-time-rules-enabled', 'groups_emotion_time_rules_enabled', 'groups_emotion_time_rules_enabled_hint', !!emotion.free_reply_time_rules_enabled)}
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-4 gap-4">
-            ${buildGroupsImageNumberField('groups-emotion-decay-minutes', 'groups_emotion_decay_minutes', 'groups_emotion_decay_minutes_hint', emotion.decay_minutes ?? 10, 1, 240)}
-            ${buildGroupsImageNumberField('groups-emotion-default-valence', 'groups_emotion_default_valence', 'groups_emotion_decay_minutes_hint', emotion.default_valence ?? 0, -1, 1)}
-            ${buildGroupsImageNumberField('groups-emotion-default-energy', 'groups_emotion_default_energy', 'groups_emotion_decay_minutes_hint', emotion.default_energy ?? 0.5, 0, 1)}
-            ${buildGroupsImageNumberField('groups-emotion-default-sociability', 'groups_emotion_default_sociability', 'groups_emotion_decay_minutes_hint', emotion.default_sociability ?? 0.45, 0, 1)}
-        </div>
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
-            ${buildGroupsImageToggle('groups-emotion-typing-delay-enabled', 'groups_emotion_typing_delay_enabled', 'groups_emotion_typing_delay_enabled_hint', emotion.free_reply_typing_delay_enabled !== false)}
-            ${buildGroupsImageNumberField('groups-emotion-typing-cps', 'groups_emotion_typing_chars_per_second', 'groups_emotion_typing_chars_per_second_hint', emotion.free_reply_typing_chars_per_second ?? 7, 1, 30)}
-        </div>
-        <label class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4 block">
-            <span class="text-sm font-medium text-slate-800 dark:text-slate-100">${t('groups_emotion_time_rules')}</span>
-            <span class="block text-xs text-slate-500 dark:text-slate-400 mt-1">${t('groups_emotion_time_rules_hint')}</span>
-            <textarea id="groups-emotion-time-rules" rows="6"
-                class="mt-3 w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 transition-colors font-mono resize-y">${escapeHtml(rulesJson)}</textarea>
-        </label>
-        <div class="rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 p-4">
-            <h4 class="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-2">${t('groups_emotion_last_decision')}</h4>
-            ${renderGroupsEmotionDecision(groupsEmotionState.lastDecision)}
-        </div>
-        <div class="flex items-center justify-end gap-3">
-            <button type="button" id="groups-emotion-save" onclick="saveGroupsEmotionConfig()"
-                class="px-4 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                ${t('groups_emotion_save')}
-            </button>
-        </div>
-    </div>`;
-}
-
-function translateGroupsEmotionState(value) {
-    const key = String(value || '').trim().toLowerCase();
-    const labels = {
-        withdrawn: t('groups_emotion_state_withdrawn'),
-        engaged: t('groups_emotion_state_engaged'),
-        guarded: t('groups_emotion_state_guarded'),
-        steady: t('groups_emotion_state_steady')
-    };
-    return labels[key] || String(value || '-');
-}
-
-function formatGroupsEmotionMetricValue(value, type = '') {
-    if (type === 'number') {
-        const number = Number(value);
-        return Number.isFinite(number) ? number.toFixed(2) : String(value ?? '-');
-    }
-    if (type === 'state') {
-        return translateGroupsEmotionState(value);
-    }
-    return String(value ?? '-');
-}
-
-function buildGroupsEmotionMetric(label, value, type = '') {
-    const displayValue = formatGroupsEmotionMetricValue(value, type);
+function buildGroupsMetric(label, value) {
+    const displayValue = String(value ?? '-');
     return `<div class="rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-[#111111] px-3 py-3">
         <div class="text-[11px] uppercase tracking-wide text-slate-400 dark:text-slate-500">${escapeHtml(String(label))}</div>
         <div class="mt-1 text-base font-semibold text-slate-800 dark:text-slate-100 break-words">${escapeHtml(displayValue)}</div>
     </div>`;
-}
-
-function parseGroupsEmotionTimeRulesInput() {
-    const raw = document.getElementById('groups-emotion-time-rules')?.value || '[]';
-    if (!raw.trim()) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-        throw new Error('time rules must be a JSON array');
-    }
-    return parsed;
-}
-
-function saveGroupsEmotionConfig() {
-    const btn = document.getElementById('groups-emotion-save');
-    if (btn) btn.disabled = true;
-    let timeRules;
-    try {
-        timeRules = parseGroupsEmotionTimeRulesInput();
-    } catch (_) {
-        showGroupsStatus('groups_emotion_time_rules_invalid', true);
-        if (btn) btn.disabled = false;
-        return;
-    }
-    fetch('/api/wechat-group/emotion/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            wechat_group_emotion_enabled: !!document.getElementById('groups-emotion-enabled')?.checked,
-            wechat_group_emotion_decay_minutes: clampNumber(document.getElementById('groups-emotion-decay-minutes')?.value, 1, 240, 10),
-            wechat_group_emotion_default_valence: clampNumber(document.getElementById('groups-emotion-default-valence')?.value, -1, 1, 0),
-            wechat_group_emotion_default_energy: clampNumber(document.getElementById('groups-emotion-default-energy')?.value, 0, 1, 0.5),
-            wechat_group_emotion_default_sociability: clampNumber(document.getElementById('groups-emotion-default-sociability')?.value, 0, 1, 0.45),
-            wechat_group_free_reply_time_rules_enabled: !!document.getElementById('groups-emotion-time-rules-enabled')?.checked,
-            wechat_group_free_reply_time_rules: timeRules,
-            wechat_group_free_reply_typing_delay_enabled: !!document.getElementById('groups-emotion-typing-delay-enabled')?.checked,
-            wechat_group_free_reply_typing_chars_per_second: clampNumber(document.getElementById('groups-emotion-typing-cps')?.value, 1, 30, 7),
-        }),
-    }).then(r => r.json()).then(data => {
-        if (data.status !== 'success') throw new Error(data.message || 'save failed');
-        showGroupsStatus('groups_emotion_saved', false);
-        loadGroupsView();
-    }).catch(err => showGroupsStatus(err.message || 'channels_save_error', true))
-      .finally(() => { if (btn) btn.disabled = false; });
-}
-
-function resetGroupsEmotionState() {
-    const roomId = String(groupsEmotionState.selectedRoomId || '').trim();
-    if (!roomId) {
-        showGroupsStatus('groups_emotion_empty', true);
-        return;
-    }
-    if (!window.confirm(t('groups_emotion_reset_confirm'))) return;
-    fetch('/api/wechat-group/emotion/reset', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stable_room_id: roomId, room_id: roomId }),
-    }).then(r => r.json()).then(data => {
-        if (data.status !== 'success') throw new Error(data.message || 'reset failed');
-        groupsEmotionState.state = data.state || null;
-        groupsEmotionState.loadedRoomId = roomId;
-        showGroupsStatus('groups_emotion_reset_done', false);
-        renderGroupsView();
-    }).catch(err => showGroupsStatus(err.message || 'groups_load_failed', true));
 }
 
 function formatGroupsStickerText(key, values = {}) {
@@ -14057,7 +13724,7 @@ function renderGroupsStickerCard(sticker) {
                     <div><span class="text-slate-500 dark:text-slate-400">${t('groups_sticker_file_name')}:</span> ${escapeHtml(String(sticker?.file_name || '-'))}</div>
                     <div><span class="text-slate-500 dark:text-slate-400">${t('groups_sticker_source_message_id')}:</span> ${escapeHtml(String(sticker?.source_message_id || '-'))}</div>
                     <div><span class="text-slate-500 dark:text-slate-400">${t('groups_sticker_use_count')}:</span> ${escapeHtml(String(sticker?.use_count ?? 0))}</div>
-                    <div><span class="text-slate-500 dark:text-slate-400">${t('groups_sticker_updated_at')}:</span> ${escapeHtml(formatGroupsEmotionTimestamp(sticker?.updated_at))}</div>
+                    <div><span class="text-slate-500 dark:text-slate-400">${t('groups_sticker_updated_at')}:</span> ${escapeHtml(formatGroupsTimestamp(sticker?.updated_at))}</div>
                 </div>
                 ${!stickerId || isEditing ? '' : `<div class="flex flex-wrap gap-2 mt-3">
                     <button type="button" data-sticker-id="${escapeHtml(stickerId)}" onclick="beginGroupsStickerDescriptionEdit(this.dataset.stickerId)"

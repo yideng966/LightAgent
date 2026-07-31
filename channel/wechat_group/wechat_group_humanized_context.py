@@ -275,11 +275,6 @@ class WechatGroupHumanizedContextBuilder:
             metadata["wechat_group_style_injected"] = True
             blocks.append(style_block)
 
-        emotion_block = self.channel._build_emotion_context_block(msg)
-        if emotion_block:
-            metadata["wechat_group_emotion_injected"] = True
-            blocks.append(emotion_block)
-
         reference_block = build_wechat_group_reference_policy_block(
             msg,
             text,

@@ -1343,7 +1343,6 @@ class WebChannel(ChatChannel):
             '/api/wechat-group/memories/(.*)', 'WechatGroupMemoriesHandler',
             '/api/wechat-group/focus/(.*)', 'WechatGroupFocusHandler',
             '/api/wechat-group/styles/(.*)', 'WechatGroupStylesHandler',
-            '/api/wechat-group/emotion/(.*)', 'WechatGroupEmotionHandler',
             '/api/wechat-group/stickers/(.*)', 'WechatGroupStickersHandler',
             '/api/wechat-group/reports/(.*)', 'WechatGroupReportsHandler',
             '/api/feishu/register', 'FeishuRegisterHandler',
@@ -4325,24 +4324,6 @@ class ChannelsHandler:
         return min(max(value, low), high)
 
     @staticmethod
-    def _normalize_wechat_group_time_rules(value) -> list:
-        if not isinstance(value, list):
-            return []
-        normalized = []
-        for item in value:
-            if not isinstance(item, dict):
-                continue
-            rule = dict(item)
-            if "start" in rule:
-                rule["start"] = str(rule.get("start") or "").strip()
-            if "end" in rule:
-                rule["end"] = str(rule.get("end") or "").strip()
-            if "days" in rule:
-                rule["days"] = [day.lower() for day in ChannelsHandler._normalize_string_list(rule.get("days"))]
-            normalized.append(rule)
-        return normalized
-
-    @staticmethod
     def _normalize_wechat_group_rooms(rooms) -> list:
         if not isinstance(rooms, list):
             return []
@@ -4603,17 +4584,6 @@ class ChannelsHandler:
                 "learning_batch_limit": conf().get("wechat_group_style_learning_batch_limit", 100),
                 "auto_apply_enabled": conf().get("wechat_group_style_auto_apply_enabled", False),
             },
-            "emotion": {
-                "enabled": conf().get("wechat_group_emotion_enabled", True),
-                "decay_minutes": conf().get("wechat_group_emotion_decay_minutes", 10),
-                "default_valence": conf().get("wechat_group_emotion_default_valence", 0),
-                "default_energy": conf().get("wechat_group_emotion_default_energy", 0.5),
-                "default_sociability": conf().get("wechat_group_emotion_default_sociability", 0.45),
-                "free_reply_time_rules_enabled": conf().get("wechat_group_free_reply_time_rules_enabled", False),
-                "free_reply_time_rules": conf().get("wechat_group_free_reply_time_rules", []) or [],
-                "free_reply_typing_delay_enabled": conf().get("wechat_group_free_reply_typing_delay_enabled", True),
-                "free_reply_typing_chars_per_second": conf().get("wechat_group_free_reply_typing_chars_per_second", 7),
-            },
             "voice_interaction": {
                 "mode": cls._normalize_wechat_group_voice_interaction_mode(
                     conf().get("wechat_group_voice_interaction_mode")
@@ -4796,15 +4766,6 @@ class ChannelsHandler:
             "wechat_group_style_candidate_min_evidence",
             "wechat_group_style_learning_batch_limit",
             "wechat_group_style_auto_apply_enabled",
-            "wechat_group_emotion_enabled",
-            "wechat_group_emotion_decay_minutes",
-            "wechat_group_emotion_default_valence",
-            "wechat_group_emotion_default_energy",
-            "wechat_group_emotion_default_sociability",
-            "wechat_group_free_reply_time_rules_enabled",
-            "wechat_group_free_reply_time_rules",
-            "wechat_group_free_reply_typing_delay_enabled",
-            "wechat_group_free_reply_typing_chars_per_second",
             "wechat_group_sticker_enabled",
             "wechat_group_sticker_auto_collect_enabled",
             "wechat_group_sticker_context_limit",
@@ -5018,9 +4979,6 @@ class ChannelsHandler:
                 "wechat_group_style_enabled",
                 "wechat_group_style_learning_enabled",
                 "wechat_group_style_auto_apply_enabled",
-                "wechat_group_emotion_enabled",
-                "wechat_group_free_reply_time_rules_enabled",
-                "wechat_group_free_reply_typing_delay_enabled",
                 "wechat_group_sticker_enabled",
                 "wechat_group_sticker_auto_collect_enabled",
                 "wechat_group_sticker_online_search_enabled",
@@ -5098,19 +5056,9 @@ class ChannelsHandler:
                 "wechat_group_style_context_limit",
                 "wechat_group_style_candidate_min_evidence",
                 "wechat_group_style_learning_batch_limit",
-                "wechat_group_emotion_decay_minutes",
-                "wechat_group_free_reply_typing_chars_per_second",
                 "wechat_group_sticker_context_limit",
             ):
                 value = max(1, int(value))
-            elif key == "wechat_group_emotion_default_valence":
-                value = cls._clamp_float(value, -1.0, 1.0, 0.0)
-            elif key == "wechat_group_emotion_default_energy":
-                value = cls._clamp_float(value, 0.0, 1.0, 0.5)
-            elif key == "wechat_group_emotion_default_sociability":
-                value = cls._clamp_float(value, 0.0, 1.0, 0.45)
-            elif key == "wechat_group_free_reply_time_rules":
-                value = cls._normalize_wechat_group_time_rules(value)
             elif key == "wechat_group_sticker_max_size_mb":
                 value = cls._clamp_int(value, 1, 20, 2)
             elif key == "wechat_group_sticker_daily_send_limit":
@@ -6719,106 +6667,6 @@ class WechatGroupMemoriesHandler(_WechatGroupWebIdentityMixin):
         except RuntimeError:
             return asyncio.run(coro)
         raise RuntimeError("WechatGroupMemoriesHandler cannot run coroutine inside an active event loop")
-
-
-class WechatGroupEmotionHandler(_WechatGroupWebIdentityMixin):
-    _emotion_service = None
-
-    def GET(self, action=""):
-        _require_auth()
-        try:
-            params = web.input(stable_room_id="", runtime_room_id="", room_id="", now="")
-            action = (action or "").strip("/")
-            if action != "state":
-                return self._json({"status": "error", "message": f"unknown action: {action}"})
-            room_identity = self._resolve_room_identity(params, require=True)
-            room_id = room_identity["effective_room_id"]
-            now_value = self._to_optional_int(getattr(params, "now", ""))
-            state = self._build_state_payload(
-                self._get_emotion_service().get_state(room_id, now=now_value),
-            )
-            running = self._get_running_channel()
-            free_reply_status = running.free_reply_status() if running and hasattr(running, "free_reply_status") else {}
-            return self._json({
-                "status": "success",
-                "state": state,
-                "last_decision": free_reply_status.get("last_decision") or {},
-                "worker": free_reply_status.get("worker") or {},
-                "identity": self._identity_payload(room_identity),
-            })
-        except Exception as e:
-            logger.error(f"[WebChannel] WechatGroupEmotion GET error: {e}")
-            return self._json({"status": "error", "message": str(e)})
-
-    def POST(self, action=""):
-        _require_auth()
-        try:
-            body = json.loads(web.data() or b"{}")
-            action = (action or "").strip("/")
-            if action == "reset":
-                room_identity = self._resolve_room_identity(body, require=True)
-                room_id = room_identity["effective_room_id"]
-                state = self._build_state_payload(
-                    self._get_emotion_service().reset_state(
-                        room_id=room_id,
-                        now=self._to_optional_int(body.get("now")),
-                    ),
-                )
-                return self._json({"status": "success", "state": state, "identity": self._identity_payload(room_identity)})
-            if action == "config":
-                allowed_keys = {
-                    "wechat_group_emotion_enabled",
-                    "wechat_group_emotion_decay_minutes",
-                    "wechat_group_emotion_default_valence",
-                    "wechat_group_emotion_default_energy",
-                    "wechat_group_emotion_default_sociability",
-                    "wechat_group_free_reply_time_rules_enabled",
-                    "wechat_group_free_reply_time_rules",
-                    "wechat_group_free_reply_typing_delay_enabled",
-                    "wechat_group_free_reply_typing_chars_per_second",
-                }
-                applied = ChannelsHandler._apply_wechat_group_config(
-                    {key: body.get(key) for key in allowed_keys if key in body}
-                )
-                ChannelsHandler._write_channel_config(applied)
-                return self._json({"status": "success", "config": applied})
-            return self._json({"status": "error", "message": f"unknown action: {action}"})
-        except Exception as e:
-            logger.error(f"[WebChannel] WechatGroupEmotion POST error: {e}")
-            return self._json({"status": "error", "message": str(e)})
-
-    @classmethod
-    def _get_emotion_service(cls):
-        if cls._emotion_service is None:
-            from channel.wechat_group.wechat_group_emotion_service import WechatGroupEmotionService
-
-            cls._emotion_service = WechatGroupEmotionService()
-        return cls._emotion_service
-
-    @staticmethod
-    def _get_running_channel():
-        return WechatGroupQrHandler._get_running_channel()
-
-    @classmethod
-    def _build_state_payload(cls, state):
-        row = dict(state or {})
-        row["interpreted_state"] = cls._get_emotion_service().interpret_state(row)
-        return row
-
-    @staticmethod
-    def _json(payload):
-        web.header("Content-Type", "application/json; charset=utf-8")
-        return json.dumps(payload, ensure_ascii=False)
-
-    @staticmethod
-    def _to_optional_int(value):
-        try:
-            text = str(value).strip()
-            if not text:
-                return None
-            return int(text)
-        except Exception:
-            return None
 
 
 class WechatGroupFocusHandler(_WechatGroupWebIdentityMixin):
