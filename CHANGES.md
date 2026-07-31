@@ -1,5 +1,28 @@
 # CHANGES
 
+## 2026-08-01
+
+### 发布 LightAgent 2.2.1
+
+- 汇总发布四项个人微信群稳定性改进：图片与表情包入站分类、自由回复识图失败静默、Wechat4u 联系人同步重复告警合并，以及模型内部静默说明发送拦截。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.1`，新增版本化发行说明，并固化正式标签提交必须同步仓库版本来源的发布约束。
+- 保持既有配置、数据库和 sidecar 协议不变，本版本不包含破坏性迁移。
+
+关键文件：
+
+- `AGENTS.md`
+- `CHANGES.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.1.md`
+- `plans/20260801_发布2.2.1.md`
+
+验证记录：
+
+- `python scripts/validate_release_notes.py --tag v2.2.1 docs/releases/v2.2.1.md`：通过。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- `python -X utf8 -m unittest discover -s tests`：1222 项通过，1 项按条件跳过。
+
 ## 2026-07-31
 
 ### 修复微信群静默说明误发送

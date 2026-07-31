@@ -249,6 +249,7 @@ docker push yideng966/lightagent:latest
 - 正文不得包含内部计划、测试通过数量、文件清单、提交哈希、实现过程、未确认路线图、密钥或部署标识；贡献者致谢、关联 PR/Issue 仅在真实且有用户价值时补充。
 - 末尾必须依次保留“安装”和“文档”章节。安装命令必须使用当前完整版本标签，至少给出 Docker Hub 与 GHCR 镜像；如发布 `skills-full`，应明确变体。文档链接必须指向 `yideng966/LightAgent` 的当前有效页面。
 - 创建标签前必须先运行 `python scripts/validate_release_notes.py --tag <完整标签> docs/releases/<完整标签>.md`，并人工预览 Markdown；校验通过且说明文件已进入待打标签的提交后，才能推送标签。不得先打标签、后在默认分支补说明。
+- 创建正式 `v*` 标签的本地发行提交必须先运行 `scripts/stamp_release_version.py`，确保 `cli/VERSION` 与 `pyproject.toml` 都等于去掉 `v` 前缀的完整标签版本；不得只依赖 Docker 构建阶段临时盖章而让 Git 标签内版本来源仍停留在旧版本。
 - `deploy-image.yml` 只能由 `v*` 标签推送触发，不得开放 `workflow_dispatch` 或从仓库内旧版本文件推导正式镜像版本；`docker/metadata-action` 必须关闭隐式 `latest`，基础版与 `skills-full` 只能通过矩阵中显式的浮动标签发布，避免完整技能版覆盖基础版 `latest`；Docker 发布构建必须在安装 Python 后端前调用 `scripts/stamp_release_version.py`，使用当前发布标签同时更新 `cli/VERSION` 与 `pyproject.toml`，避免 CLI/Web 版本与 `pip show lightagent` 不一致。
 - Docker 多架构发布必须使用原生 AMD64 与 ARM64 GitHub Hosted Runner 分架构构建，按 canonical digest 汇集后分别为 Docker Hub 和 GHCR 创建 manifest，不得回退到在 AMD64 Runner 上通过 QEMU 执行 ARM64 重依赖安装；跨版本缓存必须使用按 `variant + arch` 隔离且可跨 `v*` 标签复用的 Registry Cache，不能依赖不同标签不可互访的 GitHub Actions Cache；`latest` 默认保留微信群图片报告所需的 Playwright Chromium。
 - GHCR 未标记版本清理必须作为独立任务，在基础版与完整技能版的全部 manifest 成功发布后执行；任一变体发布失败时必须跳过清理，禁止从并行变体任务中提前删除 canonical digest 或 attestation 子 manifest。
