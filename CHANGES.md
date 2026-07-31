@@ -2,6 +2,24 @@
 
 ## 2026-07-31
 
+### 修复微信群回复暴露不可读成员编码
+
+- 微信群回复清洗会移除正文开头的 32 位以上十六进制成员编码或 `wxid_` 内部 ID，正常可读的 `@昵称` 保持不变；清洗结果同时用于实际发送、归档和后续上下文，避免内部编码再次回灌。
+- sidecar 发送前再次清理不可读 mention；联系人无法解析或解析出的昵称仍是内部 ID 时，不再交给 Wechaty 执行原生 mention，改为不 @ 任何成员并直接发送正文。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_reply_cleanup.py`
+- `channel/wechat_group/sidecar/wechaty-sidecar-core.mjs`
+- `tests/test_wechat_group_humanization.py`
+- `channel/wechat_group/sidecar/wechaty-sidecar-core.test.mjs`
+
+验证记录：
+
+- sidecar 全量测试 63 项通过，覆盖 64 位成员编码、目标无法解析及目标昵称仍为内部 ID 的降级路径。
+- 微信群拟人化与回复清洗 20 项、微信群主通道与确认发送 152 项通过。
+- Python 编译与 sidecar JavaScript 语法检查通过。
+
 ### 修复微信群工具完成协议兼容性回归
 
 - 修复 `v2.1.26` 中多种自定义模型完成贴纸搜索、贴纸发送等工具后，因返回普通纯文本而未调用内部完成工具，被连续误判为候选故障并最终发送 422 技术错误的问题。

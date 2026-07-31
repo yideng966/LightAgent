@@ -364,11 +364,80 @@ test('buildManualMentionText strips leading long raw sender id from model output
 })
 
 test('buildManualMentionText does not expose raw sender id as visible mention name', () => {
-  const text = buildManualMentionText('hello', [
-    { name: '@ec16ad646512ce039fd5b1885a848f170362fed7b7fbe874d257455cf85ea0b2' },
-  ])
+  const rawSenderId = '@ec16ad646512ce039fd5b1885a848f170362fed7b7fbe874d257455cf85ea0b2'
+  const targets = [{ name: rawSenderId }]
 
-  assert.equal(text, 'hello')
+  assert.equal(buildManualMentionText('hello', targets), 'hello')
+  assert.equal(buildManualMentionText(`${rawSenderId} hello`, targets), 'hello')
+})
+
+test('sendText removes raw sender id when mention target cannot be resolved', async () => {
+  const rawSenderId = '@62c6151697e24a21de9f36dee37b0e1961028c6abf7d480dfa00069f884fc9ff'
+  const room = {
+    id: 'room@@abc',
+    sayCalls: [],
+    async memberAll() {
+      return []
+    },
+    async say(...args) {
+      this.sayCalls.push(args)
+    },
+  }
+
+  await sendText(
+    {
+      room_id: room.id,
+      text: `${rawSenderId} 所以是要再买张电信卡才能转进去？这门槛有点高啊[捂脸]`,
+      mention_ids: [rawSenderId],
+    },
+    {
+      emit: () => {},
+      findRoom: async roomId => roomId === room.id ? room : undefined,
+      findContact: async () => undefined,
+    },
+  )
+
+  assert.deepEqual(room.sayCalls, [[
+    '所以是要再买张电信卡才能转进去？这门槛有点高啊[捂脸]',
+  ]])
+})
+
+test('sendText falls back to body without mention when resolved target name is raw id', async () => {
+  const rawSenderId = '@62c6151697e24a21de9f36dee37b0e1961028c6abf7d480dfa00069f884fc9ff'
+  const member = { id: rawSenderId, name: () => rawSenderId }
+  const room = {
+    id: 'room@@abc',
+    sayCalls: [],
+    async memberAll() {
+      return [member]
+    },
+    async alias() {
+      return rawSenderId
+    },
+    async say(...args) {
+      this.sayCalls.push(args)
+    },
+  }
+  const warnings = []
+
+  await sendText(
+    {
+      room_id: room.id,
+      text: `${rawSenderId} 正文`,
+      mention_ids: [rawSenderId],
+    },
+    {
+      emit: () => {},
+      findRoom: async roomId => roomId === room.id ? room : undefined,
+      findContact: async () => undefined,
+      logWarning: message => warnings.push(message),
+    },
+  )
+
+  assert.deepEqual(room.sayCalls, [['正文']])
+  assert.deepEqual(warnings, [
+    '[wechat_group] unreadable mention targets omitted (resolved_count=1, mention_count=0)',
+  ])
 })
 
 test('resolveContactDisplayName prefers room alias over raw contact id', async () => {

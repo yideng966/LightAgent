@@ -728,6 +728,19 @@ class WechatGroupReplyCleanupTest(unittest.TestCase):
 
         self.assertEqual(text, cleaned)
 
+    def test_cleanup_removes_unreadable_leading_member_id_but_keeps_readable_mention(self):
+        raw_member_id = "@62c6151697e24a21de9f36dee37b0e1961028c6abf7d480dfa00069f884fc9ff"
+        body = "所以是要再买张电信卡才能转进去？这门槛有点高啊[捂脸]"
+
+        self.assertEqual(
+            body,
+            cleanup_wechat_group_reply_text("{} {}".format(raw_member_id, body)),
+        )
+        self.assertEqual(
+            "@小明 {}".format(body),
+            cleanup_wechat_group_reply_text("@小明 {}".format(body)),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

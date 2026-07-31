@@ -374,11 +374,12 @@ docker push yideng966/lightagent:latest
 2. 扫码入口必须在通道管理中完成：`通道管理 -> 接入通道 -> 个人微信群`，由界面展示二维码；不要把“看日志扫码”作为主要交互路径。
 3. Web 控制台入口涉及 `channel/web/web_channel.py` 与 `channel/web/static/js/console.js`；归档的桌面端不再同步接入能力。
 4. 微信群回复 @ 用户时，正文不要手工拼接普通文本 `@昵称` 或 `@@id`；应将发送者 ID 作为 `mention_ids` 传给 sidecar，并由 Wechaty `room.say(text, ...mentions)` 执行真实 mention。
-5. sidecar 与 Python 之间只通过 JSON Lines 协议通信。新增事件或命令时，先更新 `protocol.py`，再同步 Python client、channel 和 `wechaty-sidecar.mjs`，并补充对应测试。
-6. Wechaty 登录态、媒体目录等运行数据必须放在仓库外的数据目录，不能写入 Git 跟踪内容；新增 npm 依赖时同步检查 `channel/wechat_group/sidecar/package.json` 与 lock 文件。
-7. 涉及群选择时优先使用 `wechat_group_stable_room_ids` 做精确限制；`wechat_group_room_ids` 只保留为 runtime legacy 快照；`group_name_white_list: ["ALL_GROUP"]` 只适合开发测试，不应作为长期生产默认。
-8. 修改后至少运行 `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`。涉及二维码、连接状态或通道页时，在 Web 控制台完成对应验证。
-9. 外部真实链路仍需手动验证：启动后打开通道管理，选择“个人微信群”，扫码登录，在目标群 @ 机器人确认能收到回复，并确认回复真实 @ 到发送者。
+5. sidecar 只有在目标成员存在可读群昵称时才能执行 mention；昵称仍是十六进制成员编码、`wxid_` 或其他内部 ID 时必须丢弃 mention，并清除正文开头的不可读 ID 后直接发送正文。
+6. sidecar 与 Python 之间只通过 JSON Lines 协议通信。新增事件或命令时，先更新 `protocol.py`，再同步 Python client、channel 和 `wechaty-sidecar.mjs`，并补充对应测试。
+7. Wechaty 登录态、媒体目录等运行数据必须放在仓库外的数据目录，不能写入 Git 跟踪内容；新增 npm 依赖时同步检查 `channel/wechat_group/sidecar/package.json` 与 lock 文件。
+8. 涉及群选择时优先使用 `wechat_group_stable_room_ids` 做精确限制；`wechat_group_room_ids` 只保留为 runtime legacy 快照；`group_name_white_list: ["ALL_GROUP"]` 只适合开发测试，不应作为长期生产默认。
+9. 修改后至少运行 `python -m unittest tests.test_wechat_group_message tests.test_wechat_group_channel tests.test_wechat_group_web`。涉及二维码、连接状态或通道页时，在 Web 控制台完成对应验证。
+10. 外部真实链路仍需手动验证：启动后打开通道管理，选择“个人微信群”，扫码登录，在目标群 @ 机器人确认能收到回复，并确认回复真实 @ 到发送者。
 
 ### 个人微信群 LLM 请求上下文链路
 

@@ -6,6 +6,14 @@ import re
 from typing import Any
 
 
+_RAW_WECHAT_MENTION_PREFIX = re.compile(
+    r"^[@＠](?:[0-9a-f]{32,}|wxid_[a-z0-9_-]{4,})"
+    r"(?=$|[\s\u2005-\u200a，,。.!！?？:：、])"
+    r"[\s\u2005-\u200a，,。.!！?？:：、]*",
+    flags=re.I,
+)
+
+
 def is_wechat_group_silent_control_text(text: Any) -> bool:
     """识别模型输出的短小静默决策，避免把内部路由说明发到群里。"""
     raw = re.sub(r"\s+", "", str(text or "")).strip()
@@ -82,6 +90,7 @@ def cleanup_wechat_group_reply_text(text: Any, max_chars: int = 800) -> str:
         return ""
     value = _strip_prompt_blocks(value)
     value = _strip_status_lines(value)
+    value = _strip_unreadable_leading_mentions(value)
     value = _strip_markdown_for_wechat(value)
     value = _strip_fixed_openings(value)
     value = _strip_tail_questions(value)
@@ -93,6 +102,16 @@ def cleanup_wechat_group_reply_text(text: Any, max_chars: int = 800) -> str:
     if len(value) > limit:
         value = value[:limit].rstrip()
     return value
+
+
+def _strip_unreadable_leading_mentions(text: str) -> str:
+    result = text.strip()
+    for _ in range(5):
+        next_value = _RAW_WECHAT_MENTION_PREFIX.sub("", result, count=1).strip()
+        if next_value == result:
+            break
+        result = next_value
+    return result
 
 
 def _strip_prompt_blocks(text: str) -> str:

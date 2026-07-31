@@ -778,19 +778,33 @@ function stripLeadingWechatMentionText(text = '') {
   return value || String(text || '').trim()
 }
 
-function stripOneLeadingWechatMention(text = '') {
+function stripLeadingRawWechatMentionText(text = '') {
+  let value = String(text || '').trim()
+  for (let i = 0; i < 5; i++) {
+    const next = stripOneLeadingWechatMention(value, true)
+    if (next === value) break
+    value = next
+  }
+  return value
+}
+
+function stripOneLeadingWechatMention(text = '', rawOnly = false) {
   const value = String(text || '').trim()
   const match = value.match(/^[@\uFF20]([^\s\u2005\u2006\u2007\u2008\u2009\u200a,，.。!！?？:：、]{1,128})([\s\u2005\u2006\u2007\u2008\u2009\u200a,，.。!！?？:：、]*)/u)
   if (!match) return value
   const name = match[1] || ''
-  if (!looksLikeRawWechatInternalId(name) && name.length > 40) return value
+  const isRawId = looksLikeRawWechatInternalId(name)
+  if (rawOnly && !isRawId) return value
+  if (!isRawId && name.length > 40) return value
   return value.slice(match[0].length).trim()
 }
 
 export function buildManualMentionText(text = '', targets = []) {
   const names = targets.map(item => cleanVisibleMentionName(item?.name || '')).filter(Boolean)
-  if (!names.length) return String(text || '')
-  return `${names.map(name => `@${name}`).join('\u2005')}\u2005${stripLeadingWechatMentionText(text)}`
+  const safeText = stripLeadingRawWechatMentionText(text)
+  if (!names.length) return safeText
+  const body = stripLeadingWechatMentionText(safeText)
+  return `${names.map(name => `@${name}`).join('\u2005')}\u2005${body}`
 }
 
 function escapeMsgSourceXml(value = '') {
@@ -930,7 +944,9 @@ export async function sendWechat4uRawTextWithMsgSource(wechat4u, room, text, men
 export async function sendText(command, deps) {
   const room = await deps.findRoom(command.room_id)
   if (!room) throw new Error(`room not found: ${command.room_id}`)
-  const mentionTargets = await resolveMentionTargets(
+  const safeText = stripLeadingRawWechatMentionText(command.text)
+  if (!safeText) throw new Error('text is empty after removing unreadable mention')
+  const resolvedMentionTargets = await resolveMentionTargets(
     room,
     command.mention_ids || [],
     deps.findContact,
@@ -940,11 +956,20 @@ export async function sendText(command, deps) {
       nowMs: deps.nowMs?.(),
     },
   )
+  const mentionTargets = resolvedMentionTargets
+    .map(target => ({ ...target, name: cleanVisibleMentionName(target?.name || '') }))
+    .filter(target => target.name)
+  if (mentionTargets.length !== resolvedMentionTargets.length) {
+    deps.logWarning?.(
+      `[wechat_group] unreadable mention targets omitted ` +
+      `(resolved_count=${resolvedMentionTargets.length}, mention_count=${mentionTargets.length})`,
+    )
+  }
   const wechat4u = deps.getWechat4u?.()
   const useVisibleMentionText = mentionTargets.length && (deps.isWechat4u?.() || wechat4u)
   if (mentionTargets.length && wechat4u) {
     try {
-      await sendWechat4uRawTextWithMsgSource(wechat4u, room, command.text, mentionTargets)
+      await sendWechat4uRawTextWithMsgSource(wechat4u, room, safeText, mentionTargets)
     } catch (error) {
       const errorMessage = String(error?.message || error || 'unknown error')
         .replace(/[\r\n]+/g, ' ')
@@ -953,24 +978,24 @@ export async function sendText(command, deps) {
         `[wechat_group] true mention failed; falling back to visible text ` +
         `(reason=wechat4u_raw_send_failed, mention_count=${mentionTargets.length}, error=${errorMessage})`,
       )
-      await room.say(buildManualMentionText(command.text, mentionTargets))
+      await room.say(buildManualMentionText(safeText, mentionTargets))
     }
   } else if (useVisibleMentionText) {
     deps.logWarning?.(
       `[wechat_group] true mention unavailable; falling back to visible text ` +
       `(reason=wechat4u_runtime_unavailable, mention_count=${mentionTargets.length})`,
     )
-    await room.say(buildManualMentionText(command.text, mentionTargets))
+    await room.say(buildManualMentionText(safeText, mentionTargets))
   } else if (mentionTargets.length) {
     const contacts = mentionTargets.map(item => item.contact).filter(Boolean)
-    const manualText = buildManualMentionText(command.text, mentionTargets)
+    const manualText = buildManualMentionText(safeText, mentionTargets)
     try {
-      await room.say(command.text, ...contacts)
+      await room.say(safeText, ...contacts)
     } catch {
-      await room.say(manualText || command.text)
+      await room.say(manualText || safeText)
     }
   } else {
-    await room.say(command.text)
+    await room.say(safeText)
   }
   const sendResult = { ok: true, command: 'send_text', room_id: command.room_id }
   if (command.request_id) {
