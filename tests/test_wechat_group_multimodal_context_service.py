@@ -192,6 +192,33 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
         self.assertNotIn("D:/tmp/cat.jpg", first["block"])
         self.assertNotIn("D:/tmp/cat.jpg", second["block"])
 
+    def test_sticker_free_reply_reuses_semantic_text_without_second_vision_call(self):
+        from channel.wechat_group.wechat_group_multimodal_context_service import (
+            WechatGroupMultimodalContextService,
+        )
+
+        conf()["wechat_group_multimodal_free_reply_image_context_enabled"] = True
+        service = WechatGroupMultimodalContextService(Mock())
+        msg = self._image_msg(media_path="D:/tmp/sticker.gif")
+        msg.message_type = "sticker"
+        msg.is_at = False
+        msg.wechat_group_media_semantic_text = "小猫捂脸表示无奈"
+
+        with patch("agent.tools.vision.vision.Vision.execute") as execute:
+            result = service.build_context(
+                msg,
+                query="[sticker] 小猫捂脸表示无奈",
+                trigger_source="free_reply",
+                now=100000,
+            )
+
+        execute.assert_not_called()
+        self.assertEqual("", result["block"])
+        self.assertEqual(
+            "sticker_semantic_text_available",
+            result["diagnostics"]["skipped_reason"],
+        )
+
     def test_image_summary_failure_returns_diagnostic_text_without_path_leak(self):
         from channel.wechat_group.wechat_group_multimodal_context_service import (
             WechatGroupMultimodalContextService,

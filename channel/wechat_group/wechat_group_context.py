@@ -4,7 +4,10 @@ import time
 import re
 from typing import Any, Dict, Iterable
 
-from channel.wechat_group.wechat_group_transport import project_wechat_message_type
+from channel.wechat_group.wechat_group_transport import (
+    project_wechat_media_semantic_text,
+    project_wechat_message_type,
+)
 
 
 _TRANSPORT_PAYLOAD_RE = re.compile(
@@ -53,6 +56,13 @@ def _format_timestamp(value: Any) -> str:
 
 def _summarize_message_safe(row: Dict[str, Any], max_length: int = 160) -> str:
     msg_type = project_wechat_message_type(row.get("message_type") or "text", row.get("text"))
+    semantic_text = project_wechat_media_semantic_text(
+        msg_type,
+        row.get("text"),
+        row.get("metadata"),
+    )
+    if semantic_text:
+        return semantic_text
     if msg_type and msg_type != "text":
         return "[{} message]".format(msg_type)
     if is_wechat_group_transport_payload(row.get("text")):

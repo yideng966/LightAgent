@@ -308,6 +308,12 @@ class WechatGroupMultimodalContextService:
         return True
 
     def _select_image_candidate(self, msg, query: str, trigger_source: str, cfg: Dict[str, Any], now=None) -> Dict[str, Any]:
+        if (
+            str(trigger_source or "").strip() == "free_reply"
+            and str(getattr(msg, "message_type", "") or "").lower() == "sticker"
+            and str(getattr(msg, "wechat_group_media_semantic_text", "") or "").strip()
+        ):
+            return {"skipped_reason": "sticker_semantic_text_available"}
         current = self._current_image_item(msg)
         if current:
             return {"item": current, "reason": "current_image"}

@@ -4,6 +4,7 @@ import unittest
 from channel.wechat_group.wechat_group_transport import (
     detect_wechat_transport_message_type,
     is_wechat_transport_metadata_term,
+    project_wechat_media_semantic_text,
 )
 
 
@@ -53,6 +54,30 @@ class WechatGroupTransportTest(unittest.TestCase):
             self.assertTrue(is_wechat_transport_metadata_term(value), value)
         for value in ("hevc", "image", "release", "讨论 hevc_mid_size 字段"):
             self.assertFalse(is_wechat_transport_metadata_term(value), value)
+
+    def test_projects_only_explicit_safe_media_semantic_text(self):
+        self.assertEqual(
+            "[sticker: 小猫捂脸表示无奈]",
+            project_wechat_media_semantic_text(
+                "sticker",
+                WECHAT_STICKER_TRANSPORT_XML,
+                {"media_semantic_text": "小猫捂脸表示无奈"},
+            ),
+        )
+        for semantic in (
+            WECHAT_STICKER_TRANSPORT_XML,
+            r"C:\private\sticker.gif",
+            "https://example.test/private.png",
+            "cdnurl=secret",
+        ):
+            self.assertEqual(
+                "",
+                project_wechat_media_semantic_text(
+                    "sticker",
+                    WECHAT_STICKER_TRANSPORT_XML,
+                    {"media_semantic_text": semantic},
+                ),
+            )
 
 
 if __name__ == "__main__":

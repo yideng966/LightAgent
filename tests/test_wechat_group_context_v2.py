@@ -157,6 +157,40 @@ class WechatGroupContextV2Test(unittest.TestCase):
             for source in snapshot.included_source_event_ids
         ))
 
+    def test_recent_snapshot_uses_sticker_semantic_text_without_transport_payload(self):
+        sticker_xml = '<msg><emoji aeskey="secret" cdnurl="https://private.test/a.gif" /></msg>'
+        self.archive.record_message(
+            "msg-sticker",
+            "wgr_room",
+            sender_nickname="Charlie",
+            message_type="sticker",
+            text=sticker_xml,
+            media_path=r"C:\private\sticker.gif",
+            metadata={"media_semantic_text": "小猫捂脸表示无奈"},
+            created_at=self.now - 10,
+            stable_room_id="wgr_room",
+            stable_member_id="wgm_charlie",
+        )
+
+        snapshot = WechatGroupRequestSnapshotFactory(
+            self.archive,
+            store=self.store,
+        ).build(
+            make_message(self.now),
+            "这个怎么算",
+            trigger_source="direct_reply",
+            is_free_reply=False,
+            owner_session_id="wechat_group:wgr_room:wgm_alice",
+            thread_id="wgt_new",
+            thread_action="new_thread",
+        )
+
+        block = snapshot.recent_block()
+        self.assertIn("[sticker: 小猫捂脸表示无奈]", block)
+        self.assertNotIn("aeskey", block)
+        self.assertNotIn("private.test", block)
+        self.assertNotIn(r"C:\private", block)
+
     def test_resume_thread_excludes_events_already_in_agent_history(self):
         session_id = "wechat_group:wgr_room:wgm_alice"
         self.store.create_thread(session_id, "wgt_old")

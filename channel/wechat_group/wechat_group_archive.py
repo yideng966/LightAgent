@@ -85,6 +85,34 @@ class WechatGroupArchive:
                 ).fetchone()
                 return int(row[0] or 0) if row else 0
 
+    def update_message_media_semantic_text(
+        self,
+        message_id: str,
+        semantic_text: str,
+    ) -> bool:
+        message_id_text = str(message_id or "").strip()
+        semantic = " ".join(str(semantic_text or "").split()).strip()
+        if not message_id_text or not semantic or len(semantic) > 120:
+            return False
+        with self._lock, closing(self._connect()) as conn:
+            with conn:
+                row = conn.execute(
+                    "SELECT metadata FROM wechat_group_messages WHERE message_id = ? LIMIT 1",
+                    (message_id_text,),
+                ).fetchone()
+                if not row:
+                    return False
+                metadata = _parse_metadata(row[0])
+                metadata["media_semantic_text"] = semantic
+                cursor = conn.execute(
+                    "UPDATE wechat_group_messages SET metadata = ? WHERE message_id = ?",
+                    (
+                        json.dumps(metadata, ensure_ascii=False),
+                        message_id_text,
+                    ),
+                )
+                return bool(cursor.rowcount)
+
     def record_assistant_reply(
         self,
         room_id: str,

@@ -10,7 +10,10 @@ from channel.wechat_group.wechat_group_context import (
     is_wechat_group_transport_payload,
     sanitize_wechat_group_prompt_text,
 )
-from channel.wechat_group.wechat_group_transport import project_wechat_message_type
+from channel.wechat_group.wechat_group_transport import (
+    project_wechat_media_semantic_text,
+    project_wechat_message_type,
+)
 
 
 _QUESTION_RE = re.compile(r"(?:吗|嘛|呢|么|咋|怎么|如何|为何|为什么|为啥|谁|哪|多少|几|[?？])")
@@ -221,7 +224,14 @@ def build_safe_free_reply_timeline(
             continue
         text = str(_field(raw, "text", "content") or "")
         msg_type = project_wechat_message_type(_field(raw, "message_type", default="text"), text)
-        if is_wechat_group_transport_payload(text):
+        semantic_text = project_wechat_media_semantic_text(
+            msg_type,
+            text,
+            raw.get("metadata"),
+        )
+        if semantic_text:
+            safe_text = semantic_text
+        elif is_wechat_group_transport_payload(text):
             safe_text = "[media message]"
         elif msg_type != "text":
             safe_text = "[{} message]".format(msg_type)
@@ -246,11 +256,17 @@ def build_safe_free_reply_timeline(
     current_copy = dict(current)
     current_copy["is_bot"] = False
     current_text = str(_field(current, "text", "content") or "")
-    safe_current_text = (
-        "[media message]"
-        if is_wechat_group_transport_payload(current_text)
-        else sanitize_wechat_group_prompt_text(current_text, 300)
+    current_semantic_text = project_wechat_media_semantic_text(
+        _field(current, "message_type", default="text"),
+        current_text,
+        current.get("metadata"),
     )
+    if current_semantic_text:
+        safe_current_text = current_semantic_text
+    elif is_wechat_group_transport_payload(current_text):
+        safe_current_text = "[media message]"
+    else:
+        safe_current_text = sanitize_wechat_group_prompt_text(current_text, 300)
     result.append(
         {
             "message_id": "CURRENT_MESSAGE",

@@ -2,6 +2,32 @@
 
 ## 2026-07-31
 
+### 修复普通表情包被直接解读回复（Issue #25）
+
+- 普通未 @ 表情包不再通过 `media_payload_allowed` 自动达到自由回复阈值；启用自由回复图片理解后，系统先把表情包转换为安全短语义，再按现有活跃档位、本地规则、Scorer、兼容 Judge 和 worker 决定是否接话。
+- 表情包短语义会回写当前素材描述和归档结构化元数据，后续 V2 timeline、recent transcript 与自由回复上下文可以理解其含义；规则未放行时只保留上下文，不发送群消息。
+- 媒体语义投影新增安全边界，拒绝微信传输 XML、URL、本机路径和协议字段；worker 放行表情包后直接使用已验证语义，不再发起第二次图片解读或构造确定性评论请求。普通图片和明确触发的图片理解行为保持不变。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_archive.py`
+- `channel/wechat_group/wechat_group_transport.py`
+- `channel/wechat_group/wechat_group_context.py`
+- `channel/wechat_group/wechat_group_timeline_service.py`
+- `channel/wechat_group/wechat_group_free_reply_context.py`
+- `channel/wechat_group/wechat_group_multimodal_context_service.py`
+- `tests/test_wechat_group_channel.py`
+- `tests/test_wechat_group_context_v2.py`
+- `tests/test_wechat_group_transport.py`
+- `plans/20260731_修复表情包直接解读回复.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 微信群主通道 151 项、上下文/滚动摘要/焦点/Scorer 63 项、消息/传输/多模态/表情包 58 项均通过。
+- Python 编译和 `git diff --check` 通过。
+
 ### 删除微信群情绪与主动性功能（Issue #24）
 
 - 删除微信群情绪状态服务、SQLite 存储、消息观察、回复记录、自由回复情绪调节和 `<wechat-group-emotion>` 上下文注入；自由回复继续只由现有本地规则、Scorer、兼容 Judge 与 worker 决定。

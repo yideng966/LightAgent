@@ -50,6 +50,11 @@ from channel.wechat_group.wechat_group_permissions import (
 )
 from channel.wechat_group.wechat_group_style_service import WechatGroupStyleService
 from channel.wechat_group.wechat_group_sticker_service import WechatGroupStickerService
+from channel.wechat_group.wechat_group_sticker_labeling import (
+    is_pending_sticker_description,
+    normalize_semantic_label,
+    vision_label,
+)
 from channel.wechat_group.wechat_group_transport import project_wechat_message_type
 from channel.wechat_group.wechat_group_focus_service import WechatGroupFocusService
 from channel.wechat_group.wechat_group_humanized_context import (
@@ -1200,11 +1205,21 @@ class WechatGroupChannel(ChatChannel):
             if not direct_reply:
                 if not conf().get("wechat_group_free_reply_image_understanding_enabled", False):
                     return
-                image_text = self._build_free_reply_image_text(msg)
+                is_sticker = str(getattr(msg, "message_type", "") or "").lower() == "sticker"
+                if is_sticker and not conf().get("wechat_group_image_understanding_enabled", True):
+                    return
+                image_text = (
+                    self._build_free_reply_sticker_text(msg)
+                    if is_sticker
+                    else self._build_free_reply_image_text(msg)
+                )
+                if not image_text:
+                    return
                 should_enqueue, decision, recent_messages = self._should_enqueue_free_reply_message(
                     msg,
-                    allow_media_payload=True,
+                    allow_media_payload=not is_sticker,
                     text_override=image_text,
+                    message_type_override="text" if is_sticker else None,
                 )
                 if not should_enqueue:
                     return
@@ -2341,25 +2356,29 @@ class WechatGroupChannel(ChatChannel):
 
     def _collect_sticker_from_message(self, msg: WechatGroupMessage):
         if not conf().get("wechat_group_sticker_enabled", True):
-            return
+            return {}
         if not conf().get("wechat_group_sticker_auto_collect_enabled", True):
-            return
+            return {}
         if str(getattr(msg, "message_type", "") or "").lower() != "sticker":
-            return
+            return {}
         media_path = str(getattr(msg, "media_path", "") or "").strip()
         if not media_path:
-            return
+            return {}
         try:
             description = Path(media_path).stem
-            self._get_sticker_service().collect_from_message(
+            row = self._get_sticker_service().collect_from_message(
                 room_id=_wechat_group_stable_room_scope(msg),
                 media_path=media_path,
                 source_message_id=getattr(msg, "msg_id", ""),
                 description=description,
                 now=getattr(msg, "create_time", None),
             )
+            if isinstance(row, dict) and row:
+                msg.wechat_group_sticker_record = dict(row)
+                return dict(row)
         except Exception as e:
             logger.warning("[wechat_group] failed to collect sticker: {}".format(e))
+        return {}
 
     def _record_sticker_reply(self, reply, context):
         if not conf().get("wechat_group_sticker_enabled", True):
@@ -2565,6 +2584,59 @@ class WechatGroupChannel(ChatChannel):
     def _build_free_reply_image_text(msg: WechatGroupMessage) -> str:
         # Keep local media paths out of free-reply scoring, logs, and LLM judge prompts.
         return "[image]"
+
+    def _build_free_reply_sticker_text(self, msg: WechatGroupMessage) -> str:
+        row = getattr(msg, "wechat_group_sticker_record", {})
+        row = row if isinstance(row, dict) else {}
+        description = normalize_semantic_label(row.get("description"))
+        if not description or is_pending_sticker_description(description):
+            media_path = str(getattr(msg, "media_path", "") or "").strip()
+            if not media_path:
+                return ""
+            try:
+                description = vision_label(media_path)
+            except Exception as e:
+                logger.warning(
+                    "[wechat_group] sticker semantic labeling failed: {}".format(
+                        type(e).__name__
+                    )
+                )
+                return ""
+            description = normalize_semantic_label(description)
+            if not description:
+                return ""
+            sticker_id = str(row.get("sticker_id") or "").strip()
+            if sticker_id:
+                try:
+                    updated = self._get_sticker_service().update_description(
+                        _wechat_group_stable_room_scope(msg),
+                        sticker_id,
+                        description,
+                        expected_description=str(row.get("description") or ""),
+                    )
+                    if isinstance(updated, dict) and updated:
+                        msg.wechat_group_sticker_record = dict(updated)
+                except Exception as e:
+                    logger.debug(
+                        "[wechat_group] sticker semantic description was not persisted: {}".format(
+                            type(e).__name__
+                        )
+                    )
+        msg.wechat_group_media_semantic_text = description
+        updater = getattr(self.archive, "update_message_media_semantic_text", None)
+        if callable(updater):
+            try:
+                if updater(getattr(msg, "msg_id", ""), description):
+                    self._schedule_rolling_summary(
+                        _wechat_group_stable_room_scope(msg)
+                    )
+            except Exception as e:
+                logger.debug(
+                    "[wechat_group] sticker archive semantic update skipped: {}".format(
+                        type(e).__name__
+                    )
+                )
+        return "[sticker] {}".format(description)
 
     @staticmethod
     def _build_image_reply_content() -> str:
@@ -2824,10 +2896,20 @@ class WechatGroupChannel(ChatChannel):
         if msg.ctype == ContextType.IMAGE:
             if not conf().get("wechat_group_free_reply_image_understanding_enabled", False):
                 return
-            content = self._build_image_reply_content()
             context_type = ContextType.TEXT
-            image_understanding_triggered = True
-        trigger_source = "image_message" if msg.ctype == ContextType.IMAGE else "free_reply"
+            if str(getattr(msg, "message_type", "") or "").lower() == "sticker":
+                content = str(task.get("text") or "").strip()
+                if not content:
+                    return
+            else:
+                content = self._build_image_reply_content()
+                image_understanding_triggered = True
+        trigger_source = (
+            "image_message"
+            if msg.ctype == ContextType.IMAGE
+            and str(getattr(msg, "message_type", "") or "").lower() != "sticker"
+            else "free_reply"
+        )
         reply_mode = str((llm_decision or {}).get("reply_mode") or "")
         context_kwargs = {
             "isgroup": True,

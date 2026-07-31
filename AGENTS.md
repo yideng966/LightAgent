@@ -540,8 +540,10 @@ messages:
 识图触发规则：
 
 - 当群内直接发送图片并触发机器人回复时，`WechatGroupChannel` 只负责把本轮转换为文本回复上下文并进入 `_compose_context()`；当前图片由 `WechatGroupMultimodalContextService` 作为 `current_image` 优先生成视觉摘要并注入 `<wechat-group-multimodal>`。
+- 普通未 @ 表情包不得凭媒体类型直接获得自由回复分数。仅在总图片理解与自由回复图片理解都开启时，通道才复用表情包 `vision_label()` 生成受约束的短语义，写入归档 `metadata.media_semantic_text` 和可更新的素材描述，并把 `[sticker] <语义>` 作为普通文本交给既有本地规则、Scorer、兼容 Judge 与 worker；语义生成失败或规则未放行时必须静默。worker 放行后沿用该语义作为当前用户内容，不得再次把它改成“请解读图片”的确定性请求。
+- 归档媒体语义只允许通过结构化 `media_semantic_text` 投影到 recent transcript、V2 timeline 和自由回复安全上下文；投影必须拒绝 XML、URL、本机绝对路径和微信协议字段。原始媒体文本、`media_path` 和文件名不得作为语义回退。
 - Wechaty 对图片或贴纸上报的 `message.text()` 可能是含 `aeskey`、`cdnthumburl`、`hevc_mid_size` 等字段的传输层 XML；该原文只允许用于协议处理和归档，不得作为 `context.content`、`wechat_group_user_content` 或 Agent 会话用户消息。图片当前轮用户内容必须使用显式语义文本，视觉事实只来自统一多模态摘要。
-- 微信群表情包素材的 `description` 不得持久化传输层 XML、纯数字消息 ID 或长哈希文件名；无法同步生成语义时使用安全占位描述。历史素材批量生成语义必须复用现有 `Vision`，执行前备份 SQLite，逐条条件更新且失败项保持原值以支持续跑；GIF 应先转换为静态多帧联系图，避免兼容接口直接解析动画失败。
+- 微信群表情包素材的 `description` 不得持久化传输层 XML、纯数字消息 ID 或长哈希文件名；自由回复图片理解未启用或实时语义生成失败时使用安全占位描述。历史素材批量生成语义必须复用现有 `Vision`，执行前备份 SQLite，逐条条件更新且失败项保持原值以支持续跑；GIF 应先转换为静态多帧联系图，避免兼容接口直接解析动画失败。
 - `wechat_group_sticker_send` 成功后只发送表情包媒体；即使 Agent 最终文本包含文件名或占位说明，也不得作为 `text_content` 先发。该规则不影响普通图片或文件的显式图文回复。
 - 上述边界同样适用于引用消息、recent transcript、焦点栈、画像 LLM 提取及贴纸 Agent 工具；即使媒体下载失败或既有数据库已保存污染内容，媒体消息也必须投影为语义占位符，不能回退注入原始 `text` 或 XML。历史归档可能把图片/贴纸 XML 误标为 `message_type = text`，模型边界不得只信任类型字段，还必须识别正文中的微信媒体传输载荷。
 - 最近图片识别只处理文本消息，且必须直接触发机器人回复：`is_at = true` 或 `is_quote_self = true`。未 @ 机器人、未引用机器人回复的普通文本，不会直接进入最近图片识别链路，而是按自由回复或普通文本逻辑处理。

@@ -16,6 +16,7 @@ _TRANSPORT_FIELD_MARKERS = (
     "encrypturl=",
 )
 _TRANSPORT_FIELD_NAMES = frozenset(marker[:-1] for marker in _TRANSPORT_FIELD_MARKERS)
+MEDIA_SEMANTIC_TEXT_KEY = "media_semantic_text"
 
 
 def detect_wechat_transport_message_type(value: Any) -> str:
@@ -49,3 +50,32 @@ def project_wechat_message_type(message_type: Any, text: Any = "") -> str:
     if detected:
         return detected
     return str(message_type or "unknown").strip().lower() or "unknown"
+
+
+def project_wechat_media_semantic_text(
+    message_type: Any,
+    text: Any = "",
+    metadata: Any = None,
+) -> str:
+    """只投影归档媒体消息中显式保存且可安全进入提示词的语义。"""
+    projected_type = project_wechat_message_type(message_type, text)
+    if projected_type in ("text", "unknown") or not isinstance(metadata, dict):
+        return ""
+    semantic = re.sub(
+        r"\s+",
+        " ",
+        str(metadata.get(MEDIA_SEMANTIC_TEXT_KEY) or "").strip(),
+    )
+    lowered = semantic.lower()
+    if (
+        not semantic
+        or len(semantic) > 120
+        or "<" in semantic
+        or ">" in semantic
+        or "://" in semantic
+        or semantic.startswith(("/", "\\"))
+        or re.search(r"(?:^|\s)[a-zA-Z]:[\\/]", semantic)
+        or any(marker in lowered for marker in _TRANSPORT_FIELD_MARKERS)
+    ):
+        return ""
+    return "[{}: {}]".format(projected_type, semantic)

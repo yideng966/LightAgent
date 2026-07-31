@@ -62,6 +62,29 @@ class WechatGroupMessageTest(unittest.TestCase):
         self.assertTrue(msg.my_msg)
         self.assertFalse(msg.is_at)
 
+    def test_parse_sticker_keeps_media_type_and_image_context(self):
+        raw = {
+            "type": "message",
+            "message_id": "msg-sticker",
+            "timestamp": int(time.time()),
+            "room_id": "room@@abc",
+            "room_name": "测试群",
+            "sender_id": "wxid_alice",
+            "sender_name": "Alice",
+            "self_id": "wxid_bot",
+            "self_name": "LightBot",
+            "text": '<msg><emoji aeskey="masked" cdnurl="masked" /></msg>',
+            "message_type": "sticker",
+            "file_path": "D:/tmp/sticker.gif",
+        }
+
+        msg = WechatGroupMessage(parse_sidecar_event(raw))
+
+        self.assertEqual("sticker", msg.message_type)
+        self.assertEqual(ContextType.IMAGE, msg.ctype)
+        self.assertEqual("D:/tmp/sticker.gif", msg.content)
+        self.assertFalse(msg.is_at)
+
     def test_parse_quote_self_message_metadata(self):
         raw = {
             "type": "message",

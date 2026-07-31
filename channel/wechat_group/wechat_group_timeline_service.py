@@ -10,7 +10,10 @@ from channel.wechat_group.wechat_group_context import (
     is_wechat_group_transport_payload,
     sanitize_wechat_group_prompt_text,
 )
-from channel.wechat_group.wechat_group_transport import project_wechat_message_type
+from channel.wechat_group.wechat_group_transport import (
+    project_wechat_media_semantic_text,
+    project_wechat_message_type,
+)
 
 
 @dataclass(frozen=True)
@@ -181,7 +184,15 @@ class WechatGroupTimelineService:
             row.get("message_type") or "text",
             raw_text,
         )
-        if is_wechat_group_transport_payload(raw_text):
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+        semantic_text = project_wechat_media_semantic_text(
+            msg_type,
+            raw_text,
+            metadata,
+        )
+        if semantic_text:
+            safe_text = semantic_text
+        elif is_wechat_group_transport_payload(raw_text):
             safe_text = "[media message]"
         elif msg_type != "text":
             safe_text = "[{} message]".format(msg_type)
@@ -190,7 +201,6 @@ class WechatGroupTimelineService:
         if not safe_text:
             return None
 
-        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
         quote = metadata.get("quote") if isinstance(metadata.get("quote"), dict) else {}
         quote_actor = sanitize_wechat_group_prompt_text(
             quote.get("sender_name") or quote.get("display_name") or "",

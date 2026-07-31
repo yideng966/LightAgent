@@ -34,6 +34,12 @@ WECHAT_IMAGE_TRANSPORT_XML = """<?xml version="1.0"?>
 </msg>
 """
 
+WECHAT_STICKER_TRANSPORT_XML = """<?xml version="1.0"?>
+<msg>
+  <emoji aeskey="masked" cdnurl="masked" md5="masked" />
+</msg>
+"""
+
 TEST_IMAGE_UNDERSTANDING_PROMPT = (
     resolve_wechat_group_image_understanding_prompt("Describe this image")
 )
@@ -376,6 +382,31 @@ class WechatGroupChannelTest(unittest.TestCase):
 
             self.assertEqual(1, archive.count_room_inbound_after_cursor("wgr_a", before))
             self.assertEqual(0, archive.count_room_inbound_after_cursor("wgr_b", before + 1))
+
+    def test_archive_updates_sticker_semantic_text_without_replacing_metadata(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = WechatGroupArchive(os.path.join(tmp, "archive.db"))
+            archive.record_message(
+                message_id="sticker-1",
+                room_id="room@@a",
+                message_type="sticker",
+                text=WECHAT_STICKER_TRANSPORT_XML,
+                metadata={"at_list": ["wxid_bot"]},
+                stable_room_id="wgr_a",
+            )
+
+            updated = archive.update_message_media_semantic_text(
+                "sticker-1",
+                "小猫捂脸表示无奈",
+            )
+
+            row = archive.get_message_by_id("wgr_a", "sticker-1")
+            self.assertTrue(updated)
+            self.assertEqual(["wxid_bot"], row["metadata"]["at_list"])
+            self.assertEqual(
+                "小猫捂脸表示无奈",
+                row["metadata"]["media_semantic_text"],
+            )
 
     def test_channel_does_not_keep_legacy_image_understanding_builders(self):
         from channel.wechat_group.wechat_group_channel import WechatGroupChannel
@@ -3549,6 +3580,111 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertTrue(task["local_decision"]["triggered"])
         self.assertIn("media_payload_allowed", task["local_decision"]["reasons"])
 
+    def test_non_at_sticker_uses_semantic_text_without_automatic_media_score(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["group_name_white_list"] = []
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_activity_level"] = "normal"
+        conf()["wechat_group_free_reply_scorer_enabled"] = False
+        conf()["wechat_group_free_reply_llm_judge_enabled"] = False
+        conf()["wechat_group_free_reply_image_understanding_enabled"] = True
+        archive = Mock(get_recent_messages=Mock(return_value=[]))
+        archive.update_message_media_semantic_text.return_value = True
+        channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+        channel.produce = Mock()
+        channel.free_reply_worker = Mock(submit=Mock(return_value=True))
+        channel._ensure_free_reply_worker_started = Mock()
+        msg = Mock(
+            ctype=ContextType.IMAGE,
+            content="D:/tmp/sticker.gif",
+            text=WECHAT_STICKER_TRANSPORT_XML,
+            from_user_id="room@@abc",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            create_time=100000,
+            msg_id="msg-sticker-semantic",
+            message_type="sticker",
+            media_path="D:/tmp/sticker.gif",
+            my_msg=False,
+        )
+
+        with patch(
+            "channel.wechat_group.wechat_group_channel.vision_label",
+            return_value="小猫捂脸表示无奈",
+        ) as label:
+            channel.handle_text(msg)
+
+        label.assert_called_once_with("D:/tmp/sticker.gif")
+        archive.update_message_media_semantic_text.assert_called_once_with(
+            "msg-sticker-semantic",
+            "小猫捂脸表示无奈",
+        )
+        channel.free_reply_worker.submit.assert_not_called()
+        decision = channel.free_reply_state.last_decision()
+        self.assertFalse(decision["triggered"])
+        self.assertIn("below_threshold", decision["suppressions"])
+        self.assertNotIn("media_payload", decision["suppressions"])
+        self.assertNotIn("media_payload_allowed", decision["reasons"])
+        self.assertEqual("[sticker] 小猫捂脸表示无奈", decision["text_preview"])
+
+    def test_non_at_sticker_can_queue_only_when_existing_text_rules_match(self):
+        conf()["wechat_group_room_ids"] = ["room@@abc"]
+        conf()["group_name_white_list"] = []
+        conf()["wechat_group_free_reply_enabled"] = True
+        conf()["wechat_group_free_reply_room_ids"] = ["room@@abc"]
+        conf()["wechat_group_free_reply_activity_level"] = "crazy"
+        conf()["wechat_group_free_reply_scorer_enabled"] = False
+        conf()["wechat_group_free_reply_llm_judge_enabled"] = False
+        conf()["wechat_group_free_reply_image_understanding_enabled"] = True
+        archive = Mock(get_recent_messages=Mock(return_value=[]))
+        channel = WechatGroupChannel(client=FakeClient(), archive=archive)
+        channel.produce = Mock()
+        channel.free_reply_worker = Mock(submit=Mock(return_value=True))
+        channel._ensure_free_reply_worker_started = Mock()
+        msg = Mock(
+            ctype=ContextType.IMAGE,
+            content="D:/tmp/sticker.gif",
+            text=WECHAT_STICKER_TRANSPORT_XML,
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            create_time=100000,
+            msg_id="msg-sticker-banter",
+            message_type="sticker",
+            media_path="D:/tmp/sticker.gif",
+            my_msg=False,
+        )
+
+        with patch(
+            "channel.wechat_group.wechat_group_channel.vision_label",
+            return_value="笑死，小猫捂脸",
+        ):
+            channel.handle_text(msg)
+
+        channel._ensure_free_reply_worker_started.assert_called_once()
+        channel.free_reply_worker.submit.assert_called_once()
+        task = channel.free_reply_worker.submit.call_args.args[0]
+        self.assertEqual("[sticker] 笑死，小猫捂脸", task["text"])
+        self.assertIn("banter_opportunity", task["local_decision"]["reasons"])
+        self.assertNotIn("media_payload_allowed", task["local_decision"]["reasons"])
+        self.assertNotIn("D:/tmp/sticker.gif", task["text"])
+
     def test_non_at_image_free_reply_does_not_treat_windows_media_path_as_sensitive(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
         conf()["group_name_white_list"] = []
@@ -4419,6 +4555,56 @@ class WechatGroupChannelTest(unittest.TestCase):
         self.assertNotIn("D:/tmp/cat.jpg", context.content)
         for transport_fragment in ("<?xml", "<img", "hevc_mid_size", "aeskey", "cdnthumburl"):
             self.assertNotIn(transport_fragment, context.content)
+
+    def test_worker_approved_sticker_uses_semantic_text_as_free_reply_context(self):
+        conf()["wechat_group_free_reply_image_understanding_enabled"] = True
+        channel = WechatGroupChannel(client=FakeClient())
+        channel.produce = Mock()
+        msg = Mock(
+            ctype=ContextType.IMAGE,
+            content="D:/tmp/sticker.gif",
+            text=WECHAT_STICKER_TRANSPORT_XML,
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            is_at=False,
+            message_type="sticker",
+            media_path="D:/tmp/sticker.gif",
+            wechat_group_media_semantic_text="小猫捂脸表示无奈",
+        )
+        context = {"receiver": "room@@abc", "msg": msg}
+        channel._compose_context = Mock(return_value=context)
+        task = {
+            "msg": msg,
+            "text": "[sticker] 小猫捂脸表示无奈",
+            "local_decision": {"triggered": True, "score": 35},
+        }
+
+        with patch(
+            "agent.tools.vision.vision.Vision.execute",
+        ) as execute:
+            channel._submit_free_reply_after_judge(
+                task,
+                {"approved": True, "confidence": 0.9},
+            )
+
+        execute.assert_not_called()
+        channel._compose_context.assert_called_once_with(
+            ContextType.TEXT,
+            "[sticker] 小猫捂脸表示无奈",
+            isgroup=True,
+            msg=msg,
+            wechat_group_force_reply=True,
+            wechat_group_is_free_reply=True,
+            wechat_group_trigger_source="free_reply",
+            wechat_group_free_reply_mode="",
+            wechat_group_free_reply_decision={"triggered": True, "score": 35},
+            wechat_group_free_reply_llm_decision={"approved": True, "confidence": 0.9},
+        )
+        self.assertTrue(context["wechat_group_free_reply_triggered"])
+        self.assertTrue(context["suppress_mention"])
+        self.assertNotIn("wechat_group_image_understanding_triggered", context)
 
     def test_worker_approved_text_free_reply_injects_recent_image_via_global_multimodal_context(self):
         conf()["wechat_group_room_ids"] = ["room@@abc"]
