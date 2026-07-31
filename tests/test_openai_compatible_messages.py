@@ -73,7 +73,7 @@ class TestOpenAICompatibleMessageConversion(unittest.TestCase):
         self.assertNotIn("reasoning_effort", request_params)
         self.assertNotIn("response_format", request_params)
 
-    def test_custom_wechat_request_forwards_disabled_thinking_to_wire_payload(self):
+    def test_custom_request_forwards_thinking_control_to_wire_payload(self):
         bot = OpenAICompatibleBot()
         bot.get_api_config = Mock(return_value={
             "api_key": "test-key",
@@ -84,15 +84,17 @@ class TestOpenAICompatibleMessageConversion(unittest.TestCase):
             "choices": [{"message": {"content": "answer"}}],
         })
 
-        bot.call_with_tools(
-            [{"role": "user", "content": "hello"}],
-            provider_type="custom:provider01",
-            channel_type="wechat_group",
-            thinking={"type": "disabled"},
-        )
+        for state in ("enabled", "disabled"):
+            with self.subTest(state=state):
+                bot.call_with_tools(
+                    [{"role": "user", "content": "hello"}],
+                    provider_type="custom:provider01",
+                    channel_type="wechat_group",
+                    thinking={"type": state},
+                )
 
-        request_params = bot._handle_sync_response.call_args.args[0]
-        self.assertEqual({"type": "disabled"}, request_params["thinking"])
+                request_params = bot._handle_sync_response.call_args.args[0]
+                self.assertEqual({"type": state}, request_params["thinking"])
 
     def test_non_custom_provider_does_not_receive_generic_thinking_field(self):
         bot = OpenAICompatibleBot()

@@ -11,10 +11,12 @@ import threading
 import time
 import types
 from collections import OrderedDict
+from html.parser import HTMLParser
 from typing import Optional, List
 from uuid import uuid4
 
 from agent.protocol import (
+    AGENT_FINISH_TOOL_NAME,
     Agent,
     AgentCancelledError,
     LLMModel,
@@ -37,8 +39,37 @@ from models.openai_compatible_bot import OpenAICompatibleBot
 _WECHAT_GROUP_FINAL_ONLY_PROMPT = """
 这是即时通讯群聊请求。不要输出、解释或复述内部分析、思考步骤或回答计划，只输出面向用户的最终答复。
 需要调用工具时只返回原生 tool_calls，不要先输出过程说明，也不要把 tool_calls 写成文本标签。
-不需要继续调用工具时，必须把唯一可发送正文放在 <final_response> 与 </final_response> 之间；标签外不得放置面向用户的正文。
-""".strip()
+可以直接回答时输出纯文本最终答复，不要添加 XML、JSON、send、message、analysis 或 thinking 标签。
+工具执行后，如果工具列表中出现 `{finish_tool}`：信息充分时必须调用它提交完整、自包含的最终正文；信息不足时继续调用所需工具，不要输出“让我继续看看”等进度说明。
+""".strip().format(finish_tool=AGENT_FINISH_TOOL_NAME)
+
+
+class _WechatSendAttributeParser(HTMLParser):
+    """只解析兼容 `<send message="...">` 所需的确定性属性。"""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.start_count = 0
+        self.end_count = 0
+        self.message = None
+
+    def handle_starttag(self, tag, attrs):
+        if str(tag or "").lower() != "send":
+            return
+        self.start_count += 1
+        if self.start_count == 1:
+            values = {str(key or "").lower(): value for key, value in attrs}
+            self.message = values.get("message")
+
+    def handle_startendtag(self, tag, attrs):
+        if str(tag or "").lower() != "send":
+            return
+        self.handle_starttag(tag, attrs)
+        self.end_count += 1
+
+    def handle_endtag(self, tag):
+        if str(tag or "").lower() == "send":
+            self.end_count += 1
 
 
 def add_openai_compatible_support(bot_instance):
@@ -284,27 +315,6 @@ class TextModelRouter(LLMModel):
         "prohibited",
         "safety",
     }
-    _WECHAT_GROUP_PROTOCOL_MARKERS = (
-        "</arg_value>",
-        "<function_calls_output",
-        "</function_calls_output>",
-        "<wechat-sticker-copied",
-        "</wechat-sticker-copied>",
-        "<tool_calls",
-        "</tool_calls>",
-    )
-    _WECHAT_GROUP_FINAL_PROTOCOL_TOKENS = (
-        "<final_response>",
-        "</final_response>",
-        "<send>",
-        "</send>",
-        "<message>",
-        "</message>",
-        "<think>",
-        "</think>",
-        "<thinking>",
-        "</thinking>",
-    )
     _WECHAT_GROUP_MAX_BUFFERED_CHUNKS = 8192
 
     def __init__(self, bridge: Bridge, bot_type: str = "chat", failover_state=None):
@@ -613,7 +623,7 @@ class TextModelRouter(LLMModel):
 
         request_disables_thinking = request_options.get("reasoning_effort") == "none"
         thinking_enabled = bool(conf().get("enable_thinking", False))
-        if request_disables_thinking or channel_type == const.WECHAT_GROUP:
+        if request_disables_thinking:
             thinking_enabled = False
         kwargs['thinking'] = (
             {"type": "enabled"} if thinking_enabled
@@ -971,6 +981,66 @@ class TextModelRouter(LLMModel):
             return None, "malformed {} protocol block".format(open_tag)
         return text[start + len(open_tag):end], ""
 
+    @staticmethod
+    def _single_send_attribute_message(text):
+        parser = _WechatSendAttributeParser()
+        try:
+            parser.feed(str(text or ""))
+            parser.close()
+        except Exception:
+            return None, "malformed send attribute protocol"
+        if parser.start_count == 0 and parser.end_count == 0:
+            return None, ""
+        if parser.start_count != 1 or parser.end_count != 1:
+            return None, "malformed send attribute protocol"
+        if not isinstance(parser.message, str) or not parser.message.strip():
+            return None, "send attribute protocol requires string message"
+        return parser.message.strip(), ""
+
+    @staticmethod
+    def _strip_wechat_group_protocol_residue(content):
+        """从已缓冲候选中移除确定性的 Provider 控制块和标签。"""
+        result = str(content or "")
+        block_tags = {
+            "analysis",
+            "arg_value",
+            "function_calls",
+            "function_calls_output",
+            "think",
+            "thinking",
+            "tool_calls",
+            "wechat-sticker-copied",
+        }
+        tag_pattern = re.compile(
+            r"<\s*(/?)\s*(analysis|arg_value|function_calls(?:_output)?|"
+            r"think|thinking|tool_calls|wechat-sticker-copied|s)\b[^>]*>",
+            flags=re.I,
+        )
+        visible_parts = []
+        open_blocks = []
+        cursor = 0
+        for match in tag_pattern.finditer(result):
+            if not open_blocks:
+                visible_parts.append(result[cursor:match.start()])
+            tag_name = match.group(2).lower()
+            is_closing = bool(match.group(1))
+            is_self_closing = match.group(0).rstrip().endswith("/>")
+            if tag_name in block_tags:
+                if is_closing:
+                    if tag_name in open_blocks:
+                        while open_blocks:
+                            if open_blocks.pop() == tag_name:
+                                break
+                elif not is_self_closing:
+                    open_blocks.append(tag_name)
+            cursor = match.end()
+        if not open_blocks:
+            visible_parts.append(result[cursor:])
+        result = "".join(visible_parts)
+        for marker in ("<|endoftext|>", "<|end_of_text|>", "<|eot_id|>"):
+            result = result.replace(marker, "")
+        return result.strip()
+
     @classmethod
     def _extract_wechat_group_final_content(cls, content):
         final_payload, final_error = cls._single_protocol_block(
@@ -985,15 +1055,29 @@ class TextModelRouter(LLMModel):
             "<send>",
             "</send>",
         )
+        send_attribute_message = None
+        if send_payload is None:
+            send_attribute_message, attribute_error = (
+                cls._single_send_attribute_message(content)
+            )
+            if send_attribute_message is not None:
+                send_error = ""
+            elif attribute_error and not send_error:
+                send_error = attribute_error
         if send_error:
             return "", send_error, ""
-        if final_payload is not None and send_payload is not None:
+        if final_payload is not None and (
+            send_payload is not None or send_attribute_message is not None
+        ):
             return "", "multiple final response protocol blocks", ""
 
         protocol_kind = ""
         if final_payload is not None:
             final_text = str(final_payload).strip()
             protocol_kind = "final_response"
+        elif send_attribute_message is not None:
+            final_text = send_attribute_message
+            protocol_kind = "send_attribute"
         elif send_payload is not None:
             message_payload, message_error = cls._single_protocol_block(
                 send_payload,
@@ -1021,19 +1105,15 @@ class TextModelRouter(LLMModel):
                 final_text = message.strip()
                 protocol_kind = "send_json"
         else:
-            lowered = content.lower()
-            if any(token in lowered for token in cls._WECHAT_GROUP_FINAL_PROTOCOL_TOKENS):
-                return "", "incomplete final response protocol", ""
-            return "", "missing final response envelope", ""
+            final_text = str(content or "").strip()
+            protocol_kind = "plain_text"
 
+        normalized_text = cls._strip_wechat_group_protocol_residue(final_text)
+        if normalized_text != final_text:
+            protocol_kind = "{}_normalized".format(protocol_kind)
+        final_text = normalized_text
         if not final_text:
             return "", "empty final response", ""
-        lowered_final = final_text.lower()
-        for marker in cls._WECHAT_GROUP_PROTOCOL_MARKERS:
-            if marker in lowered_final:
-                return "", "reserved provider protocol marker: {}".format(marker), ""
-        if any(token in lowered_final for token in cls._WECHAT_GROUP_FINAL_PROTOCOL_TOKENS):
-            return "", "nested final response protocol", ""
         return final_text, "", protocol_kind
 
     @staticmethod
@@ -1110,6 +1190,8 @@ class TextModelRouter(LLMModel):
 
         if not content.strip():
             return "empty response", "", [], ""
+        if bool(getattr(request, "require_finish_tool", False)):
+            return "missing required finish tool call", "", [], ""
         final_text, protocol_reason, protocol_kind = (
             cls._extract_wechat_group_final_content(content)
         )
@@ -3315,7 +3397,7 @@ class AgentBridge:
             thinking_enabled = False
 
         messages_to_store = new_messages
-        if not thinking_enabled:
+        if not thinking_enabled or channel_type == const.WECHAT_GROUP:
             messages_to_store = self._strip_thinking_blocks(new_messages)
         if thread_id:
             messages_to_store = self._thread_text_only_messages(messages_to_store)

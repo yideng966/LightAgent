@@ -7,6 +7,32 @@ import copy
 from typing import Any, Dict, List, Optional
 
 
+AGENT_FINISH_TOOL_NAME = "lightagent_finish"
+
+
+def build_agent_finish_tool_schema() -> Dict[str, Any]:
+    """构造工具执行后用于提交最终正文的内部协议工具。"""
+    return {
+        "name": AGENT_FINISH_TOOL_NAME,
+        "description": (
+            "Finish the current request after tool use. Call this only when the "
+            "answer is complete and self-contained. If more information is needed, "
+            "call the appropriate tool instead of reporting progress."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The complete final answer to send to the user.",
+                },
+            },
+            "required": ["message"],
+            "additionalProperties": False,
+        },
+    }
+
+
 class LLMRequest:
     """Request model for LLM operations"""
     

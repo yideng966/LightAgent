@@ -10,7 +10,12 @@ import time
 from typing import List, Dict, Any, Optional, Callable, Tuple
 
 from agent.protocol.cancel import AgentCancelledError
-from agent.protocol.models import LLMRequestSourceSnapshot, LLMModel
+from agent.protocol.models import (
+    AGENT_FINISH_TOOL_NAME,
+    LLMRequestSourceSnapshot,
+    LLMModel,
+    build_agent_finish_tool_schema,
+)
 from agent.protocol.message_utils import sanitize_claude_messages, compress_turn_to_text_only
 from agent.tools.base_tool import BaseTool, ToolResult
 from common.log import logger
@@ -772,6 +777,7 @@ class AgentStreamExecutor:
 
         final_response = ""
         turn = 0
+        require_finish_tool = False
 
         cancelled = False
         try:
@@ -785,7 +791,10 @@ class AgentStreamExecutor:
                 self._emit_event("turn_start", {"turn": turn})
 
                 # Call LLM (enable retry_on_empty for better reliability)
-                assistant_msg, tool_calls = self._call_llm_stream(retry_on_empty=True)
+                assistant_msg, tool_calls = self._call_llm_stream(
+                    retry_on_empty=True,
+                    require_finish_tool=require_finish_tool,
+                )
                 final_response = assistant_msg
 
                 # No tool calls, end loop
@@ -812,7 +821,10 @@ class AgentStreamExecutor:
                             })
                             
                             # 再调用一次 LLM
-                            assistant_msg, tool_calls = self._call_llm_stream(retry_on_empty=False)
+                            assistant_msg, tool_calls = self._call_llm_stream(
+                                retry_on_empty=False,
+                                require_finish_tool=require_finish_tool,
+                            )
                             final_response = assistant_msg
                             
                             # Remove the injected prompt from history so it doesn't
@@ -1023,6 +1035,8 @@ class AgentStreamExecutor:
                     "has_tool_calls": True,
                     "tool_count": len(tool_calls)
                 })
+                if self._current_channel_type() == "wechat_group":
+                    require_finish_tool = True
 
             if turn >= self.max_turns:
                 logger.warning(f"⚠️  Reached max decision step limit: {self.max_turns}")
@@ -1044,7 +1058,10 @@ class AgentStreamExecutor:
                 
                 # Call LLM one more time to get summary (without retry to avoid loops)
                 try:
-                    summary_response, summary_tools = self._call_llm_stream(retry_on_empty=False)
+                    summary_response, summary_tools = self._call_llm_stream(
+                        retry_on_empty=False,
+                        require_finish_tool=False,
+                    )
                     if summary_response:
                         final_response = summary_response
                         logger.info(f"💭 Summary: {summary_response[:150]}{'...' if len(summary_response) > 150 else ''}")
@@ -1140,7 +1157,8 @@ class AgentStreamExecutor:
 
     def _call_llm_stream(self, retry_on_empty=True, retry_count=0, max_retries=3,
                          _overflow_retry: bool = False,
-                         _tools_disabled_retry: bool = False) -> Tuple[str, List[Dict]]:
+                         _tools_disabled_retry: bool = False,
+                         require_finish_tool: bool = False) -> Tuple[str, List[Dict]]:
         """
         Call LLM with streaming and automatic retry on errors
         
@@ -1150,6 +1168,8 @@ class AgentStreamExecutor:
             max_retries: Maximum number of retries for API errors
             _overflow_retry: Internal flag indicating this is a retry after context overflow
             _tools_disabled_retry: Internal flag indicating this is a retry without tools
+            require_finish_tool: Require the internal native finish tool after a
+                WeChat group tool round instead of accepting plain progress text
         
         Returns:
             (response_text, tool_calls)
@@ -1193,6 +1213,14 @@ class AgentStreamExecutor:
                     "description": tool.description,
                     "input_schema": input_schema,
                 })
+        if require_finish_tool and self._current_channel_type() == "wechat_group":
+            tools_schema = list(tools_schema or [])
+            if not any(
+                str(tool.get("name") or "") == AGENT_FINISH_TOOL_NAME
+                for tool in tools_schema
+                if isinstance(tool, dict)
+            ):
+                tools_schema.append(build_agent_finish_tool_schema())
 
         logger.info(
             "[Agent] LLM request: "
@@ -1216,6 +1244,10 @@ class AgentStreamExecutor:
             system=self.system_prompt,
             source_metadata=source_metadata,
             provider_continuation_context=self._provider_continuation_context(),
+            require_finish_tool=bool(
+                require_finish_tool
+                and self._current_channel_type() == "wechat_group"
+            ),
         )
         request = request_source.build_request()
         request._source_snapshot = request_source
@@ -1443,7 +1475,8 @@ class AgentStreamExecutor:
                             retry_on_empty=retry_on_empty,
                             retry_count=retry_count,
                             max_retries=max_retries,
-                            _overflow_retry=True
+                            _overflow_retry=True,
+                            require_finish_tool=require_finish_tool,
                         )
 
                 # Aggressive trim didn't help or this is a message format error
@@ -1465,6 +1498,7 @@ class AgentStreamExecutor:
             if (
                     tools_schema
                     and not _tools_disabled_retry
+                    and not require_finish_tool
                     and _is_upstream_object_parse_error(error_str_lower)):
                 logger.warning(
                     "[Agent] Upstream rejected tool-enabled stream with object parse error; "
@@ -1476,6 +1510,7 @@ class AgentStreamExecutor:
                     max_retries=max_retries,
                     _overflow_retry=_overflow_retry,
                     _tools_disabled_retry=True,
+                    require_finish_tool=require_finish_tool,
                 )
 
             # Check if error is rate limit (429)
@@ -1502,7 +1537,8 @@ class AgentStreamExecutor:
                 return self._call_llm_stream(
                     retry_on_empty=retry_on_empty, 
                     retry_count=retry_count + 1,
-                    max_retries=max_retries
+                    max_retries=max_retries,
+                    require_finish_tool=require_finish_tool,
                 )
             else:
                 if retry_count >= max_retries:
@@ -1551,6 +1587,25 @@ class AgentStreamExecutor:
                 "arguments": arguments
             })
 
+        finish_calls = [
+            tool_call
+            for tool_call in tool_calls
+            if tool_call.get("name") == AGENT_FINISH_TOOL_NAME
+        ]
+        if finish_calls:
+            if not require_finish_tool or len(tool_calls) != 1:
+                raise RuntimeError("invalid finish tool call")
+            message = (finish_calls[0].get("arguments") or {}).get("message")
+            if not isinstance(message, str) or not message.strip():
+                raise RuntimeError("finish tool requires a non-empty message")
+            full_content = message.strip()
+            tool_calls = []
+            logger.info("[Agent] accepted native finish tool response")
+        elif require_finish_tool and not tool_calls:
+            raise RuntimeError(
+                "model returned plain text after tool execution; finish tool required"
+            )
+
         if defer_message_updates and tool_calls:
             if full_content.strip():
                 logger.info(
@@ -1573,7 +1628,8 @@ class AgentStreamExecutor:
             return self._call_llm_stream(
                 retry_on_empty=False, 
                 retry_count=retry_count,
-                max_retries=max_retries
+                max_retries=max_retries,
+                require_finish_tool=require_finish_tool,
             )
 
         # Add assistant message to history (Claude format uses content blocks)

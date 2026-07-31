@@ -17,6 +17,7 @@ class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
     def setUp(self):
         self._original_config = {
             "conversation_persistence": conf().get("conversation_persistence"),
+            "enable_thinking": conf().get("enable_thinking"),
         }
         conf()["conversation_persistence"] = True
 
@@ -81,6 +82,32 @@ class AgentBridgeWechatGroupPersistenceTest(unittest.TestCase):
         self.assertEqual("final answer", result[1]["content"][0]["text"])
         self.assertNotIn("tool_use", str(result))
         self.assertNotIn("tool_result", str(result))
+
+    def test_wechat_group_persistence_drops_thinking_when_enabled(self):
+        conf()["enable_thinking"] = True
+        store = Mock()
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "问题"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "thinking", "thinking": "内部分析"},
+                    {"type": "text", "text": "最终答复"},
+                ],
+            },
+        ]
+
+        with patch("agent.memory.get_conversation_store", return_value=store):
+            persisted = self._bridge()._persist_messages(
+                "wechat_group:wgr_room:wgm_alice",
+                messages,
+                channel_type="wechat_group",
+            )
+
+        self.assertTrue(persisted)
+        stored_messages = store.append_messages.call_args.args[1]
+        self.assertNotIn("内部分析", str(stored_messages))
+        self.assertIn("最终答复", str(stored_messages))
 
     def test_thread_turn_is_staged_pending_and_hidden_from_restore(self):
         with tempfile.TemporaryDirectory() as tmpdir:

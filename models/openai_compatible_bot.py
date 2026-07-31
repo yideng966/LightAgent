@@ -118,16 +118,14 @@ class OpenAICompatibleBot:
                     if request_options.get(key) is not None:
                         request_params[key] = request_options[key]
 
-            # 自定义兼容端点按请求转发微信群禁思考控制；原生适配器和
-            # OpenAI 官方端点继续使用各自既有请求契约。
+            # 自定义兼容端点遵循统一思考开关；原生适配器和 OpenAI
+            # 官方端点继续使用各自既有请求契约。
             provider_type = str(kwargs.get("provider_type") or "")
-            channel_type = str(kwargs.get("channel_type") or "")
             thinking = kwargs.get("thinking")
             if (
-                channel_type == "wechat_group"
-                and provider_type.startswith("custom")
+                provider_type.startswith("custom")
                 and isinstance(thinking, dict)
-                and thinking.get("type") == "disabled"
+                and thinking.get("type") in ("enabled", "disabled")
             ):
                 request_params["thinking"] = dict(thinking)
             

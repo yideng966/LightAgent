@@ -6,6 +6,76 @@ import re
 from typing import Any
 
 
+def is_wechat_group_silent_control_text(text: Any) -> bool:
+    """识别模型输出的短小静默决策，避免把内部路由说明发到群里。"""
+    raw = re.sub(r"\s+", "", str(text or "")).strip()
+    if not raw:
+        return False
+
+    pairs = {"(": ")", "（": "）", "[": "]", "【": "】", "{": "}"}
+    wrapped = len(raw) >= 2 and pairs.get(raw[0]) == raw[-1]
+    if not wrapped:
+        return False
+    value = raw[1:-1].strip()
+    if not value or len(value) > 48:
+        return False
+
+    lowered = value.lower()
+    not_addressed = any(marker in lowered for marker in (
+        "没@我",
+        "没有@我",
+        "未@我",
+        "不是@我",
+        "不是在问我",
+        "不是问我",
+        "没在问我",
+        "没有在问我",
+        "不是对我说",
+        "不是在跟我说",
+        "不是跟我说",
+    ))
+    silent_action = any(marker in lowered for marker in (
+        "不插嘴",
+        "不用插嘴",
+        "无需插嘴",
+        "不接话",
+        "不用接话",
+        "无需接话",
+        "不回复",
+        "不用回复",
+        "无需回复",
+        "无需ai回复",
+        "不回应",
+        "不用回应",
+        "无需回应",
+        "保持安静",
+    ))
+    if not_addressed and silent_action:
+        return True
+
+    normalized = re.sub(r"[，,。.!！?？;；:：]", "", lowered)
+    if normalized in {
+        "不回复",
+        "不用回复",
+        "无需回复",
+        "无需ai回复",
+        "不回应",
+        "不用回应",
+        "无需回应",
+        "保持安静即可",
+    }:
+        return True
+    control_context = any(marker in lowered for marker in (
+        "群友之间",
+        "正常互动",
+        "正常交流",
+        "保持安静",
+        "ai回复",
+        "机器人回复",
+    ))
+    return silent_action and control_context
+
+
 def cleanup_wechat_group_reply_text(text: Any, max_chars: int = 800) -> str:
     value = str(text or "").strip()
     if not value:

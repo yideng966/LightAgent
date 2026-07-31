@@ -1561,18 +1561,26 @@ class WechatGroupChannelTest(unittest.TestCase):
         channel.produce.assert_called_once_with(context)
 
     def test_send_silent_reply_notice_is_not_sent_to_group(self):
-        conf()["wechat_group_free_reply_typing_delay_enabled"] = False
-        client = FakeClient()
-        channel = WechatGroupChannel(client=client)
-        context = {
-            "type": ContextType.TEXT,
-            "receiver": "room@@abc",
-            "msg": Mock(is_group=True, actual_user_id="wxid_alice"),
-        }
+        for text in (
+            "（没@我，不插嘴）",
+            "（这条是群友之间的对话，不是@我，无需接话）",
+            "（这是群友之间的正常互动，无需AI回复）",
+            "（无需回复，保持安静即可。）",
+            "（无需回复）",
+        ):
+            with self.subTest(text=text):
+                conf()["wechat_group_free_reply_typing_delay_enabled"] = False
+                client = FakeClient()
+                channel = WechatGroupChannel(client=client)
+                context = {
+                    "type": ContextType.TEXT,
+                    "receiver": "room@@abc",
+                    "msg": Mock(is_group=True, actual_user_id="wxid_alice"),
+                }
 
-        channel.send(Reply(ReplyType.TEXT, "（没@我，不插嘴）"), context)
+                channel.send(Reply(ReplyType.TEXT, text), context)
 
-        self.assertEqual([], client.commands)
+                self.assertEqual([], client.commands)
 
     def test_send_internal_non_reply_reason_is_not_sent_to_group(self):
         conf()["wechat_group_free_reply_typing_delay_enabled"] = False
@@ -1605,6 +1613,23 @@ class WechatGroupChannelTest(unittest.TestCase):
 
         self.assertEqual(
             [("send_text", "room@@abc", "这句话的意思是：没@我，不插嘴，表示机器人不会主动接话。", ["wxid_alice"])],
+            client.commands,
+        )
+
+    def test_send_unwrapped_silent_phrase_is_not_treated_as_internal_control(self):
+        conf()["wechat_group_free_reply_typing_delay_enabled"] = False
+        client = FakeClient()
+        channel = WechatGroupChannel(client=client)
+        context = {
+            "type": ContextType.TEXT,
+            "receiver": "room@@abc",
+            "msg": Mock(is_group=True, actual_user_id="wxid_alice"),
+        }
+
+        channel.send(Reply(ReplyType.TEXT, "小风说没@我，不插嘴"), context)
+
+        self.assertEqual(
+            [("send_text", "room@@abc", "小风说没@我，不插嘴", ["wxid_alice"])],
             client.commands,
         )
 

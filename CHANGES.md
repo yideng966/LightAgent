@@ -1,5 +1,33 @@
 # CHANGES
 
+## 2026-07-31
+
+### 选择性恢复微信群纯文本回复并收紧最终结果边界
+
+- 微信群不再强制模型输出 `<final_response>`，普通纯文本重新作为合法最终答复；仍兼容确定性提取 `<send><message>`、`<send message="...">` 和 JSON `send.message`，且不会读取或发送 Provider 路径、JSON `path` 等其他字段。
+- `</s>`、`</analysis>`、`</function_calls>`、空文本化 `<tool_calls>` 等已知控制块或标签残片改为在当前候选内清洗；清洗后仍有正文时直接接受主模型，不再因标签本身切换备用模型。
+- 工具执行后的最终答复新增内部 `lightagent_finish` 提交边界，模型只返回“让我继续看看”等进度正文时不会提前结束任务或发到群里。
+- 微信群思考开关恢复跟随 `enable_thinking`；自定义 OpenAI 兼容端点会把 `thinking=enabled/disabled` 真实传入请求，模型思考仍与群聊正文及持久化历史隔离。
+- 微信群发送与自由回复共用短小括号控制说明识别，整条被括号包裹的“无需接话”等内部静默判定不会发到群里，普通括号正文不受影响。
+
+关键文件：
+
+- `agent/protocol/models.py`
+- `agent/protocol/agent_stream.py`
+- `bridge/agent_bridge.py`
+- `models/openai_compatible_bot.py`
+- `channel/wechat_group/wechat_group_reply_cleanup.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_free_reply.py`
+- `plans/20260731_选择性回退微信群回复处理至2.1.18.md`
+- `AGENTS.md`
+
+验证记录：
+
+- 模型候选 38 项、Agent 流式/完成工具/OpenAI 兼容请求 19 项、微信群主通道 146 项、自由回复 45 项、V2 持久化 12 项均通过；`</s>`、`</analysis>`、`<send message="...">` 等真实残片样本确认只调用主模型，备用模型调用次数为 0。
+- 全量 Python 回归运行 1303 项，仅有未修改的 `tests.test_wechat_group_free_reply_judge` 中 2 个“立即追问”既有失败，另有 1 项条件跳过；该文件单独运行结果一致，本次未新增失败。
+- Python 编译与 `git diff --check` 通过；隔离数据目录下的本地 Web-only `python app.py` 在 `127.0.0.1:9954` 启动成功，`/` 与 `/chat` 均返回 HTTP 200，验收后进程、端口和临时目录已清理。
+
 ## 2026-07-30
 
 ### 修复微信群思考过程与协议标签泄漏
