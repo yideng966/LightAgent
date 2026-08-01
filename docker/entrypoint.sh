@@ -99,11 +99,12 @@ if [ "$(id -u)" = "0" ]; then
         /home/agent/lightagent \
         "$IMAGE_OUTPUT_DIR"
     exec su agent -s /bin/bash -c \
-        "cd $CHATGPT_ON_WECHAT_PREFIX && exec $CHATGPT_ON_WECHAT_EXEC"
+        "python /app/scripts/seed_project_knowledge.py --workspace /home/agent/lightagent --app-root /app && cd $CHATGPT_ON_WECHAT_PREFIX && exec $CHATGPT_ON_WECHAT_EXEC"
 fi
 
 # Fallback for images started directly as the agent user.
 prepare_runtime_dirs
+python /app/scripts/seed_project_knowledge.py --workspace /home/agent/lightagent --app-root /app
 cd "$CHATGPT_ON_WECHAT_PREFIX"
 exec $CHATGPT_ON_WECHAT_EXEC
 
