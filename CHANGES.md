@@ -2,6 +2,25 @@
 
 ## 2026-08-01
 
+### 发布 LightAgent 2.2.3
+
+- 将模型管理厂商目录获取、中文/英文模糊检索、备用模型选择和同厂商跨能力缓存整理为 `v2.2.3` 补丁版本。
+- 同步 `cli/VERSION` 与 `pyproject.toml` 为 `2.2.3`，新增同标签发行说明和中文发布计划。
+
+关键文件：
+
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.3.md`
+- `plans/20260801_发布2.2.3.md`
+- `CHANGES.md`
+
+验证记录：
+
+- `python -X utf8 scripts/validate_release_notes.py --tag v2.2.3 docs/releases/v2.2.3.md`：通过。
+- 发布说明与版本契约测试 11 项通过；模型目录、模型管理和移动端控制台定向回归 56 项通过。
+- `node --check channel/web/static/js/console.js` 与 `git diff --check`：通过。
+
 ### 模型管理支持获取厂商模型与模糊检索
 
 - 主模型、LLM Scorer、图像理解、图像生成、语音识别、语音合成和向量能力统一使用可编辑模型组合框，保留任意模型 ID 手工填写，并在字段右侧增加「获取模型」按钮。
