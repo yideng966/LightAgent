@@ -2,6 +2,28 @@
 
 ## 2026-08-01
 
+### 发布 LightAgent 2.2.4
+
+- 发布 GitHub Release 群通知详情增强：直接展示版本摘要与变更内容，并过滤安装命令和文档链接等尾部信息。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.4`，新增版本化发行说明和发布计划。
+- 保持现有配置、数据库和渠道协议不变，本版本不包含破坏性迁移。
+
+关键文件：
+
+- `AGENTS.md`
+- `CHANGES.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.4.md`
+- `plans/20260801_发布2.2.4.md`
+
+验证记录：
+
+- `python -X utf8 scripts/validate_release_notes.py --tag v2.2.4 docs/releases/v2.2.4.md`：通过。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- `python -X utf8 -m unittest tests.test_github_webhook_events tests.test_github_commit_webhook tests.test_scheduler_wechat_group_delivery`：43 项通过。
+- 两个版本来源均为 `2.2.4`，`git diff --check` 通过。
+
 ### 发布 LightAgent 2.2.3
 
 - 将模型管理厂商目录获取、中文/英文模糊检索、备用模型选择和同厂商跨能力缓存整理为 `v2.2.3` 补丁版本。
