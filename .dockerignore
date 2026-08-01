@@ -15,6 +15,7 @@ client_config.json
 venv*/
 desktop/
 docs/
+!docs/zh/
 plans/
 tests/
 docker/config/
