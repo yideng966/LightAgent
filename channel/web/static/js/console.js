@@ -2329,18 +2329,22 @@ function navigateTo(viewId) {
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebar-overlay');
+    const menuToggle = document.getElementById('menu-toggle');
     const isOpen = !sidebar.classList.contains('-translate-x-full');
     if (isOpen) {
         closeSidebar();
     } else {
         sidebar.classList.remove('-translate-x-full');
         overlay.classList.remove('hidden');
+        menuToggle.setAttribute('aria-expanded', 'true');
     }
 }
 
 function closeSidebar() {
     document.getElementById('sidebar').classList.add('-translate-x-full');
     document.getElementById('sidebar-overlay').classList.add('hidden');
+    const menuToggle = document.getElementById('menu-toggle');
+    if (menuToggle) menuToggle.setAttribute('aria-expanded', 'false');
 }
 
 document.querySelectorAll('.menu-group > button').forEach(btn => {
@@ -2357,6 +2361,7 @@ window.addEventListener('resize', () => {
     if (window.innerWidth >= 1024) {
         document.getElementById('sidebar').classList.remove('-translate-x-full');
         document.getElementById('sidebar-overlay').classList.add('hidden');
+        document.getElementById('menu-toggle').setAttribute('aria-expanded', 'false');
     } else {
         if (!document.getElementById('sidebar').classList.contains('-translate-x-full')) {
             closeSidebar();
@@ -18959,7 +18964,9 @@ function initApp() {
     }).catch(() => {
         document.getElementById('sidebar-version').textContent = 'LightAgent';
     });
-    chatInput.focus();
+    if (!_isMobileView()) {
+        chatInput.focus({ preventScroll: true });
+    }
 }
 
 // =====================================================================

@@ -274,6 +274,7 @@ docker push yideng966/lightagent:latest
 - 不顺手重构无关代码；发现无关问题时在回复里单独说明。
 - 用户要求修改 UI、页面、布局、交互或样式时，默认且仅修改 Web 控制台（`channel/web/chat.html`、`channel/web/static/js/console.js`、`channel/web/static/css/console.css` 等）；`desktop/` 已停止维护，不再承接 UI 需求。
 - Web 控制台开关使用绝对定位伪元素绘制滑块时，定位上下文必须放在开关轨道本身；`chat.html` 中的 `console.js` / `console.css` 地址不得预置查询参数，缓存时间戳统一由 `ChatHandler` 注入，避免形成重复查询串并继续加载旧资源。
+- Web 控制台移动端根布局必须使用带 `100vh` 回退的动态视口高度；登录初始化不得自动聚焦底部聊天输入框，避免 Android 浏览器把顶部导航带出可视区；侧边栏菜单按钮触控区不得小于 44 x 44 像素，并保持 `aria-expanded` 与抽屉状态一致。
 - 仅在新增或修改代码并提交/交付代码变更时，才同步更新根目录 `CHANGES.md`，记录本次修改日期、任务背景、关键改动文件和验证结果；纯文档、计划、规则、配置说明等非代码变更不更新 `CHANGES.md`。
 - 提交 Git 代码变更时，必须将根目录 `AGENTS.md` 与 `CHANGES.md` 纳入同一次提交范围；提交前检查两者状态，确保规则说明与变更记录不会遗漏。
 - 面向本项目的开发计划、迁移计划、实施方案和阶段性任务文档必须使用简体中文编写；如需引用英文 API、命令、路径或错误信息，保留原文即可。

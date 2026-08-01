@@ -17,6 +17,13 @@
 .dark ::-webkit-scrollbar-thumb { background: #475569; }
 .dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
 
+/* Keep the console inside the visible viewport when mobile browser chrome moves. */
+.console-viewport {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+}
+
 /* Generic Tooltip (via data-tooltip attribute) */
 [data-tooltip] {
     position: relative;

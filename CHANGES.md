@@ -2,6 +2,31 @@
 
 ## 2026-08-01
 
+### 修复 Android 手机 Web 控制台侧边栏入口不可见
+
+- Web 控制台根容器改用带 `100vh` 回退的 `100dvh` 动态视口高度，避免荣耀、华为等 Android 手机的底部浏览器栏挤压可视区域后把顶部导航带出屏幕。
+- 移动端登录完成后不再自动聚焦底部聊天输入框，桌面端继续自动聚焦；顶部菜单按钮扩大到 44 x 44 像素，并同步侧边栏展开状态供辅助技术读取。
+- 保持移动端侧边栏默认收起、桌面端固定展示及现有导航结构不变，不新增配置或接口。
+
+关键文件：
+
+- `AGENTS.md`
+- `channel/web/chat.html`
+- `channel/web/static/css/console.css`
+- `channel/web/static/js/console.js`
+- `tests/test_web_console_mobile.py`
+- `docs/zh/channels/web.mdx`
+- `docs/channels/web.mdx`
+- `plans/20260801_安卓手机侧边栏入口修复.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 新增 4 项移动端静态回归测试，修复前全部按预期失败，修复后全部通过。
+- `python -X utf8 -m unittest tests.test_web_console_mobile tests.test_wechat_group_web tests.test_wechat_group_memory_ui tests.test_knowledge_web`：135 项通过。
+- `node --check channel/web/static/js/console.js` 与 `git diff --check`：通过。
+- Playwright 按 iPhone 13 Pro、荣耀 Magic 7、华为 Mate 30 Pro 三种移动视口验证：顶栏、44 x 44 像素菜单按钮、动态高度、抽屉开关、遮罩关闭及缩短视口场景全部通过。
+
 ### 发布 LightAgent 2.2.1
 
 - 汇总发布四项个人微信群稳定性改进：图片与表情包入站分类、自由回复识图失败静默、Wechat4u 联系人同步重复告警合并，以及模型内部静默说明发送拦截。
