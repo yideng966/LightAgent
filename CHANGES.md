@@ -2,6 +2,27 @@
 
 ## 2026-08-01
 
+### 发布 LightAgent 2.2.2
+
+- 汇总发布两项交互修复：Android 移动端 Web 控制台顶部导航与侧边栏入口保持可见，以及微信群管理员门禁页面位置和静默拒绝行为修正。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.2`，新增版本化发行说明和发布计划。
+- 保持现有配置、数据结构和渠道协议不变，本版本不包含破坏性迁移。
+
+关键文件：
+
+- `CHANGES.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.2.md`
+- `plans/20260801_发布2.2.2.md`
+
+验证记录：
+
+- `python -X utf8 scripts/validate_release_notes.py --tag v2.2.2 docs/releases/v2.2.2.md`：通过。
+- 发布说明、版本与 Docker 发布契约测试：19 项通过；Web 移动端及微信群相关回归：275 项通过。
+- `python -X utf8 -m unittest discover -s tests`：共运行 1228 项，1224 项通过、1 项按条件跳过；3 项既有千帆文档测试因仓库已停止维护且不存在 `docs/ja/` 文件而报错，与本次改动无关。
+- `node --check channel/web/static/js/console.js` 与 `git diff --check`：通过。
+
 ### 修复微信群管理员门禁交互
 
 - Web 控制台“群聊 -> 群与管理员”展开或收起管理员门禁详情时保留当前滚动位置，不再异常跳到页面顶部。
