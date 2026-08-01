@@ -29,6 +29,65 @@ if "web" not in sys.modules:
 
 
 class TestModelsHandler(unittest.TestCase):
+    def test_fetch_provider_models_returns_normalized_catalog(self):
+        from channel.web.web_channel import ModelsHandler
+
+        local_config = {
+            "open_ai_api_key": "secret-key",
+            "bot_type": "openai",
+            "model": "gpt-5",
+        }
+        handler = ModelsHandler()
+        fetched = [{
+            "id": "gpt-5",
+            "label": "gpt-5",
+            "hint": "",
+            "capabilities": [],
+        }]
+
+        with patch("channel.web.web_channel.conf", return_value=local_config), \
+                patch("channel.web.model_catalog.ModelCatalogService.fetch", return_value=fetched) as fetch:
+            result = json.loads(handler._handle_fetch_provider_models({
+                "provider_id": "openai",
+                "capability": "chat",
+                "api_base": "https://attacker.invalid/v1",
+            }))
+
+        self.assertEqual("success", result["status"])
+        self.assertEqual("openai", result["provider_id"])
+        self.assertEqual("chat", result["capability"])
+        self.assertEqual(fetched, result["models"])
+        fetch.assert_called_once_with("openai")
+
+    def test_fetch_provider_models_rejects_provider_outside_capability(self):
+        from channel.web.web_channel import ModelsHandler
+
+        handler = ModelsHandler()
+        with patch("channel.web.web_channel.conf", return_value={}), \
+                patch("channel.web.model_catalog.ModelCatalogService.fetch") as fetch:
+            result = json.loads(handler._handle_fetch_provider_models({
+                "provider_id": "claudeAPI",
+                "capability": "embedding",
+            }))
+
+        self.assertEqual("error", result["status"])
+        self.assertEqual("provider_not_allowed_for_capability", result["error_code"])
+        fetch.assert_not_called()
+
+    def test_fetch_provider_models_rejects_unknown_capability(self):
+        from channel.web.web_channel import ModelsHandler
+
+        handler = ModelsHandler()
+        with patch("channel.web.model_catalog.ModelCatalogService.fetch") as fetch:
+            result = json.loads(handler._handle_fetch_provider_models({
+                "provider_id": "openai",
+                "capability": "search",
+            }))
+
+        self.assertEqual("error", result["status"])
+        self.assertEqual("unknown_capability", result["error_code"])
+        fetch.assert_not_called()
+
     def test_scorer_capability_exposes_dedicated_selection(self):
         from channel.web.web_channel import ModelsHandler
 

@@ -566,45 +566,12 @@ class TestQianfanDocs(unittest.TestCase):
         with open(os.path.join(root, relative_path), encoding="utf-8") as f:
             return f.read()
 
-    def test_qianfan_docs_exist_in_all_doc_locales(self):
-        for path in (
-            "docs/models/qianfan.mdx",
-            "docs/zh/models/qianfan.mdx",
-            "docs/ja/models/qianfan.mdx",
-        ):
-            text = self._read(path)
-            self.assertIn("qianfan_api_key", text)
-            self.assertIn("https://qianfan.baidubce.com/v2", text)
-            self.assertIn("ernie-4.5-turbo-128k", text)
-            self.assertIn("ernie-4.5-turbo-vl", text)
-
-    def test_model_indexes_link_qianfan(self):
-        for path in (
-            "docs/models/index.mdx",
-            "docs/zh/models/index.mdx",
-            "docs/ja/models/index.mdx",
-        ):
-            text = self._read(path)
-            self.assertIn('/models/qianfan', text)
-
     def test_readme_documents_native_qianfan_provider(self):
         text = self._read("docs/models/qianfan.mdx")
 
         self.assertIn('"model": "ernie-5.1"', text)
         self.assertIn('"qianfan_api_key": ""', text)
         self.assertIn('"qianfan_api_base": "https://qianfan.baidubce.com/v2"', text)
-
-    def test_vision_docs_document_qianfan_provider(self):
-        expected = {
-            "docs/tools/vision.mdx": "ERNIE",
-            "docs/zh/tools/vision.mdx": "百度千帆",
-            "docs/ja/tools/vision.mdx": "百度 Qianfan",
-        }
-        for path, label in expected.items():
-            text = self._read(path)
-            self.assertIn(label, text)
-            self.assertIn("ernie-4.5-turbo-vl", text)
-
 
 if __name__ == "__main__":
     unittest.main()

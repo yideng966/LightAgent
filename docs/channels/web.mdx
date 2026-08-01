@@ -64,6 +64,8 @@ The chat interface supports multi-session management. All session records are pe
 
 Manage text, image, voice, and embedding model configurations for different providers online — no need to edit config files manually:
 
+The Main Model, its fallback rows, LLM Scorer, Image Understanding, Image Generation, Speech Recognition, Speech Synthesis, and Embedding cards accept direct model-ID entry. You can also click **Fetch models** beside a field to load candidates from the selected configured provider's Models API. The editable list supports Chinese and English keyword filtering. Within the current page session, a successfully fetched provider catalog is reused automatically by other capabilities and fallback rows using that provider. If the provider does not expose a model-list endpoint or the request fails, the current value is preserved and can still be entered and saved manually.
+
 <img width="850" src="https://cdn.link-ai.tech/doc/20260521212949.png" />
 
 ### Skill Management

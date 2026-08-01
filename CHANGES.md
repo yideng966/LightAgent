@@ -2,6 +2,38 @@
 
 ## 2026-08-01
 
+### 模型管理支持获取厂商模型与模糊检索
+
+- 主模型、LLM Scorer、图像理解、图像生成、语音识别、语音合成和向量能力统一使用可编辑模型组合框，保留任意模型 ID 手工填写，并在字段右侧增加「获取模型」按钮。
+- Web 后端按已保存 Provider 配置调用 Models API，支持 OpenAI-compatible、Anthropic 与 Gemini 响应归一化；请求限制目标、重定向、超时、响应体和分页，错误响应不回显凭据或第三方正文。
+- 模型候选合并现有静态目录、远端结果和当前值，支持中文、英文大小写及空格多词过滤，以及方向键、Enter、Escape、ARIA 展开状态、加载/失败反馈和移动端 44px 触控区。
+- 主模型备用列表同步使用可编辑模型组合框和「获取模型」按钮；远端模型目录按 Provider 在当前页面会话内缓存，并自动刷新其他使用同一厂商的能力和备用模型候选。
+- 厂商未提供 `/models`、鉴权失败或网络异常时保留当前模型与静态候选，用户仍可手动输入；不改变现有 Provider 白名单、自动模式、TTS 音色联动和向量索引重建确认。
+
+关键文件：
+
+- `channel/web/model_catalog.py`
+- `channel/web/web_channel.py`
+- `channel/web/static/js/console.js`
+- `channel/web/static/css/console.css`
+- `tests/test_model_catalog.py`
+- `tests/test_models_handler.py`
+- `tests/test_models_console.py`
+- `docs/zh/channels/web.mdx`
+- `docs/channels/web.mdx`
+- `plans/20260801_模型列表获取与模糊检索开发计划.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 模型目录、模型管理、文本路由、自定义 Provider、语音工厂和移动端控制台定向回归 108 项通过。
+- Python 编译与 `node --check channel/web/static/js/console.js` 通过。
+- 本地 `python app.py` Web 控制台验证 7 个模型组合框和 7 个获取按钮均渲染；中英文搜索及键盘选择通过，375px 视口无横向溢出或控件重叠。
+- 新增备用模型与共享缓存后，模型目录和 Web 控制台定向回归 56 项通过；真实 NewAPI 获取 20 个模型后，同厂商目录自动传播到图像理解、图像生成、ASR、TTS、向量及两条备用模型，备用行主动刷新与键盘选择通过。
+- 1440px 与 375px 浏览器检查无横向溢出或控件重叠，备用模型获取按钮保持 44px 高；`node --check channel/web/static/js/console.js` 与 `git diff --check` 通过。
+- `python -X utf8 -m unittest discover -s tests`：共运行 1246 项，1242 项通过、1 项按条件跳过；3 项既有千帆文档测试因仓库已停止维护且不存在 `docs/ja/` 文件而报错，与本次改动无关。
+- 删除 3 个因 `docs/ja/` 已停止维护而失效的千帆文档单元测试；保留千帆配置文档内容测试。
+
 ### 发布 LightAgent 2.2.2
 
 - 汇总发布两项交互修复：Android 移动端 Web 控制台顶部导航与侧边栏入口保持可见，以及微信群管理员门禁页面位置和静默拒绝行为修正。

@@ -3283,10 +3283,68 @@ class ModelsHandler:
                 return self._handle_set_voice_reply_mode(data)
             if action == "set_search_credential":
                 return self._handle_set_search_credential(data)
+            if action == "fetch_provider_models":
+                return self._handle_fetch_provider_models(data)
             return json.dumps({"status": "error", "message": f"unknown action: {action!r}"})
         except Exception as e:
             logger.error(f"[ModelsHandler] POST failed: {e}")
             return json.dumps({"status": "error", "message": str(e)})
+
+    def _handle_fetch_provider_models(self, data: dict) -> str:
+        from channel.web.model_catalog import ModelCatalogError, ModelCatalogService
+
+        capability = str(data.get("capability") or "").strip()
+        provider_id = str(data.get("provider_id") or "").strip()
+        supported_capabilities = {
+            "chat", "scorer", "vision", "image", "asr", "tts", "embedding",
+        }
+        if capability not in supported_capabilities:
+            return json.dumps({
+                "status": "error",
+                "error_code": "unknown_capability",
+            })
+
+        local_config = conf()
+        cap = self._capabilities(local_config).get(capability) or {}
+        if provider_id not in (cap.get("providers") or []):
+            return json.dumps({
+                "status": "error",
+                "error_code": "provider_not_allowed_for_capability",
+            })
+
+        try:
+            models = ModelCatalogService(
+                local_config,
+                ConfigHandler.PROVIDER_MODELS,
+            ).fetch(provider_id)
+            return json.dumps({
+                "status": "success",
+                "provider_id": provider_id,
+                "capability": capability,
+                "models": models,
+            }, ensure_ascii=False)
+        except ModelCatalogError as exc:
+            logger.warning(
+                "[ModelsHandler] model catalog failed: provider=%r capability=%r code=%s",
+                provider_id,
+                capability,
+                exc.code,
+            )
+            return json.dumps({
+                "status": "error",
+                "error_code": exc.code,
+            })
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(
+                "[ModelsHandler] model catalog unexpected failure: provider=%r capability=%r type=%s",
+                provider_id,
+                capability,
+                type(exc).__name__,
+            )
+            return json.dumps({
+                "status": "error",
+                "error_code": "models_api_unavailable",
+            })
 
     def _handle_set_provider(self, data: dict) -> str:
         provider_id = (data.get("provider_id") or "").strip()

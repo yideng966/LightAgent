@@ -25,6 +25,19 @@ const I18N = {
         models_add_vendor: '添加厂商',
         models_provider: '厂商',
         models_model: '模型',
+        models_fetch_models: '获取模型',
+        models_fetching: '获取中',
+        models_fetched: '已获取 {count} 个模型',
+        models_model_search_placeholder: '输入或搜索模型 ID',
+        models_model_no_matches: '未找到匹配模型',
+        models_catalog_provider_not_configured: '请先完成厂商配置',
+        models_catalog_provider_not_allowed: '当前能力不支持该厂商',
+        models_catalog_unsupported: '该厂商未提供模型列表接口，可继续手动填写',
+        models_catalog_unauthorized: '厂商鉴权失败，请检查 API Key',
+        models_catalog_timeout: '获取模型超时，请重试',
+        models_catalog_unavailable: '厂商模型接口暂不可用，请重试',
+        models_catalog_invalid: '厂商返回的模型列表格式无效',
+        models_catalog_empty: '厂商未返回可用模型，可继续手动填写',
         models_voice: '音色',
         models_configured: '已配置',
         models_not_configured: '未配置',
@@ -1062,6 +1075,19 @@ const I18N = {
         models_add_vendor: 'Add Provider',
         models_provider: 'Provider',
         models_model: 'Model',
+        models_fetch_models: 'Fetch models',
+        models_fetching: 'Fetching',
+        models_fetched: 'Fetched {count} models',
+        models_model_search_placeholder: 'Enter or search a model ID',
+        models_model_no_matches: 'No matching models',
+        models_catalog_provider_not_configured: 'Configure this provider first',
+        models_catalog_provider_not_allowed: 'This provider is not available for the capability',
+        models_catalog_unsupported: 'This provider has no model-list endpoint; manual entry remains available',
+        models_catalog_unauthorized: 'Provider authentication failed; check the API key',
+        models_catalog_timeout: 'Fetching models timed out; try again',
+        models_catalog_unavailable: 'The provider model endpoint is unavailable; try again',
+        models_catalog_invalid: 'The provider returned an invalid model list',
+        models_catalog_empty: 'The provider returned no models; manual entry remains available',
         models_voice: 'Voice',
         models_configured: 'configured',
         models_not_configured: 'not configured',
@@ -8452,6 +8478,9 @@ const MODELS_CAPABILITY_DEFS = [
     { id: 'search',    icon: 'fa-magnifying-glass', editable: true,  needsModel: false, titleKey: 'models_capability_search',    descKey: 'models_capability_search_desc',
       iconChip: 'bg-orange-50 dark:bg-orange-900/30',    iconGlyph: 'text-orange-500' },
 ];
+const MODEL_CATALOG_CAPABILITY_IDS = new Set(
+    MODELS_CAPABILITY_DEFS.filter(def => def.needsModel).map(def => def.id)
+);
 
 // Provider logos: when a real SVG exists under static/logos/<id>.svg we use
 // it; otherwise we fall back to a neutral monogram chip. SVGs are fetched
@@ -8468,6 +8497,11 @@ const MODELS_PROVIDER_LOGO_DARK_INVERT = new Set([
 ]);
 
 let modelsState = { providers: [], capabilities: {} };
+const modelsCatalogState = {
+    entries: new Map(),
+    loading: new Map(),
+    errors: new Map(),
+};
 
 // One-shot: { capabilityId, providerId } stashed before a Models reload,
 // consumed by renderCapabilityBody to preselect a just-configured vendor.
@@ -9116,7 +9150,7 @@ function renderChatFallbackRow(index, fallback) {
     const providerId = String(item.provider_id || item.provider || item.bot_type || '').trim();
     const model = String(item.model || '').trim();
     return `
-        <div class="grid grid-cols-1 md:grid-cols-[auto_minmax(180px,0.9fr)_minmax(220px,1.1fr)_auto] gap-2 items-start"
+        <div class="grid grid-cols-1 lg:grid-cols-[auto_minmax(170px,0.7fr)_minmax(320px,1.3fr)_auto] gap-2 items-start"
              data-chat-fallback-row data-fallback-provider="${escapeHtml(providerId)}">
             <div class="h-10 flex items-center gap-1">
                 <button type="button" draggable="true"
@@ -9138,11 +9172,33 @@ function renderChatFallbackRow(index, fallback) {
                 </div>
                 <div class="cfg-dropdown-menu"></div>
             </div>
-            <input id="cap-chat-fallback-model-${index}" data-chat-fallback-model type="text"
-                   value="${escapeHtml(model)}" placeholder="${escapeHtml(t('models_model'))}"
-                   class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
-                          bg-white dark:bg-[#111111] text-sm text-slate-800 dark:text-slate-100
-                          focus:outline-none focus:border-primary-500 font-mono transition-colors">
+            <div>
+                <div class="model-picker-row">
+                    <div id="cap-chat-fallback-model-${index}" class="model-combobox"
+                         data-chat-fallback-model-combobox>
+                        <input id="cap-chat-fallback-model-input-${index}" data-chat-fallback-model type="text"
+                               value="${escapeHtml(model)}" class="model-combobox-input font-mono"
+                               role="combobox" aria-autocomplete="list" aria-expanded="false"
+                               aria-controls="cap-chat-fallback-model-list-${index}"
+                               autocomplete="off" spellcheck="false"
+                               placeholder="${escapeHtml(t('models_model_search_placeholder'))}">
+                        <button type="button" class="model-combobox-toggle"
+                                aria-label="${escapeHtml(t('models_model'))}" tabindex="-1">
+                            <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                        </button>
+                        <div id="cap-chat-fallback-model-list-${index}" class="model-combobox-menu"
+                             role="listbox"></div>
+                    </div>
+                    <button type="button" class="model-fetch-button"
+                            data-chat-fallback-fetch-models
+                            onclick="fetchChatFallbackModels(this)">
+                        <i class="fas fa-arrows-rotate" aria-hidden="true"></i>
+                        <span>${t('models_fetch_models')}</span>
+                    </button>
+                </div>
+                <div class="model-fetch-status" data-chat-fallback-catalog-status
+                     aria-live="polite"></div>
+            </div>
             <div class="h-10 flex items-center gap-1">
                 <button type="button" onclick="moveChatFallbackRow(this, -1)" title="${escapeHtml(t('models_chat_fallback_move_up'))}"
                         aria-label="${escapeHtml(t('models_chat_fallback_move_up'))}" class="h-8 w-8 inline-flex items-center justify-center text-slate-400 hover:text-primary-500">
@@ -9185,14 +9241,58 @@ function initChatFallbackRows(scope) {
     if (root.matches && root.matches('[data-chat-fallback-row]')) rows.push(root);
     root.querySelectorAll('[data-chat-fallback-row]').forEach(row => rows.push(row));
     rows.forEach(row => {
-        const providerId = row.dataset.fallbackProvider || '';
+        const initialProviderId = row.dataset.fallbackProvider || '';
         const dd = row.querySelector('[data-chat-fallback-provider]');
         if (dd && !dd._chatFallbackBound) {
-            initDropdown(dd, buildChatFallbackProviderOptions(providerId), providerId, () => {});
+            initDropdown(dd, buildChatFallbackProviderOptions(initialProviderId), initialProviderId, (providerId) => {
+                row.dataset.fallbackProvider = providerId;
+                rebuildChatFallbackModelDropdown(row, providerId, getChatFallbackModelValue(row));
+                updateChatFallbackFetchButton(row, providerId);
+                showChatFallbackCatalogStatus(row, '', false);
+            });
             dd._chatFallbackBound = true;
         }
+        const providerId = dd ? getDropdownValue(dd) : initialProviderId;
+        rebuildChatFallbackModelDropdown(row, providerId, getChatFallbackModelValue(row));
+        updateChatFallbackFetchButton(row, providerId);
     });
     refreshChatFallbackPriorities();
+}
+
+function getChatFallbackModelValue(row) {
+    const input = row ? row.querySelector('[data-chat-fallback-model]') : null;
+    return input ? String(input.value || '').trim() : '';
+}
+
+function rebuildChatFallbackModelDropdown(row, providerId, selectedModel) {
+    if (!row) return;
+    const combobox = row.querySelector('[data-chat-fallback-model-combobox]');
+    if (!combobox) return;
+    const chatDef = MODELS_CAPABILITY_DEFS.find(def => def.id === 'chat') || { id: 'chat' };
+    initModelCombobox(
+        combobox,
+        buildCapabilityModelOptions(chatDef, providerId, selectedModel),
+        selectedModel,
+        () => {},
+    );
+}
+
+function showChatFallbackCatalogStatus(row, message, isError) {
+    const status = row ? row.querySelector('[data-chat-fallback-catalog-status]') : null;
+    if (!status) return;
+    status.textContent = message || '';
+    status.classList.toggle('error', !!isError);
+}
+
+function updateChatFallbackFetchButton(row, providerId) {
+    const button = row ? row.querySelector('[data-chat-fallback-fetch-models]') : null;
+    if (!button) return;
+    const loading = modelsCatalogState.loading.has(modelCatalogKey(providerId));
+    button.disabled = loading || !providerId || !isProviderCatalogReady(providerId);
+    button.setAttribute('aria-busy', loading ? 'true' : 'false');
+    button.innerHTML = loading
+        ? `<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>${t('models_fetching')}</span>`
+        : `<i class="fas fa-arrows-rotate" aria-hidden="true"></i><span>${t('models_fetch_models')}</span>`;
 }
 
 let draggedChatFallbackRow = null;
@@ -9338,21 +9438,31 @@ function renderCapabilityBody(def, cap, body) {
     // gets toggled by setCapabilityModelPickerVisible.
     const modelHtml = def.needsModel ? `
         <div id="cap-${def.id}-model-wrap">
-            <label class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('models_model')}</label>
-            <div id="cap-${def.id}-model" class="cfg-dropdown" tabindex="0">
-                <div class="cfg-dropdown-selected">
-                    <span class="cfg-dropdown-text">--</span>
-                    <i class="fas fa-chevron-down cfg-dropdown-arrow"></i>
+            <label for="cap-${def.id}-model-input" class="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-1.5">${t('models_model')}</label>
+            <div class="model-picker-row">
+                <div id="cap-${def.id}-model" class="model-combobox">
+                    <input id="cap-${def.id}-model-input" type="text"
+                           class="model-combobox-input font-mono"
+                           role="combobox" aria-autocomplete="list" aria-expanded="false"
+                           aria-controls="cap-${def.id}-model-list"
+                           autocomplete="off" spellcheck="false"
+                           placeholder="${escapeHtml(t('models_model_search_placeholder'))}">
+                    <button type="button" class="model-combobox-toggle"
+                            aria-label="${escapeHtml(t('models_model'))}" tabindex="-1">
+                        <i class="fas fa-chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div id="cap-${def.id}-model-list" class="model-combobox-menu"
+                         role="listbox"></div>
                 </div>
-                <div class="cfg-dropdown-menu"></div>
+                <button id="cap-${def.id}-fetch-models" type="button"
+                        class="model-fetch-button"
+                        onclick="fetchProviderModels('${def.id}')">
+                    <i class="fas fa-arrows-rotate" aria-hidden="true"></i>
+                    <span>${t('models_fetch_models')}</span>
+                </button>
             </div>
-            <div id="cap-${def.id}-model-custom-wrap" class="mt-2 hidden">
-                <input id="cap-${def.id}-model-custom" type="text"
-                       class="w-full px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-600
-                              bg-slate-50 dark:bg-white/5 text-sm text-slate-800 dark:text-slate-100
-                              focus:outline-none focus:border-primary-500 font-mono transition-colors"
-                       placeholder="custom model name">
-            </div>
+            <div id="cap-${def.id}-catalog-status" class="model-fetch-status"
+                 aria-live="polite"></div>
         </div>` : '';
 
     const dimHtml = (def.id === 'embedding' && cap.current_dim) ? `
@@ -9467,6 +9577,7 @@ function renderCapabilityBody(def, cap, body) {
         const showModel = def.id === 'embedding' ? initialProviderValue !== '' :
             !capabilityUsesAutoProvider(def.id, initialProviderValue);
         setCapabilityModelPickerVisible(def, showModel, body);
+        updateModelFetchButton(def, initialProviderValue, body);
     }
 
     if (def.id === 'tts') {
@@ -9765,23 +9876,36 @@ function decorateVendorModalPicker(ddEl, opts) {
     });
 }
 
-function rebuildCapabilityModelDropdown(def, providerId, selectedModel, scope) {
-    // `scope` lets the caller (renderCapabilityBody) target a still-detached
-    // subtree. After the card is mounted, callers may pass `document` instead.
-    const root = scope || document;
-    const el = root.querySelector(`#cap-${def.id}-model`);
-    if (!el) return;
+function modelCatalogKey(providerId) {
+    return String(providerId || '');
+}
 
-    // Prefer the capability-scoped model list when the backend provides one
-    // (vision / image). It reflects the models the runtime can actually
-    // dispatch to for this capability, instead of the vendor's full chat-
-    // model catalog. Fall back to the generic provider.models for chat /
-    // embedding / tts where any vendor model is fair game.
-    //
-    // Entries may be plain strings or {value, hint} objects (image catalog
-    // uses the latter to surface brand aliases like "Nano Banana 2" next to
-    // the technical Gemini model id). We normalize to {value, label, hint}
-    // before handing off to initDropdown.
+function invalidateProviderModelCatalog(providerId) {
+    const key = modelCatalogKey(providerId);
+    modelsCatalogState.entries.delete(key);
+    modelsCatalogState.errors.delete(key);
+}
+
+function normalizeModelSearchText(value) {
+    return String(value || '').normalize('NFKC').toLocaleLowerCase();
+}
+
+function normalizeModelOption(entry) {
+    if (typeof entry === 'string') {
+        const value = entry.trim();
+        return value ? { value, label: value, hint: '' } : null;
+    }
+    if (!entry || typeof entry !== 'object') return null;
+    const value = String(entry.value || entry.id || '').trim();
+    if (!value) return null;
+    return {
+        value,
+        label: String(entry.label || value),
+        hint: String(entry.hint || ''),
+    };
+}
+
+function buildCapabilityModelOptions(def, providerId, selectedModel) {
     const cap = modelsState.capabilities[def.id] || {};
     const capModelMap = cap.provider_models || {};
     let rawList;
@@ -9794,53 +9918,394 @@ function rebuildCapabilityModelDropdown(def, providerId, selectedModel, scope) {
         const provider = modelsState.providers.find(p => p.id === providerId);
         rawList = (provider && provider.models) ? provider.models.slice() : [];
     }
-    const modelValues = [];
-    const opts = rawList.map(entry => {
-        if (typeof entry === 'string') {
-            modelValues.push(entry);
-            return { value: entry, label: entry };
-        }
-        modelValues.push(entry.value);
-        return { value: entry.value, label: entry.label || entry.value, hint: entry.hint || '' };
+
+    const remote = modelsCatalogState.entries.get(modelCatalogKey(providerId)) || [];
+    const combined = [];
+    if (selectedModel) combined.push(selectedModel);
+    combined.push(...rawList, ...remote);
+    const seen = new Set();
+    const options = [];
+    combined.forEach(entry => {
+        const option = normalizeModelOption(entry);
+        if (!option || seen.has(option.value)) return;
+        seen.add(option.value);
+        options.push(option);
     });
-    opts.push({ value: '__custom__', label: currentLang === 'zh' ? '自定义' : 'Custom' });
+    return options;
+}
 
-    let initialValue = selectedModel || '';
-    if (initialValue && !modelValues.includes(initialValue)) {
-        initialValue = '__custom__';
+function initModelCombobox(el, options, selectedValue, onChange) {
+    if (!el) return;
+    const input = el.querySelector('.model-combobox-input');
+    const menu = el.querySelector('.model-combobox-menu');
+    const toggle = el.querySelector('.model-combobox-toggle');
+    if (!input || !menu || !toggle) return;
+
+    el._modelOptions = options || [];
+    el._modelOnChange = onChange;
+    el._modelActiveIndex = -1;
+    const initialValue = String(selectedValue || (el._modelOptions[0] && el._modelOptions[0].value) || '');
+    input.value = initialValue;
+    el._modelValue = initialValue;
+
+    function close() {
+        el.classList.remove('open');
+        input.setAttribute('aria-expanded', 'false');
+        input.removeAttribute('aria-activedescendant');
+        el._modelActiveIndex = -1;
     }
-    if (!initialValue && opts.length) initialValue = opts[0].value;
 
-    initDropdown(el, opts, initialValue, (value) => {
-        const customWrap = document.getElementById(`cap-${def.id}-model-custom-wrap`);
-        if (customWrap) {
-            if (value === '__custom__') {
-                customWrap.classList.remove('hidden');
-                const input = document.getElementById(`cap-${def.id}-model-custom`);
-                if (input && !input.value) input.value = selectedModel || '';
-            } else {
-                customWrap.classList.add('hidden');
-            }
+    function selectOption(option) {
+        input.value = option.value;
+        el._modelValue = option.value;
+        close();
+        if (el._modelOnChange) el._modelOnChange(option.value);
+    }
+
+    function setActive(index) {
+        const items = Array.from(menu.querySelectorAll('[role="option"]'));
+        if (!items.length) {
+            el._modelActiveIndex = -1;
+            input.removeAttribute('aria-activedescendant');
+            return;
         }
-        // TTS voice catalog may be scoped per engine model (aggregating
-        // gateways). Rebuild the voice picker whenever the model changes.
+        const next = Math.max(0, Math.min(index, items.length - 1));
+        items.forEach((item, itemIndex) => item.classList.toggle('keyboard-active', itemIndex === next));
+        el._modelActiveIndex = next;
+        input.setAttribute('aria-activedescendant', items[next].id);
+        items[next].scrollIntoView({ block: 'nearest' });
+    }
+
+    function render() {
+        const query = normalizeModelSearchText(input.value.trim());
+        const tokens = query.split(/\s+/).filter(Boolean);
+        const matches = el._modelOptions.filter(option => {
+            if (!tokens.length) return true;
+            const haystack = normalizeModelSearchText(`${option.value} ${option.label} ${option.hint}`);
+            return tokens.every(token => haystack.includes(token));
+        });
+        matches.sort((left, right) => {
+            if (!query) return 0;
+            const leftExact = normalizeModelSearchText(left.value) === query ? 0 : 1;
+            const rightExact = normalizeModelSearchText(right.value) === query ? 0 : 1;
+            return leftExact - rightExact;
+        });
+        const visible = matches.slice(0, 100);
+        menu.innerHTML = '';
+        visible.forEach((option, index) => {
+            const item = document.createElement('div');
+            item.id = `${menu.id}-option-${index}`;
+            item.className = 'model-combobox-option';
+            item.setAttribute('role', 'option');
+            item.setAttribute('aria-selected', option.value === input.value ? 'true' : 'false');
+            item.dataset.value = option.value;
+
+            const label = document.createElement('span');
+            label.className = 'model-combobox-option-label';
+            label.textContent = option.label;
+            item.appendChild(label);
+            if (option.hint) {
+                const hint = document.createElement('span');
+                hint.className = 'model-combobox-option-hint';
+                hint.textContent = option.hint;
+                item.appendChild(hint);
+            }
+            item.addEventListener('mousedown', event => event.preventDefault());
+            item.addEventListener('mouseenter', () => setActive(index));
+            item.addEventListener('click', () => selectOption(option));
+            menu.appendChild(item);
+        });
+        if (!visible.length) {
+            const empty = document.createElement('div');
+            empty.className = 'model-combobox-empty';
+            empty.textContent = t('models_model_no_matches');
+            menu.appendChild(empty);
+        }
+        el._modelActiveIndex = -1;
+        input.removeAttribute('aria-activedescendant');
+    }
+
+    function open() {
+        render();
+        el.classList.add('open');
+        input.setAttribute('aria-expanded', 'true');
+    }
+
+    el._modelRender = render;
+    el._modelOpen = open;
+    el._modelClose = close;
+
+    if (!el._modelBound) {
+        input.addEventListener('focus', open);
+        input.addEventListener('input', () => {
+            el._modelValue = input.value;
+            open();
+        });
+        input.addEventListener('change', () => {
+            el._modelValue = input.value.trim();
+            input.value = el._modelValue;
+            if (el._modelOnChange) el._modelOnChange(el._modelValue);
+        });
+        input.addEventListener('keydown', event => {
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                if (!el.classList.contains('open')) open();
+                const delta = event.key === 'ArrowDown' ? 1 : -1;
+                const start = el._modelActiveIndex < 0 ? (delta > 0 ? -1 : 1) : el._modelActiveIndex;
+                setActive(start + delta);
+                return;
+            }
+            if (event.key === 'Enter' && el.classList.contains('open')) {
+                const items = Array.from(menu.querySelectorAll('[role="option"]'));
+                const item = items[el._modelActiveIndex];
+                if (item) {
+                    event.preventDefault();
+                    const option = el._modelOptions.find(candidate => candidate.value === item.dataset.value);
+                    if (option) selectOption(option);
+                }
+                return;
+            }
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                close();
+            } else if (event.key === 'Tab') {
+                close();
+            }
+        });
+        input.addEventListener('blur', () => {
+            setTimeout(() => {
+                if (!el.contains(document.activeElement)) close();
+            }, 0);
+        });
+        toggle.addEventListener('mousedown', event => event.preventDefault());
+        toggle.addEventListener('click', () => {
+            if (el.classList.contains('open')) {
+                close();
+            } else {
+                input.focus();
+                open();
+            }
+        });
+        el._modelBound = true;
+    }
+
+    render();
+}
+
+function getModelComboboxValue(el) {
+    if (!el) return '';
+    const input = el.querySelector('.model-combobox-input');
+    return input ? input.value.trim() : '';
+}
+
+function rebuildCapabilityModelDropdown(def, providerId, selectedModel, scope) {
+    const root = scope || document;
+    const el = root.querySelector(`#cap-${def.id}-model`);
+    if (!el) return;
+    const options = buildCapabilityModelOptions(def, providerId, selectedModel);
+    initModelCombobox(el, options, selectedModel, value => {
         if (def.id === 'tts') {
             const provDd = document.getElementById('cap-tts-provider');
             const provId = provDd ? getDropdownValue(provDd) : '';
             rebuildCapabilityVoiceDropdown(provId, '', null, value);
         }
     });
+}
 
-    const customWrap = root.querySelector(`#cap-${def.id}-model-custom-wrap`);
-    if (customWrap) {
-        if (initialValue === '__custom__') {
-            customWrap.classList.remove('hidden');
-            const input = root.querySelector(`#cap-${def.id}-model-custom`);
-            if (input) input.value = selectedModel || '';
-        } else {
-            customWrap.classList.add('hidden');
+function isProviderCatalogReady(providerId) {
+    if (!providerId) return false;
+    const provider = modelsState.providers.find(item => item.id === providerId);
+    return !!(
+        provider
+        && (provider.configured || (provider.is_custom && provider.api_base))
+    );
+}
+
+function updateModelFetchButton(def, providerId, scope) {
+    const root = scope || document;
+    const button = root.querySelector(`#cap-${def.id}-fetch-models`);
+    if (!button) return;
+    const key = modelCatalogKey(providerId);
+    const loading = modelsCatalogState.loading.has(key);
+    const disabled = (
+        loading
+        || !providerId
+        || capabilityUsesAutoProvider(def.id, providerId)
+        || !isProviderCatalogReady(providerId)
+    );
+    button.disabled = disabled;
+    button.setAttribute('aria-busy', loading ? 'true' : 'false');
+    button.innerHTML = loading
+        ? `<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>${t('models_fetching')}</span>`
+        : `<i class="fas fa-arrows-rotate" aria-hidden="true"></i><span>${t('models_fetch_models')}</span>`;
+}
+
+const MODEL_CATALOG_ERROR_I18N = {
+    provider_not_found: 'models_catalog_provider_not_configured',
+    provider_not_configured: 'models_catalog_provider_not_configured',
+    provider_not_allowed_for_capability: 'models_catalog_provider_not_allowed',
+    models_api_unsupported: 'models_catalog_unsupported',
+    models_api_unauthorized: 'models_catalog_unauthorized',
+    models_api_timeout: 'models_catalog_timeout',
+    models_api_unavailable: 'models_catalog_unavailable',
+    models_api_invalid_response: 'models_catalog_invalid',
+    models_api_empty: 'models_catalog_empty',
+};
+
+function modelCatalogErrorMessage(errorCode) {
+    return t(MODEL_CATALOG_ERROR_I18N[errorCode] || 'models_catalog_unavailable');
+}
+
+function showModelCatalogStatus(capabilityId, message, isError) {
+    const status = document.getElementById(`cap-${capabilityId}-catalog-status`);
+    if (!status) return;
+    status.textContent = message || '';
+    status.classList.toggle('error', !!isError);
+}
+
+function refreshProviderModelCatalogConsumers(providerId) {
+    if (!providerId) return;
+    MODELS_CAPABILITY_DEFS.filter(def => def.needsModel).forEach(def => {
+        const providerDropdown = document.getElementById(`cap-${def.id}-provider`);
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (activeProvider !== providerId) return;
+        const currentValue = getCapabilityModelValue(def);
+        rebuildCapabilityModelDropdown(def, providerId, currentValue, document);
+        updateModelFetchButton(def, providerId, document);
+    });
+    document.querySelectorAll('[data-chat-fallback-row]').forEach(row => {
+        const providerDropdown = row.querySelector('[data-chat-fallback-provider]');
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (activeProvider !== providerId) return;
+        rebuildChatFallbackModelDropdown(row, providerId, getChatFallbackModelValue(row));
+        updateChatFallbackFetchButton(row, providerId);
+    });
+}
+
+function updateProviderModelCatalogButtons(providerId) {
+    if (!providerId) return;
+    MODELS_CAPABILITY_DEFS.filter(def => def.needsModel).forEach(def => {
+        const providerDropdown = document.getElementById(`cap-${def.id}-provider`);
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (activeProvider === providerId) updateModelFetchButton(def, providerId, document);
+    });
+    document.querySelectorAll('[data-chat-fallback-row]').forEach(row => {
+        const providerDropdown = row.querySelector('[data-chat-fallback-provider]');
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (activeProvider === providerId) updateChatFallbackFetchButton(row, providerId);
+    });
+}
+
+function requestProviderModelCatalog(capabilityId, providerId) {
+    const key = modelCatalogKey(providerId);
+    if (modelsCatalogState.loading.has(key)) return modelsCatalogState.loading.get(key);
+
+    modelsCatalogState.errors.delete(key);
+    const request = fetch('/api/models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'fetch_provider_models',
+            provider_id: providerId,
+            capability: capabilityId,
+        }),
+    }).then(response => response.json()).then(data => {
+        if (data.status !== 'success') {
+            throw new Error(data.error_code || 'models_api_unavailable');
         }
+        const models = Array.isArray(data.models) ? data.models : [];
+        modelsCatalogState.entries.set(key, models);
+        modelsCatalogState.errors.delete(key);
+        refreshProviderModelCatalogConsumers(providerId);
+        return models;
+    }).catch(error => {
+        const candidate = error && error.message;
+        const errorCode = MODEL_CATALOG_ERROR_I18N[candidate]
+            ? candidate
+            : 'models_api_unavailable';
+        modelsCatalogState.errors.set(key, errorCode);
+        throw new Error(errorCode);
+    }).finally(() => {
+        modelsCatalogState.loading.delete(key);
+        updateProviderModelCatalogButtons(providerId);
+    });
+
+    modelsCatalogState.loading.set(key, request);
+    updateProviderModelCatalogButtons(providerId);
+    return request;
+}
+
+function fetchProviderModels(capabilityId) {
+    if (!MODEL_CATALOG_CAPABILITY_IDS.has(capabilityId)) return;
+    const def = MODELS_CAPABILITY_DEFS.find(item => item.id === capabilityId);
+    const providerDropdown = document.getElementById(`cap-${capabilityId}-provider`);
+    const providerId = providerDropdown ? getDropdownValue(providerDropdown) : '';
+    if (!def || !isProviderCatalogReady(providerId)) {
+        showModelCatalogStatus(
+            capabilityId,
+            t('models_catalog_provider_not_configured'),
+            true,
+        );
+        return;
     }
+
+    showModelCatalogStatus(capabilityId, '', false);
+    updateModelFetchButton(def, providerId, document);
+
+    requestProviderModelCatalog(capabilityId, providerId).then(models => {
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (activeProvider === providerId) {
+            const combobox = document.getElementById(`cap-${capabilityId}-model`);
+            if (combobox && combobox._modelOpen) combobox._modelOpen();
+            showModelCatalogStatus(
+                capabilityId,
+                t('models_fetched').replace('{count}', String(models.length)),
+                false,
+            );
+        }
+    }).catch(error => {
+        const errorCode = (error && error.message) || 'models_api_unavailable';
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (activeProvider === providerId) {
+            showModelCatalogStatus(capabilityId, modelCatalogErrorMessage(errorCode), true);
+        }
+    });
+}
+
+function fetchChatFallbackModels(button) {
+    const row = button ? button.closest('[data-chat-fallback-row]') : null;
+    const providerDropdown = row ? row.querySelector('[data-chat-fallback-provider]') : null;
+    const providerId = providerDropdown ? getDropdownValue(providerDropdown) : '';
+    if (!row || !isProviderCatalogReady(providerId)) {
+        showChatFallbackCatalogStatus(
+            row,
+            t('models_catalog_provider_not_configured'),
+            true,
+        );
+        return;
+    }
+
+    showChatFallbackCatalogStatus(row, '', false);
+    updateChatFallbackFetchButton(row, providerId);
+    requestProviderModelCatalog('chat', providerId).then(models => {
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (!document.body.contains(row) || activeProvider !== providerId) return;
+        const combobox = row.querySelector('[data-chat-fallback-model-combobox]');
+        if (combobox && combobox._modelOpen) combobox._modelOpen();
+        showChatFallbackCatalogStatus(
+            row,
+            t('models_fetched').replace('{count}', String(models.length)),
+            false,
+        );
+    }).catch(error => {
+        const activeProvider = providerDropdown ? getDropdownValue(providerDropdown) : '';
+        if (!document.body.contains(row) || activeProvider !== providerId) return;
+        showChatFallbackCatalogStatus(
+            row,
+            modelCatalogErrorMessage((error && error.message) || 'models_api_unavailable'),
+            true,
+        );
+    });
 }
 
 // TTS-only: rebuild the voice timbre picker against the provider's
@@ -9861,7 +10326,7 @@ function rebuildCapabilityVoiceDropdown(providerId, selectedVoice, scope, modelI
     // Some providers (gateways) scope voices by engine model id.
     if (raw && !Array.isArray(raw) && typeof raw === 'object') {
         const activeModel = modelId
-            || (root.querySelector(`#cap-tts-model`) ? getDropdownValue(root.querySelector(`#cap-tts-model`)) : '');
+            || getModelComboboxValue(root.querySelector(`#cap-tts-model`));
         raw = (activeModel && raw[activeModel]) || [];
     }
     const customProvider = String(providerId || '').startsWith('custom:');
@@ -9929,6 +10394,7 @@ function onCapabilityProviderChange(def, providerId, scope) {
             rebuildCapabilityModelDropdown(def, providerId, '', scope);
         }
         setCapabilityModelPickerVisible(def, showModel, scope);
+        updateModelFetchButton(def, providerId, scope);
     }
     if (def.id === 'tts') {
         rebuildCapabilityVoiceDropdown(providerId, '', scope);
@@ -9937,19 +10403,17 @@ function onCapabilityProviderChange(def, providerId, scope) {
     if (body) {
         const cap = modelsState.capabilities[def.id] || {};
         renderCapabilityHints(def, cap, body, providerId);
+        const catalogStatus = body.querySelector(`#cap-${def.id}-catalog-status`);
+        if (catalogStatus) {
+            catalogStatus.textContent = '';
+            catalogStatus.classList.remove('error');
+        }
     }
 }
 
 function getCapabilityModelValue(def) {
     if (!def.needsModel) return '';
-    const dd = document.getElementById(`cap-${def.id}-model`);
-    if (!dd) return '';
-    const v = getDropdownValue(dd);
-    if (v === '__custom__') {
-        const input = document.getElementById(`cap-${def.id}-model-custom`);
-        return input ? input.value.trim() : '';
-    }
-    return v || '';
+    return getModelComboboxValue(document.getElementById(`cap-${def.id}-model`));
 }
 
 function saveCapability(capId) {
@@ -10243,6 +10707,7 @@ function saveVendorModal() {
     }).then(r => r.json()).then(data => {
         btn.disabled = false;
         if (data.status === 'success') {
+            invalidateProviderModelCatalog(providerId);
             closeVendorModal();
             const onSaved = vendorModalState.onSaved;
             if (onSaved) {
@@ -10274,6 +10739,7 @@ function clearVendorModal() {
                 body: JSON.stringify({ action: 'delete_provider', provider_id: providerId }),
             }).then(r => r.json()).then(data => {
                 if (data.status === 'success') {
+                    invalidateProviderModelCatalog(providerId);
                     closeVendorModal();
                     loadModelsView();
                 } else {
@@ -10397,6 +10863,7 @@ function saveCustomProviderModal() {
     }).then(r => r.json()).then(data => {
         btn.disabled = false;
         if (data.status === 'success') {
+            if (editing) invalidateProviderModelCatalog(`custom:${customProviderModalState.editId}`);
             closeCustomProviderModal();
             loadModelsView();
         } else {
@@ -10421,6 +10888,7 @@ function deleteCustomProvider(providerId) {
                 body: JSON.stringify({ action: 'delete_custom_provider', id: providerId }),
             }).then(r => r.json()).then(data => {
                 if (data.status === 'success') {
+                    invalidateProviderModelCatalog(`custom:${providerId}`);
                     closeCustomProviderModal();
                     loadModelsView();
                 }
