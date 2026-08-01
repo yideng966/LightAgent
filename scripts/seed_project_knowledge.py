@@ -8,10 +8,9 @@ under the ``project-docs/`` category inside the agent workspace knowledge dir.
 Usage::
 
     python scripts/seed_project_knowledge.py --workspace ~/lightagent --app-root /app
-    python scripts/seed_project_knowledge.py --workspace ~/lightagent --app-root . --force
 
-Idempotent: a sentinel file (``.project-docs-seeded``) is created after the
-first successful run. Pass ``--force`` to re-import regardless.
+Runs every time — overwrites the ``project-docs/`` knowledge category with the
+latest content from README.md and docs/zh/.
 """
 
 import argparse
@@ -204,7 +203,6 @@ def convert_md(source_text: str) -> str:
 # File-system helpers
 # ---------------------------------------------------------------------------
 
-SENTINEL_NAME = ".project-docs-seeded"
 PROJECT_DOCS_DIR = "project-docs"
 
 # Directories under docs/zh/ that we import as knowledge sub-categories.
@@ -235,19 +233,17 @@ def _write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def seed(workspace: str, app_root: str, force: bool = False) -> bool:
+def seed(workspace: str, app_root: str) -> bool:
     """Seed project documentation into the knowledge base.
 
-    Returns True when files were actually written (first run or --force).
+    Always runs — overwrites the ``project-docs/`` category with the latest
+    content from README.md and docs/zh/.
+
+    Returns True when files were written.
     """
     knowledge_dir = Path(workspace) / "knowledge"
-    sentinel = knowledge_dir / SENTINEL_NAME
     dest_root = knowledge_dir / PROJECT_DOCS_DIR
     app_path = Path(app_root)
-
-    if sentinel.exists() and not force:
-        print(f"[seed_knowledge] Already seeded (sentinel exists at {sentinel}).  Use --force to re-import.")
-        return False
 
     # Ensure the knowledge directory exists
     knowledge_dir.mkdir(parents=True, exist_ok=True)
@@ -258,6 +254,12 @@ def seed(workspace: str, app_root: str, force: bool = False) -> bool:
     if not docs_zh.is_dir():
         print(f"[seed_knowledge] ERROR: docs/zh not found at {docs_zh}")
         return False
+
+    # Clean the target directory to remove stale files from previous runs,
+    # then recreate it.
+    import shutil
+    if dest_root.is_dir():
+        shutil.rmtree(dest_root)
 
     errors: list[str] = []
     written = 0
@@ -333,17 +335,13 @@ def seed(workspace: str, app_root: str, force: bool = False) -> bool:
         errors.append(f"rebuild_index_md: {exc}")
         print(f"[seed_knowledge]  WARNING: Could not rebuild knowledge index: {exc}")
 
-    # ---- 5. Sentinel ----
+    # ---- 5. Done ----
     if not errors:
-        _write_file(sentinel, f"Seeded from {app_root}/README.md and {app_root}/docs/zh/\n")
-        print(f"[seed_knowledge] Done: {written} file(s) written, sentinel at {sentinel}")
+        print(f"[seed_knowledge] Done: {written} file(s) written")
     else:
         print(f"[seed_knowledge] Done with {len(errors)} error(s):")
         for e in errors:
             print(f"  - {e}")
-        # Still write sentinel so we don't retry on every startup; user can
-        # --force after fixing the underlying issue.
-        _write_file(sentinel, f"Seeded with errors:\n" + "\n".join(f"- {e}" for e in errors))
 
     return written > 0
 
@@ -366,11 +364,6 @@ def main():
         default="/app",
         help="LightAgent application root containing README.md and docs/ (default: /app)",
     )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Re-import even if already seeded",
-    )
     args = parser.parse_args()
 
     workspace = os.path.expanduser(args.workspace)
@@ -380,8 +373,8 @@ def main():
         print(f"ERROR: --app-root is not a directory: {app_root}", file=sys.stderr)
         sys.exit(1)
 
-    ok = seed(workspace, app_root, force=args.force)
-    sys.exit(0 if ok or not ok else 0)  # Never fail the entrypoint
+    ok = seed(workspace, app_root)
+    sys.exit(0)
 
 
 if __name__ == "__main__":

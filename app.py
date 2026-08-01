@@ -348,6 +348,38 @@ def _sync_builtin_skills():
         logger.warning(f"[App] Builtin skills sync failed: {e}")
 
 
+def _seed_project_knowledge():
+    """Seed project documentation into the agent knowledge base on first run.
+
+    Idempotent — a sentinel file prevents re-import on subsequent starts.
+    Failure is non-fatal and logged as a warning.
+    """
+    try:
+        workspace = conf().get("agent_workspace", "~/lightagent")
+        workspace = os.path.expanduser(workspace)
+        project_root = os.path.dirname(os.path.abspath(__file__))
+        script = os.path.join(project_root, "scripts", "seed_project_knowledge.py")
+
+        if not os.path.isfile(script):
+            logger.debug("[App] seed_project_knowledge.py not found, skipping knowledge seed")
+            return
+
+        # The seed script is a standalone CLI — run it as a subprocess so it
+        # doesn't pollute the main process import space.
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, script, "--workspace", workspace, "--app-root", project_root],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.stdout:
+            for line in result.stdout.strip().splitlines():
+                logger.info(line)
+        if result.returncode != 0 and result.stderr:
+            logger.warning(f"[App] Knowledge seed warnings:\n{result.stderr.strip()}")
+    except Exception as e:
+        logger.warning(f"[App] Knowledge seed skipped (non-fatal): {e}")
+
+
 def _stop_wechat_group_channel(channel_manager):
     if channel_manager is None:
         return
@@ -386,6 +418,9 @@ def run():
 
         # Sync builtin skills to workspace before channels start
         _sync_builtin_skills()
+
+        # Seed project documentation into knowledge base (idempotent, first-run only)
+        _seed_project_knowledge()
 
         # Kick off MCP server loading in the background so first-message
         # latency isn't dominated by npx package downloads. Skipped in desktop
