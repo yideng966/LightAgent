@@ -128,7 +128,7 @@ LightAgent 支持国内外主流厂商的大语言模型。**文本对话、图�
 | 通道 | 文本 | 图片 | 文件 | 语音 | 群聊 |
 | --- | :-: | :-: | :-: | :-: | :-: |
 | [Web 控制台](https://docs.cowagent.ai/zh/channels/web)（默认） | ✅ | ✅ | ✅ | ✅ | |
-| [微信](https://docs.cowagent.ai/zh/channels/weixin) | ✅ | ✅ | ✅ | ✅ | |
+| [微信](https://docs.cowagent.ai/zh/channels/weixin) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [飞书](https://docs.cowagent.ai/zh/channels/feishu) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [钉钉](https://docs.cowagent.ai/zh/channels/dingtalk) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | [企微智能机器人](https://docs.cowagent.ai/zh/channels/wecom-bot) | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -199,6 +199,14 @@ LightAgent 支持国内外主流厂商的大语言模型。**文本对话、图�
 <br/>
 
 ## 🏷 更新日志
+
+> **2026.08.01：** [v2.2.1](https://github.com/yideng966/LightAgent/releases/tag/v2.2.1) — 微信群表情包与图片独立区分，自由回复识图失败不再占用冷却，静默判断不再外泄到群聊；Wechat4u 联系人同步告警合并降噪
+
+> **2026.07.31：** [v2.2.0](https://github.com/yideng966/LightAgent/releases/tag/v2.2.0) — 代码基线恢复到 2.1.18 稳定版，保留贡献指南中文化和 Docker 多架构发布竞态修复
+
+> **2026.07.29：** [v2.1.18](https://github.com/yideng966/LightAgent/releases/tag/v2.1.18) — 微信群长期记忆中文化稳定输出，群友画像自主学习页面布局与状态稳定
+
+> **2026.07.28：** [v2.1.17](https://github.com/yideng966/LightAgent/releases/tag/v2.1.17) — 进退群通知默认可用，群永久记忆统一归入记忆管理，支持重启和故障后的持续生成
 
 > **2026.06.18：** [v2.1.2](https://github.com/zhayujie/CowAgent/releases/tag/2.1.2) — Web 控制台升级（定时任务管理、知识库分类、多模型自定义厂商）、自主进化优化、新模型接入（kimi-k2.7-code、glm-5.2）、安全加固和体验优化
 

@@ -1,0 +1,51 @@
+---
+title: WeChat Group Reports
+description: Generate isolated statistical reports for confirmed WeChat groups with scheduled delivery.
+---
+
+## Overview
+
+The WeChat Group channel can generate daily, weekly, monthly, or custom-range reports for selected groups with confirmed stable identities. Each report includes posting statistics, leaderboards, key topics, highlight messages, and group chat links; data is read exclusively from the current group's archived messages.
+
+Report functionality is disabled by default. Once enabled, archives persist in the deployment data directory — the deployment administrator is responsible for disk space, privacy notices, and backup strategies.
+
+## Enabling
+
+1. Open "Channels → WeChat Group → Group Reports" in the Web Console.
+2. Select a confirmed target group and enable "Enable Current Group Reports".
+3. After saving settings, optionally enable daily, weekly, or monthly reports with an IANA timezone such as `Asia/Shanghai` and a delivery time.
+4. Use "Generate Preview" to inspect the current period's data, text, or long image; click "Send Now" to deliver after confirmation.
+
+When no group is selected, the stable group identity is unconfirmed, or the Web Console is not logged in, report APIs will not return group data or local file paths.
+
+## Output Formats
+
+| Format | Behavior |
+| --- | --- |
+| Text only | Sends a text-only report based on the six-module structure. |
+| Image | Sends only a 941px-wide report long image; displays failure status on rendering or send failure without falling back to text. |
+| Image preferred, fallback to text | Sends the long image first; falls back to the same text template only when image rendering or the platform explicitly rejects it and no image has been successfully sent. |
+
+If the image send result times out and delivery cannot be confirmed, the system marks it as "delivery unknown" and does not automatically resend the full text. Once any slice of a multi-image report succeeds, retries only send the remaining slices.
+
+## Permissions & Isolation
+
+- Report statistics, snapshots, preview resources, delivery records, scheduled tasks, and daily report memory are all isolated by `stable_room_id`; legacy runtime room IDs are only read within confirmed historical alias scopes.
+- Manual in-group generation defaults to current group admins only. Web admins can configure, preview, and send but cannot specify other group IDs.
+- Regular group members cannot use Agent tools to create reports, modify report settings, or write daily report memory.
+- Report link fetching always uses strict SSRF validation with per-hop redirect checks; links that are rejected, timeout, require authentication, or have empty bodies retain explicit status without the model guessing page content.
+
+## Templates & Images
+
+The default image template comes from the built-in Skill `wechat-group-report-cyber-intelligence`, using a cyber-intelligence style and shipped with the image. Image artifacts are saved in `agent_workspace/images/wechat_group_reports`; Docker defaults to `/home/agent/lightagent/images/wechat_group_reports` and does not write into `/app` inside the image.
+
+Custom text templates only support the simple fields listed in the console, without property access, loops, functions, or expressions. Required modules, braces, and a 64 KiB size limit are validated before saving.
+
+## Live Verification
+
+After deployment, verify in a real WeChat group:
+
+1. Trigger daily, weekly, monthly, and custom-range reports as an admin in the target group.
+2. Change a member's group nickname and confirm that statistics still merge to the same member.
+3. Check image, image-priority fallback, long links, multi-image slicing, and disconnected/unknown send states.
+4. Confirm that reports are only sent to the current stable group and that replies and images do not leak host paths, stable IDs, or runtime IDs.

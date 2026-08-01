@@ -40,7 +40,7 @@ LightAgent 是一个以 Python 为主的多渠道 Agent Harness 项目，包含�
 - `plugins/`：聊天命令插件与插件管理器。不要把 Agent 工具和插件混为一类。
 - `voice/`、`translate/`：ASR/TTS 与翻译 Provider。
 - `desktop/`：已停止维护的 Electron 历史源码归档，不再开发、修复、构建或发布；Python 后端 `app.py` 不属于桌面端，继续作为项目主入口维护。
-- `docs/`：英文、中文。涉及用户可见能力变更时，优先补充对应文档。
+- `docs/`：英文、中文。日文文档（`docs/ja/`）已停止维护，不再更新。涉及用户可见能力变更时，只需更新英文和中文对应文档。
 - `tests/`：`unittest` 风格回归测试，很多测试通过 stub/mocking 避免真实网络和外部服务。
 
 ## 本地运行与验证
@@ -261,6 +261,14 @@ docker push yideng966/lightagent:latest
 
 ## 修改原则
 
+- 修改代码逻辑后，必须同步检查并更新 `docs/` 文件夹下的相关文档，确保文档描述与代码实际行为一致。至少应包括：
+  - 新增、移除或重命名渠道时，更新 `docs/zh/README.md` 的通道列表。
+  - 新增、移除或重命名模型 Provider 时，更新 `docs/zh/README.md`、的模型支持表。
+  - 修改核心功能（记忆、知识库、技能、工具、自主进化等）的行为或默认配置时，更新对应 README 中的功能说明和配置表格。
+  - 新增或修改 CLI 命令时，更新 README 中的 CLI 命令示例。
+  - 修改 Docker 构建或部署流程时，更新 README 中的 Docker 相关说明。
+  - 修改微信群通道的关键行为时，同步更新 `docs/zh/channels/wechat-group-reply-flow.md` 中对应的流程描述。
+  - Mintlify 文档站（`docs/*.mdx`）中如有对应主题，也应同步更新。
 - 修改前先读当前文件，禁止凭记忆改代码。
 - 遵守最小修改原则：只改让当前需求成立的必要文件。
 - 不顺手重构无关代码；发现无关问题时在回复里单独说明。
