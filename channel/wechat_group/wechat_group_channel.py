@@ -1385,11 +1385,14 @@ class WechatGroupChannel(ChatChannel):
                     "report_disabled": "当前群的群聊报告尚未启用。",
                     "admin_required": "生成群聊报告需要当前群管理员触发。",
                 }
+                if reason == "admin_required":
+                    context["wechat_group_silent_admin_guard"] = True
                 return Reply(ReplyType.ERROR, messages.get(reason, "当前无法生成群聊报告。"))
         blocked = get_blocked_admin_permissions_for_text(guard_text, room_id, sender_id)
         if not blocked:
             return None
         context["wechat_group_admin_blocked_permissions"] = blocked
+        context["wechat_group_silent_admin_guard"] = True
         return Reply(ReplyType.ERROR, build_wechat_group_admin_reject_message(blocked))
 
     def _check_image_create_limit(self, context) -> Reply:
@@ -1650,6 +1653,9 @@ class WechatGroupChannel(ChatChannel):
         return reply
 
     def send(self, reply, context):
+        if context.get("wechat_group_silent_admin_guard") is True:
+            logger.info("[wechat_group] admin guard reply suppressed")
+            return
         receiver = context.get("receiver")
         if not receiver:
             logger.warning("[wechat_group] missing receiver, skip send")

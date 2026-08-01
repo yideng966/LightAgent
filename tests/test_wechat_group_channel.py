@@ -1621,6 +1621,24 @@ class WechatGroupChannelTest(unittest.TestCase):
             client.commands,
         )
 
+    def test_send_suppresses_admin_guard_reply(self):
+        client = FakeClient()
+        channel = WechatGroupChannel(client=client)
+        context = {
+            "type": ContextType.TEXT,
+            "receiver": "room@@abc",
+            "wechat_group_silent_admin_guard": True,
+            "msg": Mock(
+                is_group=True,
+                actual_user_id="wxid_alice",
+                actual_user_nickname="Alice",
+            ),
+        }
+
+        channel.send(Reply(ReplyType.ERROR, "这个操作需要当前群管理员触发。"), context)
+
+        self.assertEqual([], client.commands)
+
     def test_send_non_agent_timeout_error_is_not_suppressed(self):
         client = FakeClient()
         channel = WechatGroupChannel(client=client)
@@ -1966,6 +1984,24 @@ class WechatGroupChannelTest(unittest.TestCase):
         generate.assert_not_called()
         self.assertEqual(ReplyType.ERROR, reply.type)
         self.assertIn("当前群管理员", reply.content)
+        self.assertTrue(context["wechat_group_silent_admin_guard"])
+
+    def test_non_admin_report_request_marks_admin_guard_reply_silent(self):
+        channel = WechatGroupChannel(client=FakeClient())
+        context = Context(ContextType.TEXT, "生成群聊日报")
+        context["channel_type"] = "wechat_group"
+        context["wechat_group_stable_room_id"] = "wgr_room"
+        context["wechat_group_stable_member_id"] = "wgm_normal"
+
+        with patch(
+            "channel.wechat_group.wechat_group_channel.can_generate_wechat_group_report",
+            return_value=(False, "admin_required"),
+        ):
+            reply = channel._check_admin_guard(context)
+
+        self.assertEqual(ReplyType.ERROR, reply.type)
+        self.assertIn("当前群管理员", reply.content)
+        self.assertTrue(context["wechat_group_silent_admin_guard"])
 
     def test_admin_persistent_write_request_is_not_rejected_by_channel_guard(self):
         conf()["wechat_group_admin_members"] = [{"room_id": "room@@abc", "sender_id": "wxid_admin"}]

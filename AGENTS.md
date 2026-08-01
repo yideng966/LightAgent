@@ -347,6 +347,7 @@ docker push yideng966/lightagent:latest
 - 微信群管理员权限必须按 `stable_room_id + stable_member_id` 精确生效；旧 `room_id + sender_id` 仅作为 runtime legacy 快照兼容，不要把某个成员在一个群的管理员身份扩展到其他群。
 - `wechat_group_admin_members` 是新 UI 和新逻辑的主配置；`wechat_group_admin_sender_ids` 仅作为旧配置兼容 fallback，不作为新功能默认写入目标。
 - 普通群成员可以问答、查询、总结和读取上下文，但不能触发知识库写入、永久记忆写入、群记忆写入、群友画像写入、自主进化、workspace 文件写入/编辑、定时任务修改或微信群配置修改。
+- 普通群成员触发管理员门禁能力时必须在通道层硬拒绝并静默处理，不得向群内发送“需要当前群管理员触发”等权限提示；身份未确认、功能未启用等非管理员门禁错误保持正常反馈。
 - 管理员门禁必须同时包含通道层拒绝、Agent 工具过滤和 Prompt 权限提示；不能只依赖模型自觉遵守提示词。
 - 微信群稳定身份改造后，`wechat_group_room_id` / `wechat_group_sender_id` 继续表示当前 Wechaty 登录态 runtime ID；长期配置、权限、会话、归档、记忆、画像、焦点、情绪、风格、表情和 scheduler 必须优先使用显式 stable 字段。
 - 群永久记忆的唯一 Web 管理入口是「管理 → 记忆 → 群记忆」；「管理 → 知识」只管理全局 Markdown 知识库，「群聊」不得再提供重复的群永久记忆管理入口。群友画像及自主学习保留在「群聊 → 群友画像」，完整记忆与画像注入预览保留在「群聊 → 拟人化」。

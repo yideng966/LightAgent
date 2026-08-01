@@ -2047,6 +2047,10 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("groups_admin_permission_guard_layers", console_js)
         self.assertIn("groups_admin_permission_affected_objects", console_js)
         self.assertIn("toggleGroupsAdminPermissionDetails", console_js)
+        detail_toggle_start = console_js.find("function toggleGroupsAdminPermissionDetails")
+        status_update_start = console_js.find("function updateGroupsAdminPermissionStatus")
+        detail_toggle_block = console_js[detail_toggle_start:status_update_start]
+        self.assertIn("renderGroupsView({ preserveScroll: true })", detail_toggle_block)
         self.assertIn("/api/wechat-group/members", console_js)
         self.assertNotIn("id=\"groups-room-names\"", console_js)
 

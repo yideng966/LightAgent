@@ -2,6 +2,30 @@
 
 ## 2026-08-01
 
+### 修复微信群管理员门禁交互
+
+- Web 控制台“群聊 -> 群与管理员”展开或收起管理员门禁详情时保留当前滚动位置，不再异常跳到页面顶部。
+- 普通群成员触发管理员门禁能力时继续由通道层硬拒绝，但不再向群内发送权限提示；身份未确认、功能未启用等其他业务错误保持原有反馈。
+- 使用显式上下文标记控制静默发送，不依赖错误文案匹配，并补充 UI 与通道发送回归测试。
+
+关键文件：
+
+- `AGENTS.md`
+- `channel/web/static/js/console.js`
+- `channel/wechat_group/wechat_group_channel.py`
+- `tests/test_wechat_group_web.py`
+- `tests/test_wechat_group_channel.py`
+- `docs/zh/channels/wechat-group.mdx`
+- `docs/channels/wechat-group.mdx`
+- `plans/20260801_群聊管理员门禁交互修复.md`
+- `CHANGES.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest tests.test_wechat_group_channel`：151 项通过；补充报告门禁测试后，4 项管理员门禁聚焦用例再次通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_web`：119 项通过；管理员门禁 UI 聚焦用例再次通过。
+- `node --check channel/web/static/js/console.js` 与 `git diff --check`：通过。
+
 ### 修复 Android 手机 Web 控制台侧边栏入口不可见
 
 - Web 控制台根容器改用带 `100vh` 回退的 `100dvh` 动态视口高度，避免荣耀、华为等 Android 手机的底部浏览器栏挤压可视区域后把顶部导航带出屏幕。

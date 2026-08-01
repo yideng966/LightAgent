@@ -14837,7 +14837,7 @@ function toggleGroupsAdminPermissionDetails(permissionId) {
     if (next.has(permissionId)) next.delete(permissionId);
     else next.add(permissionId);
     groupsAdminState.expandedPermissionIds = next;
-    renderGroupsView();
+    renderGroupsView({ preserveScroll: true });
 }
 
 function updateGroupsAdminPermissionStatus(el) {
