@@ -259,6 +259,41 @@ class GitHubCommitWebhookServiceTest(unittest.TestCase):
         self.assertEqual("opened", task["metadata"]["github_action"])
         self.assertEqual("main", task["metadata"]["ref"])
 
+    def test_selected_release_queues_release_body(self):
+        self.config["github_commit_notify_events"] = ["release"]
+        self.config["github_commit_notify_event_actions"] = {
+            "release": ["released"],
+        }
+        payload = {
+            "action": "released",
+            "repository": {
+                "full_name": "owner/repository",
+                "html_url": "https://github.com/owner/repository",
+            },
+            "sender": {"login": "github-actions[bot]"},
+            "release": {
+                "name": "LightAgent 2.2.2",
+                "body": "本版本修复移动端问题。\n\n## Bug 修复\n\n- 保持侧边栏入口可见。",
+                "html_url": "https://github.com/owner/repository/releases/tag/v2.2.2",
+            },
+        }
+
+        result = self._request(
+            self._service(),
+            payload=payload,
+            event="release",
+            delivery_id="delivery-release",
+        )
+
+        self.assertEqual("accepted", result["status"])
+        task = self.enqueued[0]
+        self.assertIn("内容：LightAgent 2.2.2", task["content"])
+        self.assertIn("本版本修复移动端问题。", task["content"])
+        self.assertIn("Bug 修复", task["content"])
+        self.assertNotIn("## Bug 修复", task["content"])
+        self.assertEqual("release", task["metadata"]["github_event"])
+        self.assertEqual("released", task["metadata"]["github_action"])
+
     def test_action_filter_and_selected_event_are_ignored_without_queueing(self):
         self.config["github_commit_notify_events"] = ["pull_request"]
         self.config["github_commit_notify_event_actions"] = {

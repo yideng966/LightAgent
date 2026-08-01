@@ -333,6 +333,14 @@ def format_github_event_message(
     url = _github_event_url(event_name, payload)
     if url:
         lines.append("查看详情：{}".format(url))
+    if event_name == "release":
+        release_body = _clean_release_details(
+            _dict_value(payload.get("release")).get("body"),
+            4000,
+            repository,
+        )
+        if release_body:
+            lines.append("\n{}".format(release_body))
     return _fit_message(lines, max_chars)
 
 
@@ -537,6 +545,55 @@ def _clean_text(value, max_length: int) -> str:
     text = re.sub(r"[\x00-\x1f\x7f]+", " ", text)
     text = re.sub(r"\s+", " ", text).strip()
     return text[:max(int(max_length), 1)]
+
+
+def _clean_multiline_text(value, max_length: int) -> str:
+    if not isinstance(value, str):
+        return ""
+    limit = max(int(max_length), 1)
+    text = value[:limit * 2].replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"[\x00-\x09\x0b-\x1f\x7f]+", " ", text)
+    text = "\n".join(line.rstrip() for line in text.split("\n"))
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
+    return text[:limit].rstrip()
+
+
+def _clean_release_details(value, max_length: int, repository: str = "") -> str:
+    text = _clean_multiline_text(value, max_length)
+    if not text:
+        return ""
+
+    lines = text.split("\n")
+    first_content = next((index for index, line in enumerate(lines) if line.strip()), len(lines))
+    repository_name = str(repository or "").rsplit("/", 1)[-1].strip()
+    first_line = lines[first_content].lstrip() if first_content < len(lines) else ""
+    quoted_text = first_line[1:].strip() if first_line.startswith(">") else ""
+    is_project_positioning = (
+        repository_name
+        and quoted_text.lower().startswith(repository_name.lower() + " -")
+    )
+    if is_project_positioning:
+        index = first_content
+        while index < len(lines) and (
+            not lines[index].strip() or lines[index].lstrip().startswith(">")
+        ):
+            index += 1
+        lines = lines[index:]
+
+    details = []
+    in_code_block = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_code_block = not in_code_block
+        if not in_code_block and re.fullmatch(r"(?:-{3,}|\*{3,}|_{3,})", stripped):
+            break
+        if not in_code_block:
+            line = re.sub(r"^\s*#{1,6}\s+", "", line)
+            line = re.sub(r"^\s*[-*+]\s+", "", line)
+        details.append(line.rstrip())
+
+    return _clean_multiline_text("\n".join(details), max_length)
 
 
 def _dict_value(value) -> dict:

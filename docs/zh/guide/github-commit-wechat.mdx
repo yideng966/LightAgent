@@ -143,13 +143,29 @@ GitHub 的首次 `ping` 请求应得到 `202 Accepted`，但不会产生群消�
 
 已有 push 通知格式保持不变，仍聚合目标分支中的 commit。
 
+Release 通知会在标题和详情链接后追加 GitHub Release 的发行摘要区，并把 Markdown 标题和无序列表转换为适合微信群阅读的纯文本。若正文开头是项目定位引用则跳过该引用，遇到 Markdown 分隔线即停止，不再转发其后的安装命令和文档链接；摘要过长时仍按群消息长度上限截断。例如：
+
+```text
+[GitHub Release] owner/repository
+动作：released
+操作者：github-actions[bot]
+内容：LightAgent 2.2.2
+查看详情：https://github.com/owner/repository/releases/tag/v2.2.2
+
+本版本修复 Android 移动端 Web 控制台侧边栏入口不可见的问题。
+
+Bug 修复
+
+Web 控制台会保持顶部导航和侧边栏入口可见。
+```
+
 ## 安全与重试
 
 - 服务端使用原始请求体和 `X-Hub-Signature-256` 做 HMAC-SHA256 恒定时间比较。
 - `X-GitHub-Delivery` 用于持久化去重；在配置的去重保留期内，GitHub 手动重投递不会重复发群消息。
 - 只接受配置中的仓库和已选择稳定群；组织、企业和 GitHub App 专属事件不会进入群。
 - 通知只读取代码内白名单字段，不递归展开或保存原始 payload。
-- Issue、PR、讨论和评论正文不会进入通知；Secret scanning 的 secret、位置和匹配内容不会进入通知。
+- Release 正文的发行摘要区会进入通知；分隔线后的安装与文档内容不会转发。Issue、PR、讨论和评论正文仍不会进入通知，Secret scanning 的 secret、位置和匹配内容不会进入通知。
 - Webhook 验签和入队完成后立即返回 `202`，微信群发送由 scheduler 异步完成。
 - 群未登录、sidecar 未就绪或 stable/runtime 身份暂未恢复时，任务会在配置有效期内继续重试。
 

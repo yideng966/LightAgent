@@ -53,6 +53,27 @@
 - `python -X utf8 -m unittest discover -s tests`：共运行 1246 项，1242 项通过、1 项按条件跳过；3 项既有千帆文档测试因仓库已停止维护且不存在 `docs/ja/` 文件而报错，与本次改动无关。
 - 删除 3 个因 `docs/ja/` 已停止维护而失效的千帆文档单元测试；保留千帆配置文档内容测试。
 
+### 补充 GitHub Release 群通知详情
+
+- GitHub `release` Webhook 通知在现有标题和详情链接后追加发行摘要区，并将 Markdown 标题与无序列表转换为适合微信群阅读的纯文本。
+- 跳过正文开头的项目定位引用，并在 Markdown 分隔线处停止，避免把安装命令和文档链接发进群。
+- Release 正文继续受群消息长度上限约束；PR、Issue、讨论和评论等其他事件仍不转发正文，保持现有字段白名单边界。
+
+关键文件：
+
+- `channel/web/github_webhook_events.py`
+- `tests/test_github_webhook_events.py`
+- `tests/test_github_commit_webhook.py`
+- `docs/zh/guide/github-commit-wechat.mdx`
+- `plans/20260801_发布通知展示详情.md`
+- `CHANGES.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest tests.test_github_webhook_events tests.test_github_commit_webhook tests.test_scheduler_wechat_group_delivery`：43 项通过。
+- `python -X utf8 -m py_compile channel/web/github_webhook_events.py channel/web/github_commit_webhook.py` 与 `git diff --check`：通过。
+- 使用 `docs/releases/v2.2.2.md` 生成 800 字符上限下的实际通知样例：输出 401 字，完整保留版本概述和两条 Bug 修复，未包含安装与文档章节。
+
 ### 发布 LightAgent 2.2.2
 
 - 汇总发布两项交互修复：Android 移动端 Web 控制台顶部导航与侧边栏入口保持可见，以及微信群管理员门禁页面位置和静默拒绝行为修正。

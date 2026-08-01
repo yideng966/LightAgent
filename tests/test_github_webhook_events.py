@@ -107,6 +107,67 @@ class GitHubWebhookEventsTest(unittest.TestCase):
         self.assertNotIn("pull-request-body-secret-canary", message)
         self.assertNotIn("repository-secret-canary", message)
 
+    def test_release_message_includes_plain_summary_section(self):
+        payload = {
+            "action": "released",
+            "sender": {"login": "github-actions[bot]"},
+            "release": {
+                "name": "LightAgent 2.2.2",
+                "body": (
+                    "> LightAgent - 多渠道 Agent Harness\r\n\r\n"
+                    "本版本修复 Android 移动端 Web 控制台问题。\r\n\r\n"
+                    "## Bug 修复\r\n\r\n\r\n"
+                    "- 保持顶部导航和侧边栏入口可见。\x00\r\n\r\n"
+                    "---\r\n\r\n## 安装\r\ndocker pull secret-install-canary"
+                ),
+                "html_url": "https://github.com/owner/repository/releases/tag/v2.2.2",
+            },
+        }
+
+        message = format_github_event_message("release", payload, "yideng966/LightAgent")
+
+        self.assertIn("内容：LightAgent 2.2.2", message)
+        self.assertIn("查看详情：https://github.com/owner/repository/releases/tag/v2.2.2", message)
+        self.assertIn(
+            "\n\n本版本修复 Android 移动端 Web 控制台问题。\n\n"
+            "Bug 修复\n\n保持顶部导航和侧边栏入口可见。",
+            message,
+        )
+        self.assertNotIn("多渠道 Agent Harness", message)
+        self.assertNotIn("secret-install-canary", message)
+        self.assertNotIn("\x00", message)
+
+        warning_message = format_github_event_message(
+            "release",
+            {"release": {"name": "v1", "body": "> 这是升级前必须阅读的警告。"}},
+            "owner/repository",
+        )
+        self.assertIn("> 这是升级前必须阅读的警告。", warning_message)
+
+    def test_release_body_rejects_nested_values_and_respects_message_limit(self):
+        nested_message = format_github_event_message(
+            "release",
+            {"release": {"name": "v1", "body": {"secret": "release-secret-canary"}}},
+            "owner/repository",
+        )
+        self.assertNotIn("release-secret-canary", nested_message)
+
+        bounded_message = format_github_event_message(
+            "release",
+            {
+                "release": {
+                    "name": "v1",
+                    "body": "版本详情" * 200,
+                    "html_url": "https://github.com/owner/repository/releases/tag/v1",
+                },
+            },
+            "owner/repository",
+            max_chars=200,
+        )
+        self.assertLessEqual(len(bounded_message), 200)
+        self.assertIn("查看详情：https://github.com/owner/repository/releases/tag/v1", bounded_message)
+        self.assertIn("版本详情", bounded_message)
+
     def test_comment_and_security_payloads_do_not_leak_sensitive_content(self):
         comment_payload = {
             "action": "created",
