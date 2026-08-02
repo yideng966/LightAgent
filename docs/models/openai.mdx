@@ -27,6 +27,10 @@ OpenAI offers the most complete coverage and can simultaneously serve text chat,
 | `open_ai_api_base` | Optional; change it to access a third-party proxy |
 | `bot_type` | Not required when using OpenAI's official models; set to `openai` when accessing other providers via the compatible protocol |
 
+## Thinking Control
+
+For GPT-5 reasoning models, the Agent Configuration switch is converted to OpenAI's `reasoning_effort`: disabling uses the model's `none` level, while enabled requests use the selected `low`, `medium`, `high`, or `max` value. Support for individual effort values varies by OpenAI model; non-reasoning models receive no reasoning parameter. Third-party compatible endpoints must be configured as a Custom Provider with an explicit thinking protocol instead of inheriting OpenAI behavior automatically.
+
 ## Image Understanding
 
 OpenAI models like `gpt-5.5`, `gpt-5.4`, `gpt-4o`, and `gpt-4.1` natively support vision. Once `open_ai_api_key` is configured, the Agent's Vision tool automatically uses the main model to recognize images. If the main model does not support vision or you want to specify it explicitly, set it in the configuration file:

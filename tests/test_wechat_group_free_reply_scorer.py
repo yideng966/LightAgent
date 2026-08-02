@@ -304,7 +304,7 @@ class WechatGroupFreeReplyScorerTest(unittest.TestCase):
         self.assertEqual(256, kwargs["max_tokens"])
         self.assertEqual(
             {
-                "reasoning_effort": "none",
+                "disable_thinking": True,
                 "response_format": {"type": "json_object"},
             },
             kwargs["request_options"],

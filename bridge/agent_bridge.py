@@ -481,6 +481,7 @@ class TextModelRouter(LLMModel):
                 "api_key": conf().get("custom_api_key", ""),
                 "api_base": conf().get("custom_api_base") or None,
                 "model": "",
+                "thinking_protocol": conf().get("custom_thinking_protocol", "none"),
             }
 
         api_key = provider.get("api_key", "")
@@ -513,6 +514,7 @@ class TextModelRouter(LLMModel):
                 "api_key": api_key,
                 "api_base": api_base,
                 "model": model_name,
+                "thinking_protocol": provider.get("thinking_protocol", "none"),
                 "default_temperature": conf().get("temperature", 0.9),
                 "default_top_p": conf().get("top_p", 1.0),
                 "default_frequency_penalty": conf().get("frequency_penalty", 0.0),
@@ -552,8 +554,12 @@ class TextModelRouter(LLMModel):
         request_options = getattr(request, 'request_options', None)
         if not isinstance(request_options, dict):
             request_options = {}
-        if request_options:
-            kwargs['request_options'] = dict(request_options)
+        wire_request_options = dict(request_options)
+        wire_request_options.pop("disable_thinking", None)
+        if wire_request_options.get("reasoning_effort") == "none":
+            wire_request_options.pop("reasoning_effort", None)
+        if wire_request_options:
+            kwargs['request_options'] = wire_request_options
 
         system_prompt = getattr(request, 'system', None)
         if system_prompt:
@@ -566,7 +572,10 @@ class TextModelRouter(LLMModel):
         if session_id:
             kwargs['session_id'] = session_id
 
-        request_disables_thinking = request_options.get("reasoning_effort") == "none"
+        request_disables_thinking = (
+            request_options.get("disable_thinking") is True
+            or request_options.get("reasoning_effort") == "none"
+        )
         thinking_enabled = (
             False
             if request_disables_thinking
@@ -577,9 +586,10 @@ class TextModelRouter(LLMModel):
             else {"type": "disabled"}
         )
         if thinking_enabled:
-            effort = conf().get("reasoning_effort", "high")
-            if effort in ("high", "max"):
-                kwargs['reasoning_effort'] = effort
+            from models.thinking_policy import normalize_reasoning_effort
+            kwargs['reasoning_effort'] = normalize_reasoning_effort(
+                conf().get("reasoning_effort", "low")
+            )
         return kwargs
 
     def _call_candidate(self, request: LLMRequest, candidate, stream: bool):

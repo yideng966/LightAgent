@@ -86,6 +86,7 @@ class TestSetCustomProvider(unittest.TestCase):
         self.assertEqual(len(providers), 1)
         self.assertEqual(providers[0]["id"], res["id"])
         self.assertEqual(providers[0]["name"], "my-provider")
+        self.assertEqual(providers[0]["thinking_protocol"], "none")
         self.assertEqual(self.h.bridge_resets, 1)
 
     def test_create_with_make_active_switches_bot_type(self):
@@ -105,6 +106,32 @@ class TestSetCustomProvider(unittest.TestCase):
     def test_create_requires_name(self):
         res = self.h.call(action="set_custom_provider", name="", api_base="https://x/v1")
         self.assertEqual(res["status"], "error")
+
+    def test_create_rejects_unknown_thinking_protocol(self):
+        res = self.h.call(
+            action="set_custom_provider",
+            name="x",
+            api_base="https://x/v1",
+            thinking_protocol="arbitrary_json",
+        )
+        self.assertEqual(res["status"], "error")
+
+    def test_edit_updates_thinking_protocol(self):
+        res = self.h.call(
+            action="set_custom_provider",
+            name="x",
+            api_base="https://x/v1",
+            thinking_protocol="none",
+        )
+        self.h.call(
+            action="set_custom_provider",
+            id=res["id"],
+            name="x",
+            api_base="https://x/v1",
+            thinking_protocol="deepseek",
+        )
+        provider = config_module.conf().get("custom_providers")[0]
+        self.assertEqual(provider["thinking_protocol"], "deepseek")
 
     def test_second_provider_does_not_steal_active(self):
         # Explicitly activate the first provider.

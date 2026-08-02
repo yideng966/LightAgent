@@ -9,6 +9,7 @@ from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from config import conf, load_config
+from models.thinking_policy import normalize_reasoning_effort
 from .dashscope_session import DashscopeSession
 import os
 import dashscope
@@ -267,8 +268,13 @@ class DashscopeBot(Bot):
                 thinking = kwargs.get("thinking", {"type": "enabled"})
                 if thinking.get("type") == "enabled":
                     parameters["enable_thinking"] = True
-                    if kwargs.get("thinking_budget"):
-                        parameters["thinking_budget"] = kwargs["thinking_budget"]
+                    effort = normalize_reasoning_effort(kwargs.get("reasoning_effort", "low"))
+                    parameters["thinking_budget"] = {
+                        "low": 1024,
+                        "medium": 4096,
+                        "high": 8192,
+                        "max": 16384,
+                    }[effort]
                     if stream:
                         parameters["incremental_output"] = True
                 else:

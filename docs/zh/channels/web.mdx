@@ -13,7 +13,8 @@ Web 控制台是 LightAgent 的默认通道，启动后会自动运行，通过�
   "web_host": "0.0.0.0",
   "web_port": 9899,
   "web_password": "",
-  "enable_thinking": false
+  "enable_thinking": false,
+  "reasoning_effort": "low"
 }
 ```
 
@@ -26,6 +27,7 @@ Web 控制台是 LightAgent 的默认通道，启动后会自动运行，通过�
 | `web_session_expire_days` | 登录会话有效天数 | `30` |
 | `web_file_serve_root` | web 端可直接读取/发送的文件根目录，默认仅限用户主目录及 agent 工作空间；设为 `/` 可放开整个文件系统 | `"~"` |
 | `enable_thinking` | 是否启用深度思考模式 | `false` |
+| `reasoning_effort` | 开启思考时使用的统一强度，支持 `low`、`medium`、`high`、`max` | `low` |
 
 配置密码后，访问控制台时需先输入密码完成登录。登录状态默认保持 30 天，期间重启服务也无需重新登录。密码也支持在控制台的「配置」页面中在线修改。
 
@@ -44,7 +46,7 @@ Web 控制台是 LightAgent 的默认通道，启动后会自动运行，通过�
 
 ### 对话界面
 
-支持流式输出，可实时展示 Agent 的思考过程（Reasoning）和工具调用过程（Tool Calls），更直观地观察 Agent 的决策过程。深度思考功能可通过配置或控制台的「Agent 配置」开关控制。
+支持流式输出，可实时展示 Agent 的思考过程（Reasoning）和工具调用过程（Tool Calls）。在「配置 -> Agent 配置」中，深度思考开关控制 Agent 文本请求是否要求模型思考，旁边的强度控件可选择 `low`、`medium`、`high`、`max`。关闭时会保留已选档位，重新开启后继续使用。Provider 会把统一档位转换为自身协议；原生档位较少时可能合并相邻档位，固定推理模型也可能无法关闭。
 
 手机端会默认收起左侧导航，可点击顶部左侧的菜单按钮打开。控制台使用动态可视高度，并避免登录后自动聚焦底部输入框，以保持 Android 浏览器中的顶部导航入口可见。
 

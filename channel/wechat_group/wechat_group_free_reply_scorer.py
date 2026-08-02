@@ -395,7 +395,7 @@ class WechatGroupFreeReplyScorer:
             provider=provider,
             model=model,
             request_options={
-                "reasoning_effort": "none",
+                "disable_thinking": True,
                 "response_format": {"type": "json_object"},
             },
         )

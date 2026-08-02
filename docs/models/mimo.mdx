@@ -36,13 +36,15 @@ Xiaomi MiMo is a native omni-modal large model. A single `mimo_api_key` enables 
 
 The MiMo V2.5 series enables "thinking mode" by default: the model emits `reasoning_content` (chain-of-thought) before the final answer, improving performance on complex tasks.
 
-Use the global `enable_thinking` flag to toggle visibility (also switchable from the Web Console settings):
+Use the global `enable_thinking` flag to enable or disable model thinking (also switchable from the Web Console settings):
 
 ```json
 {
   "enable_thinking": true
 }
 ```
+
+MiMo's current switch protocol does not expose LightAgent's four effort levels, so `reasoning_effort` is retained in configuration but no unsupported strength field is sent upstream.
 
 ## Image Understanding
 

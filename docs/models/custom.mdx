@@ -11,7 +11,7 @@ For model services accessed via the OpenAI-compatible protocol, such as:
 
 ## Web Console
 
-Recommended. On the "Models" page of the Web console, click "Add Provider" and pick "Custom", then fill in the name, API Base and API Key. Multiple custom providers can be added; after adding one, select it together with a model in the "Main Model" card to enable it.
+Recommended. On the "Models" page of the Web console, click "Add Provider" and pick "Custom", then fill in the name, API Base, API Key, and the thinking protocol accepted by that endpoint. Multiple custom providers can be added; after adding one, select it together with a model in the "Main Model" card to enable it.
 
 <img width="900" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-custom-model-config.png" />
 
@@ -36,14 +36,16 @@ You can also edit `config.json` directly: define multiple providers in the `cust
       "name": "ProviderA",
       "api_key": "YOUR_API_KEY_A",
       "api_base": "https://api.a.com/v1",
-      "model": "deepseek-v3"
+      "model": "deepseek-v4-flash",
+      "thinking_protocol": "deepseek"
     },
     {
       "id": "a1b2c3d4",
       "name": "ProviderB",
       "api_key": "YOUR_API_KEY_B",
       "api_base": "https://api.b.com/v1",
-      "model": "qwen3-max"
+      "model": "qwen3-max",
+      "thinking_protocol": "enable_thinking"
     }
   ]
 }
@@ -51,11 +53,14 @@ You can also edit `config.json` directly: define multiple providers in the `cust
 
 | Parameter | Description |
 | --- | --- |
-| `custom_providers` | List of custom providers; each item has `id`, `name`, `api_base`, `api_key` (optional) and `model` (optional) |
+| `custom_providers` | List of custom providers; each item has `id`, `name`, `api_base`, `api_key` (optional), `model` (optional), and `thinking_protocol` (optional) |
 | `bot_type` | Set to `"custom:<id>"` to activate the corresponding provider |
 | `id` | Unique identifier (8-char hex); auto-generated when adding via the Web console, or any unique string when editing manually |
 | `name` | Display label, can be renamed freely |
 | `model` | Model used by this provider, takes effect when activated |
+| `thinking_protocol` | Controlled protocol used to translate the global thinking switch: `none`, `thinking_object`, `deepseek`, `enable_thinking`, or `openai_reasoning`. Defaults to `none` |
+
+`none` is the safe default and sends no thinking-specific field. Choose a protocol only when the upstream service documents that exact request shape. `reasoning_effort` remains a LightAgent-wide four-level setting; protocols without native effort support apply only the on/off state.
 
 <Note>
   The legacy single-provider configuration (`bot_type` set to `"custom"` with `custom_api_key` / `custom_api_base`) remains fully compatible and keeps working without any changes.

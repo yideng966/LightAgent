@@ -23,6 +23,10 @@ description: 通义千问模型配置（文本 / 图像理解 / 图像生成 / �
 | `model` | 可填 `qwen3.7-plus`、`qwen3.7-max`、`qwen3.6-plus`、`qwen3.5-plus`、`qwen3-max`、`qwen-max`、`qwen-plus`、`qwen-turbo`、`qwq-plus` 等 |
 | `dashscope_api_key` | 在 [百炼控制台](https://bailian.console.aliyun.com/?tab=model#/api-key) 创建，参考 [官方文档](https://bailian.console.aliyun.com/?tab=api#/api) |
 
+## 思考控制
+
+对于 Qwen3/QwQ 文本模型，LightAgent 会把全局开关转换为 `enable_thinking`，并把 `low`、`medium`、`high`、`max` 映射为递增的思考预算。其他 Qwen 模型不接收思考专属字段；可切换模型在关闭时发送 `enable_thinking=false`。
+
 ## 图像理解
 
 配置 `dashscope_api_key` 后 Agent 的 Vision 工具会自动调用千问的视觉模型识别图像。`qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` 等模型本身就是多模态；若主模型是纯文本（如 `qwen-turbo`），会自动回落到 `qwen-vl-max`。

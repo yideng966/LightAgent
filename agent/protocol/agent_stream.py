@@ -638,10 +638,16 @@ class AgentStreamExecutor:
         """
         # Log a compact turn summary without dumping injected prompt blocks.
         thinking_enabled = self._is_thinking_enabled()
+        from config import conf
+        from models.thinking_policy import normalize_reasoning_effort
+        thinking_effort = normalize_reasoning_effort(
+            conf().get("reasoning_effort", "low")
+        )
         logger.info(
-            "[Agent] turn start: model={} thinking={} {}".format(
+            "[Agent] turn start: model={} thinking={} effort={} {}".format(
                 self.model.model,
                 str(thinking_enabled).lower(),
+                thinking_effort,
                 _summarize_user_message_for_run_log(user_message),
             )
         )

@@ -24,6 +24,10 @@ Google Gemini 支持文本对话、图像理解和图像生成（Nano Banana 系
 | `gemini_api_key` | 在 [Google AI Studio](https://aistudio.google.com/app/apikey) 创建 |
 | `gemini_api_base` | 可选，默认为 `https://generativelanguage.googleapis.com`，可改为第三方代理 |
 
+## 思考控制
+
+Agent 的全局思考开关和四档强度会按 Gemini 模型族转换。Gemini 3 使用 `thinkingLevel`，统一档位 `max` 映射为其可移植的最高 `high`；Gemini 2.5 使用 `thinkingBudget`，支持关闭时以 0 表示。部分 Gemini 3 模型无法完全关闭思考，因此关闭请求会降到该模型支持的最低档位。
+
 ## 图像理解
 
 Gemini 全系列模型均原生支持视觉，配置 `gemini_api_key` 后 Agent 的 Vision 工具会自动使用主模型识别图像，无需额外配置。

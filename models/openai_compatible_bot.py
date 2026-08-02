@@ -100,7 +100,8 @@ class OpenAICompatibleBot:
                 "stream": stream
             }
             # GPT-5 / GPT-5.5 / o1 series only accept default temperature/top_p and reject penalty params
-            if model_name in ("gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.5", "o1", "o1-mini"):
+            model_name_lower = str(model_name).lower()
+            if model_name_lower.startswith("gpt-5") or model_name_lower in ("o1", "o1-mini"):
                 for key in ("temperature", "top_p", "frequency_penalty", "presence_penalty"):
                     request_params.pop(key, None)
             
@@ -108,15 +109,22 @@ class OpenAICompatibleBot:
             if kwargs.get("max_tokens"):
                 request_params["max_tokens"] = kwargs["max_tokens"]
 
-            # Stateless callers can opt into a small, explicitly allowlisted
-            # set of OpenAI-compatible request controls. Keeping these options
-            # request-scoped prevents scorer-specific reasoning settings from
-            # changing the main chat model's behavior.
+            # Stateless callers can opt into explicitly allowlisted wire
+            # controls. Thinking is resolved separately from the unified
+            # Agent configuration and must not leak internal sentinel values.
             request_options = kwargs.get("request_options")
             if isinstance(request_options, dict):
-                for key in ("reasoning_effort", "response_format"):
+                for key in ("response_format",):
                     if request_options.get(key) is not None:
                         request_params[key] = request_options[key]
+
+            from models.thinking_policy import apply_openai_compatible_thinking
+            apply_openai_compatible_thinking(
+                request_params,
+                api_config.get("thinking_protocol", "none"),
+                kwargs.get("thinking"),
+                kwargs.get("reasoning_effort", "low"),
+            )
             
             # Add tools if provided
             if tools:

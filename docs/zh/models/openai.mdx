@@ -27,6 +27,10 @@ OpenAI 是覆盖最完整的厂商，可同时承担文本对话、视觉理解�
 | `open_ai_api_base` | 可选，修改可接入第三方代理 |
 | `bot_type` | 使用 OpenAI 官方模型时无需填写；通过兼容协议接入厂商模型时需设为 `openai` |
 
+## 思考控制
+
+对于 GPT-5 推理模型，「Agent 配置」中的开关会转换为 OpenAI 的 `reasoning_effort`：关闭时使用模型的 `none` 档，开启时使用所选 `low`、`medium`、`high` 或 `max`。不同 OpenAI 模型支持的具体档位可能不同；非推理模型不会收到推理参数。第三方兼容端应配置为 Custom Provider 并显式选择思考协议，不能自动继承 OpenAI 行为。
+
 ## 图像理解
 
 `gpt-5.5`、`gpt-5.4`、`gpt-4o`、`gpt-4.1` 等 OpenAI 模型均原生支持视觉，配置 `open_ai_api_key` 后 Agent 的 Vision 工具会自动使用主模型识别图像。若主模型不支持视觉或希望显式指定，可在配置文件中配置：

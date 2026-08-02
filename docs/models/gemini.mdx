@@ -24,6 +24,10 @@ Google Gemini supports text chat, image understanding, and image generation (Nan
 | `gemini_api_key` | Create one in [Google AI Studio](https://aistudio.google.com/app/apikey) |
 | `gemini_api_base` | Optional, defaults to `https://generativelanguage.googleapis.com`. Can be changed to a third-party proxy |
 
+## Thinking Control
+
+The global Agent thinking switch and four effort levels are translated by model family. Gemini 3 uses `thinkingLevel`; `max` maps to its highest portable `high` level. Gemini 2.5 uses `thinkingBudget`, with zero used to disable thinking where supported. Some Gemini 3 models cannot fully turn thinking off, so a disabled request is reduced to the lowest supported level instead.
+
 ## Image Understanding
 
 All Gemini models natively support vision. Once `gemini_api_key` is configured, the Agent's Vision tool automatically uses the main model to recognize images, with no extra setup required.

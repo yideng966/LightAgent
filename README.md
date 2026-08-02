@@ -175,7 +175,7 @@ LightAgent 的主链路由五层组成：
 - `agent`：是否启用 Agent 模式。
 - `agent_workspace`：Agent 工作目录，默认 `~/lightagent`，用于存放技能、记忆、知识库、MCP 配置等。
 - `agent_max_context_tokens` / `agent_max_context_turns` / `agent_max_steps`：Agent 上下文和执行步数限制。
-- `enable_thinking` / `reasoning_effort`：支持推理模型的思考模式开关和强度。
+- `enable_thinking` / `reasoning_effort`：统一控制 Agent 文本请求的思考开关与 `low`、`medium`、`high`、`max` 四档强度，默认强度为 `low`；各 Provider 会转换为模型实际支持的协议和档位。
 - `model_fallbacks`：按顺序配置文本备用模型；普通聊天、Agent 推理和会话标题共用该故障转移链与熔断状态，图片、视觉、语音和翻译不受影响。
 - `knowledge`：是否启用知识库。
 - `self_evolution_enabled`：是否启用空闲会话自主进化。

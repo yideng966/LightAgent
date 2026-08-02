@@ -51,16 +51,20 @@ Under thinking mode, `reasoning_effort` controls reasoning intensity:
 ```json
 {
   "enable_thinking": true,
-  "reasoning_effort": "high"
+  "reasoning_effort": "low"
 }
 ```
 
-| Value | Use Case |
-| --- | --- |
-| `high` (Default) | Day-to-day Agent tasks; balanced reasoning and speed |
-| `max` | Complex coding, long-horizon planning, strictly constrained tasks; deeper reasoning but more time and output tokens |
+LightAgent exposes the same four levels for every Provider: `low` (default), `medium`, `high`, and `max`. DeepSeek V4 currently accepts only `high` and `max`, so LightAgent maps the unified levels as follows:
 
-`reasoning_effort` only takes effect when `enable_thinking` is `true`; it is ignored automatically when the model does not support thinking mode.
+| LightAgent | DeepSeek V4 |
+| --- | --- |
+| `low` | `high` |
+| `medium` | `high` |
+| `high` | `high` |
+| `max` | `max` |
+
+`reasoning_effort` only takes effect when `enable_thinking` is `true`. `deepseek-reasoner` is a fixed-reasoning model and cannot be turned off through the V4 `thinking` switch; non-reasoning models receive neither field.
 
 ### Behavior Notes
 

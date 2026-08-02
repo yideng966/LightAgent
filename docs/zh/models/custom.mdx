@@ -11,7 +11,7 @@ description: 自定义厂商配置，用于第三方 API 代理与本地模型
 
 ## Web 端配置
 
-推荐方式。在 Web 控制台「模型」页面点击「添加厂商」，选择「自定义」，填写名称、API Base 和 API Key 即可。支持添加多个自定义厂商，添加后在「主模型」中选择对应厂商和模型即可启用。
+推荐方式。在 Web 控制台「模型」页面点击「添加厂商」，选择「自定义」，填写名称、API Base、API Key，并选择该接口实际接受的思考协议。支持添加多个自定义厂商，添加后在「主模型」中选择对应厂商和模型即可启用。
 
 <img width="900" src="https://cdn.jsdelivr.net/gh/zhayujie/cowagent-assets@main/screenshots/en/web-console-custom-model-config.png" />
 
@@ -36,14 +36,16 @@ description: 自定义厂商配置，用于第三方 API 代理与本地模型
       "name": "厂商A",
       "api_key": "YOUR_API_KEY_A",
       "api_base": "https://api.a.com/v1",
-      "model": "deepseek-v3"
+      "model": "deepseek-v4-flash",
+      "thinking_protocol": "deepseek"
     },
     {
       "id": "a1b2c3d4",
       "name": "厂商B",
       "api_key": "YOUR_API_KEY_B",
       "api_base": "https://api.b.com/v1",
-      "model": "qwen3-max"
+      "model": "qwen3-max",
+      "thinking_protocol": "enable_thinking"
     }
   ]
 }
@@ -51,11 +53,14 @@ description: 自定义厂商配置，用于第三方 API 代理与本地模型
 
 | 参数 | 说明 |
 | --- | --- |
-| `custom_providers` | 自定义厂商列表，每项包含 `id`、`name`、`api_base`、`api_key`（可选）、`model`（可选） |
+| `custom_providers` | 自定义厂商列表，每项包含 `id`、`name`、`api_base`、`api_key`（可选）、`model`（可选）、`thinking_protocol`（可选） |
 | `bot_type` | 设置为 `"custom:<id>"` 激活对应厂商 |
 | `id` | 厂商唯一标识（8 位十六进制），在 Web 端添加时自动生成，手动配置时填写任意不重复的标识即可 |
 | `name` | 展示名称，可随意修改 |
 | `model` | 该厂商使用的模型，激活时生效 |
+| `thinking_protocol` | 把全局思考开关转换为上游参数的受控协议：`none`、`thinking_object`、`deepseek`、`enable_thinking` 或 `openai_reasoning`，默认 `none` |
+
+`none` 是安全默认值，不发送任何思考专属字段。只有上游服务明确支持对应请求结构时才应选择其他协议。全局 `reasoning_effort` 仍使用 LightAgent 的四档设置；没有原生强度能力的协议只应用启停状态。
 
 <Note>
   历史的单厂商配置（`bot_type` 为 `"custom"`，配合 `custom_api_key` / `custom_api_base`）仍然兼容，无需改动即可继续使用。

@@ -34,6 +34,10 @@ Claude 由 Anthropic 提供，支持文本对话与图像理解，主流 Sonnet 
 | `claude-sonnet-4-6` | 性价比与速度平衡，成本更低 |
 | `claude-opus-4-6` / `claude-sonnet-4-5` / `claude-sonnet-4-0` | 更早的旗舰，价格更低 |
 
+## 思考控制
+
+「Agent 配置」中的全局 `enable_thinking` 开关和 `reasoning_effort` 档位会控制 Claude 文本推理。开启时 LightAgent 使用 adaptive thinking，并把 `low`、`medium`、`high`、`max` 映射为 Claude 的 output effort；关闭时发送 Claude 明确的 disabled 思考模式。该设置只影响 Agent 文本请求，不改变 Vision 路由。
+
 ## 图像理解
 
 配置 `claude_api_key` 后 Agent 的 Vision 工具会自动使用 Claude 主模型识别图像，无需额外配置。

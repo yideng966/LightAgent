@@ -16,6 +16,7 @@ from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
 from config import conf
+from models.thinking_policy import normalize_reasoning_effort, thinking_is_enabled
 
 # Optional OpenAI image support
 try:
@@ -314,7 +315,7 @@ class ClaudeAPIBot(Bot, OpenAIImage):
         Returns:
             Formatted response compatible with OpenAI format or generator for streaming
         """
-        actual_model = self._model_mapping(conf().get("model"))
+        actual_model = self._model_mapping(kwargs.get("model") or conf().get("model"))
 
         # Extract system prompt from messages if present
         system_prompt = kwargs.get("system", conf().get("character_desc", ""))
@@ -338,6 +339,15 @@ class ClaudeAPIBot(Bot, OpenAIImage):
 
         if tools:
             request_params["tools"] = tools
+
+        thinking = kwargs.get("thinking")
+        if thinking_is_enabled(thinking):
+            request_params["thinking"] = {"type": "adaptive"}
+            request_params["output_config"] = {
+                "effort": normalize_reasoning_effort(kwargs.get("reasoning_effort", "low"))
+            }
+        elif isinstance(thinking, dict):
+            request_params["thinking"] = {"type": "disabled"}
 
         try:
             if stream:

@@ -13,7 +13,8 @@ The Web Console is LightAgent's default channel. It runs automatically once star
   "web_host": "0.0.0.0",
   "web_port": 9899,
   "web_password": "",
-  "enable_thinking": false
+  "enable_thinking": false,
+  "reasoning_effort": "low"
 }
 ```
 
@@ -26,6 +27,7 @@ The Web Console is LightAgent's default channel. It runs automatically once star
 | `web_session_expire_days` | Login session validity in days | `30` |
 | `web_file_serve_root` | Root directory the web console can directly read/send files from. Defaults to the user home dir and agent workspace only; set to `/` to allow the whole filesystem | `"~"` |
 | `enable_thinking` | Whether to enable deep thinking mode | `false` |
+| `reasoning_effort` | Unified reasoning level used while thinking is enabled: `low`, `medium`, `high`, or `max` | `low` |
 
 Once a password is configured, you must enter it to log in when accessing the console. The login session is kept for 30 days by default, so restarting the service during that period does not require re-login. The password can also be changed online from the "Configuration" page in the console.
 
@@ -44,7 +46,7 @@ After starting the project, visit:
 
 ### Chat Interface
 
-Supports streaming output with real-time display of the Agent's reasoning process and tool calls, providing intuitive observation of the Agent's decision-making. Deep thinking can be toggled via configuration or the "Agent Configuration" switch in the console.
+Supports streaming output with real-time display of the Agent's reasoning process and tool calls. Under **Configuration -> Agent Configuration**, the deep-thinking switch controls whether Agent text requests ask for reasoning, and the adjacent selector sets `low`, `medium`, `high`, or `max`. Disabling thinking keeps the selected level for the next time it is enabled. Providers translate the unified level to their own protocol; models with fewer levels may merge adjacent values, and fixed-reasoning models may not support being turned off.
 
 On mobile, the left navigation is collapsed by default and opens from the menu button at the top left. The console uses the dynamic viewport height and avoids focusing the bottom composer immediately after login, keeping the navigation entry visible in Android browsers.
 

@@ -51,16 +51,20 @@ V4 系列（`deepseek-v4-flash` / `deepseek-v4-pro`）支持显式的「思考�
 ```json
 {
   "enable_thinking": true,
-  "reasoning_effort": "high"
+  "reasoning_effort": "low"
 }
 ```
 
-| 取值 | 适用场景 |
-| --- | --- |
-| `high`（默认） | 日常 Agent 任务，思考与速度的平衡 |
-| `max` | 复杂编码、长链路规划、严格约束的任务，推理更深但耗时与输出 token 更多 |
+LightAgent 对所有 Provider 统一提供 `low`（默认）、`medium`、`high`、`max` 四档。DeepSeek V4 当前只接受 `high` 和 `max`，因此转换规则如下：
 
-`reasoning_effort` 仅在 `enable_thinking` 为 `true` 时生效；模型不支持思考模式时该字段自动忽略。
+| LightAgent 档位 | DeepSeek V4 |
+| --- | --- |
+| `low` | `high` |
+| `medium` | `high` |
+| `high` | `high` |
+| `max` | `max` |
+
+`reasoning_effort` 仅在 `enable_thinking` 为 `true` 时生效。`deepseek-reasoner` 属于固定推理模型，不能通过 V4 的 `thinking` 开关关闭；非推理模型不会收到这两个字段。
 
 ### 行为说明
 

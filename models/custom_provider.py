@@ -17,7 +17,8 @@ Config model
           "name": "my-provider",           # user-facing display label (not a key)
           "api_key": "sk-...",             # required
           "api_base": "https://...",       # required, must be OpenAI-compatible
-          "model": "model-name"           # optional default model
+          "model": "model-name",          # optional default model
+          "thinking_protocol": "none"     # optional controlled protocol
       }
 
 Routing
@@ -36,6 +37,7 @@ unchanged: we return ``custom_api_key`` / ``custom_api_base`` values.
 import uuid
 from config import conf
 from common.log import logger
+from models.thinking_policy import normalize_thinking_protocol
 
 
 def generate_provider_id() -> str:
@@ -101,7 +103,19 @@ def resolve_custom_provider_config(provider_type):
         "api_key": conf().get("custom_api_key", ""),
         "api_base": conf().get("custom_api_base") or None,
         "model": None,
+        "thinking_protocol": normalize_thinking_protocol(
+            conf().get("custom_thinking_protocol", "none")
+        ),
     }
+
+
+def resolve_custom_thinking_protocol(provider_type=None):
+    """返回指定或当前 Custom Provider 的受控思考协议。"""
+    provider_type = provider_type or conf().get("bot_type", "")
+    provider = resolve_custom_provider_config(provider_type)
+    if provider is None:
+        return "none"
+    return normalize_thinking_protocol(provider.get("thinking_protocol", "none"))
 
 
 def resolve_custom_credentials():

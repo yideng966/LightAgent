@@ -48,7 +48,7 @@ class TestOpenAICompatibleMessageConversion(unittest.TestCase):
         )
 
         request_params = bot._handle_sync_response.call_args.args[0]
-        self.assertEqual("none", request_params["reasoning_effort"])
+        self.assertNotIn("reasoning_effort", request_params)
         self.assertEqual(
             {"type": "json_object"},
             request_params["response_format"],
@@ -72,6 +72,46 @@ class TestOpenAICompatibleMessageConversion(unittest.TestCase):
         request_params = bot._handle_sync_response.call_args.args[0]
         self.assertNotIn("reasoning_effort", request_params)
         self.assertNotIn("response_format", request_params)
+
+    def test_explicit_deepseek_protocol_forwards_toggle_and_mapped_effort(self):
+        bot = OpenAICompatibleBot()
+        bot.get_api_config = Mock(return_value={
+            "api_key": "test-key",
+            "api_base": "https://example.test/v1",
+            "model": "deepseek-v4-flash",
+            "thinking_protocol": "deepseek",
+        })
+        bot._handle_sync_response = Mock(return_value={"choices": []})
+
+        bot.call_with_tools(
+            [{"role": "user", "content": "hello"}],
+            thinking={"type": "enabled"},
+            reasoning_effort="low",
+        )
+
+        request_params = bot._handle_sync_response.call_args.args[0]
+        self.assertEqual({"type": "enabled"}, request_params["thinking"])
+        self.assertEqual("high", request_params["reasoning_effort"])
+
+    def test_unknown_protocol_does_not_send_thinking_fields(self):
+        bot = OpenAICompatibleBot()
+        bot.get_api_config = Mock(return_value={
+            "api_key": "test-key",
+            "api_base": "https://example.test/v1",
+            "model": "test-model",
+        })
+        bot._handle_sync_response = Mock(return_value={"choices": []})
+
+        bot.call_with_tools(
+            [{"role": "user", "content": "hello"}],
+            thinking={"type": "enabled"},
+            reasoning_effort="max",
+        )
+
+        request_params = bot._handle_sync_response.call_args.args[0]
+        self.assertNotIn("thinking", request_params)
+        self.assertNotIn("enable_thinking", request_params)
+        self.assertNotIn("reasoning_effort", request_params)
 
 
 if __name__ == "__main__":

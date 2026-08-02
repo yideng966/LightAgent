@@ -71,6 +71,7 @@ from common.log import logger
 from common.singleton import singleton
 from config import conf, get_data_root, get_weixin_credentials_path
 from voice.factory import SUPPORTED_ASR_PROVIDERS, SUPPORTED_TTS_PROVIDERS
+from models.thinking_policy import normalize_reasoning_effort
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"}
 VIDEO_EXTENSIONS = {".mp4", ".webm", ".avi", ".mov", ".mkv"}
@@ -1900,9 +1901,9 @@ class ConfigHandler:
         "open_ai_api_key", "deepseek_api_key", "qianfan_api_key", "claude_api_key", "gemini_api_key",
         "zhipu_ai_api_key", "dashscope_api_key", "moonshot_api_key",
         "ark_api_key", "minimax_api_key", "linkai_api_key", "custom_api_key", "mimo_api_key",
-        "custom_providers",
+        "custom_providers", "custom_thinking_protocol",
         "agent_max_context_tokens", "agent_max_context_turns", "agent_max_steps",
-        "enable_thinking", "self_evolution_enabled", "web_password",
+        "enable_thinking", "reasoning_effort", "self_evolution_enabled", "web_password",
     }
 
     @staticmethod
@@ -1983,6 +1984,9 @@ class ConfigHandler:
                 "agent_max_context_turns": local_config.get("agent_max_context_turns", 20),
                 "agent_max_steps": local_config.get("agent_max_steps", 20),
                 "enable_thinking": bool(local_config.get("enable_thinking", False)),
+                "reasoning_effort": normalize_reasoning_effort(
+                    local_config.get("reasoning_effort", "low")
+                ),
                 "self_evolution_enabled": bool(local_config.get("self_evolution_enabled", False)),
                 "api_bases": api_bases,
                 "api_keys": api_keys_masked,
@@ -2011,6 +2015,26 @@ class ConfigHandler:
                     value = int(value)
                 if key in ("use_linkai", "enable_thinking", "self_evolution_enabled"):
                     value = bool(value)
+                if key == "reasoning_effort":
+                    from models.thinking_policy import VALID_REASONING_EFFORTS
+                    value = str(value or "").strip().lower()
+                    if value not in VALID_REASONING_EFFORTS:
+                        return json.dumps({
+                            "status": "error",
+                            "message": "reasoning_effort must be one of: low, medium, high, max",
+                        })
+                if key == "custom_thinking_protocol":
+                    from models.thinking_policy import (
+                        VALID_THINKING_PROTOCOLS,
+                        normalize_thinking_protocol,
+                    )
+                    raw_protocol = str(value or "none").strip().lower()
+                    if raw_protocol not in VALID_THINKING_PROTOCOLS:
+                        return json.dumps({
+                            "status": "error",
+                            "message": "unknown custom_thinking_protocol",
+                        })
+                    value = normalize_thinking_protocol(raw_protocol)
                 local_config[key] = value
                 applied[key] = value
 
@@ -2521,6 +2545,7 @@ class ModelsHandler:
                 "custom_name": name,
                 "active": (pid == active_id),
                 "model": p.get("model") or "",
+                "thinking_protocol": p.get("thinking_protocol") or "none",
                 # Custom cards are edited via the dedicated set_custom_provider
                 # action, not the field-based set_provider flow, so the field
                 # names are intentionally null.
@@ -3490,6 +3515,18 @@ class ModelsHandler:
         api_key_raw = data.get("api_key")
         api_key = api_key_raw.strip() if isinstance(api_key_raw, str) else ""
         model = (data.get("model") or "").strip()
+        thinking_protocol_provided = "thinking_protocol" in data
+        thinking_protocol_raw = data.get("thinking_protocol", "none")
+        from models.thinking_policy import (
+            VALID_THINKING_PROTOCOLS,
+            normalize_thinking_protocol,
+        )
+        thinking_protocol = normalize_thinking_protocol(thinking_protocol_raw)
+        if str(thinking_protocol_raw or "none").strip().lower() not in VALID_THINKING_PROTOCOLS:
+            return json.dumps({
+                "status": "error",
+                "message": "unknown thinking_protocol",
+            })
         make_active = bool(data.get("make_active"))
 
         local_config = conf()
@@ -3501,7 +3538,13 @@ class ModelsHandler:
             if not api_base:
                 return json.dumps({"status": "error", "message": "api_base is required"})
             provider_id = generate_provider_id()
-            entry = {"id": provider_id, "name": name, "api_key": api_key, "api_base": api_base}
+            entry = {
+                "id": provider_id,
+                "name": name,
+                "api_key": api_key,
+                "api_base": api_base,
+                "thinking_protocol": thinking_protocol,
+            }
             if model:
                 entry["model"] = model
             providers.append(entry)
@@ -3512,6 +3555,8 @@ class ModelsHandler:
                 existing["api_base"] = api_base
             if api_key:
                 existing["api_key"] = api_key
+            if thinking_protocol_provided:
+                existing["thinking_protocol"] = thinking_protocol
             # Only touch model when explicitly provided in the payload; an
             # explicit empty string clears it, a missing key keeps it (the
             # UI modal no longer sends model, so manual config survives edits).

@@ -95,6 +95,7 @@ class TestAgentStreamLogging(unittest.TestCase):
         self.assertIn("[Agent] turn start:", logs)
         self.assertIn("model=unit-test-model", logs)
         self.assertIn("thinking=", logs)
+        self.assertIn("effort=", logs)
         self.assertIn('user_text="hello"', logs)
         self.assertIn("wechat_context=persona, recent_transcript, memory", logs)
         self.assertIn("recent_transcript_messages=2", logs)

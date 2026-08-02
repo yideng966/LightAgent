@@ -457,7 +457,10 @@ class ModelScopeBot(Bot):
             # Unified judgment for thinking model
             model_name = args.get("model", self.args.get("model", ""))
             if self._is_thinking_model(model_name):
-                args["enable_thinking"] = True
+                thinking = kwargs.get("thinking")
+                args["enable_thinking"] = (
+                    isinstance(thinking, dict) and thinking.get("type") == "enabled"
+                )
             
             if tools:
                 args["tools"] = self._convert_tools_to_openai_format(tools)

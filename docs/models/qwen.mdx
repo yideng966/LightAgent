@@ -23,6 +23,10 @@ Qwen (Alibaba DashScope / Bailian) is one of the most fully-featured providers. 
 | `model` | Can be `qwen3.7-plus`, `qwen3.7-max`, `qwen3.6-plus`, `qwen3.5-plus`, `qwen3-max`, `qwen-max`, `qwen-plus`, `qwen-turbo`, `qwq-plus`, etc. |
 | `dashscope_api_key` | Create one in the [Bailian Console](https://bailian.console.aliyun.com/?tab=model#/api-key); see the [official docs](https://bailian.console.aliyun.com/?tab=api#/api) |
 
+## Thinking Control
+
+For Qwen3/QwQ text models, LightAgent converts the global switch to `enable_thinking` and maps `low`, `medium`, `high`, and `max` to increasing thinking budgets. Other Qwen models receive no thinking-specific parameter. Disabling thinking sends `enable_thinking=false` for switchable models.
+
 ## Image Understanding
 
 Once `dashscope_api_key` is configured, the Agent's Vision tool automatically calls Qwen's vision models to recognize images. Models like `qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max` are already multimodal; if the main model is text-only (e.g. `qwen-turbo`), it automatically falls back to `qwen-vl-max`.

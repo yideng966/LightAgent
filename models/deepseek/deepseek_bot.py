@@ -33,6 +33,7 @@ from bridge.reply import Reply, ReplyType
 from common import const
 from common.log import logger
 from config import conf, load_config
+from models.thinking_policy import map_reasoning_effort
 from .deepseek_session import DeepSeekSession
 
 DEFAULT_API_BASE = "https://api.deepseek.com/v1"
@@ -251,8 +252,10 @@ class DeepSeekBot(Bot, OpenAICompatibleBot):
                 request_body["thinking"] = thinking_param
                 thinking_active = thinking_param.get("type") == "enabled"
                 if thinking_active:
-                    # Default to "high"; allow caller override (e.g. "max" for heavy agent loops).
-                    request_body["reasoning_effort"] = reasoning_effort or "high"
+                    request_body["reasoning_effort"] = map_reasoning_effort(
+                        reasoning_effort,
+                        {"low": "high", "medium": "high", "high": "high", "max": "max"},
+                    )
             elif self._is_reasoner_model(model):
                 # R1 thinks unconditionally — no `thinking` field, but reasoning_content still flows.
                 thinking_active = True

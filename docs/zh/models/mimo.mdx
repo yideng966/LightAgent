@@ -36,13 +36,15 @@ description: 小米 MiMo 模型配置（文本对话 + 图像理解 + 语音合�
 
 MiMo V2.5 系列默认开启「思考模式」：模型在输出最终回答前会先输出 `reasoning_content`（思维链），提升复杂任务表现。
 
-通过全局配置 `enable_thinking` 控制是否展示（也可在 Web 控制台 - 配置页面切换）：
+通过全局配置 `enable_thinking` 控制模型是否启用思考（也可在 Web 控制台 - 配置页面切换）：
 
 ```json
 {
   "enable_thinking": true
 }
 ```
+
+MiMo 当前的开关协议没有提供 LightAgent 四档强度对应字段，因此 `reasoning_effort` 会保留在配置中，但不会向上游发送其不支持的强度参数。
 
 ## 图像理解
 

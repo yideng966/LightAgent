@@ -20,6 +20,7 @@ from bridge.context import ContextType
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from config import conf
+from models.thinking_policy import openai_thinking_protocol_for_model
 
 user_session = dict()
 
@@ -52,10 +53,12 @@ class OpenAIBot(Bot, OpenAIImage, OpenAICompatibleBot):
     
     def get_api_config(self):
         """Get API configuration for OpenAI-compatible base class"""
+        model = conf().get("model", "text-davinci-003")
         return {
             'api_key': conf().get("open_ai_api_key"),
             'api_base': conf().get("open_ai_api_base"),
-            'model': conf().get("model", "text-davinci-003"),
+            'model': model,
+            'thinking_protocol': openai_thinking_protocol_for_model(model),
             'default_temperature': conf().get("temperature", 0.9),
             'default_top_p': conf().get("top_p", 1.0),
             'default_frequency_penalty': conf().get("frequency_penalty", 0.0),

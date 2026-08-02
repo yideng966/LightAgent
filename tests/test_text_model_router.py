@@ -417,7 +417,6 @@ class TestTextModelRouter(unittest.TestCase):
         self.assertTrue(main["success"])
         self.assertEqual(
             {
-                "reasoning_effort": "none",
                 "response_format": {"type": "json_object"},
             },
             primary.calls[0]["request_options"],
@@ -447,6 +446,29 @@ class TestTextModelRouter(unittest.TestCase):
         self.assertNotIn("reasoning_effort", bot.calls[0])
         self.assertEqual({"type": "enabled"}, bot.calls[1]["thinking"])
         self.assertEqual("high", bot.calls[1]["reasoning_effort"])
+
+    def test_request_level_disable_thinking_uses_low_default_on_next_call(self):
+        from bridge.agent_bridge import TextModelRouter
+
+        bot = FakeBot([
+            {"choices": [{"message": {"content": "scored"}}]},
+            {"choices": [{"message": {"content": "main answer"}}]},
+        ])
+        config = self._config()
+        config["enable_thinking"] = True
+        with patch("bridge.agent_bridge.conf", return_value=config), \
+                patch("models.bot_factory.create_bot", return_value=bot):
+            router = TextModelRouter(FakeBridge())
+            router.complete(
+                [{"role": "user", "content": "score"}],
+                request_options={"disable_thinking": True},
+            )
+            router.complete([{"role": "user", "content": "answer"}])
+
+        self.assertEqual({"type": "disabled"}, bot.calls[0]["thinking"])
+        self.assertNotIn("request_options", bot.calls[0])
+        self.assertEqual({"type": "enabled"}, bot.calls[1]["thinking"])
+        self.assertEqual("low", bot.calls[1]["reasoning_effort"])
 
     def test_complete_model_override_does_not_fallback_or_update_primary_circuit(self):
         from bridge.agent_bridge import TextModelRouter

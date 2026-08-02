@@ -70,6 +70,7 @@ class QianfanBot(Bot, OpenAICompatibleBot):
             "api_key": self.api_key,
             "api_base": self.api_base,
             "model": self._resolve_model(),
+            "thinking_protocol": "none",
             "default_temperature": conf().get("temperature", 0.7),
             "default_top_p": conf().get("top_p", 1.0),
             "default_frequency_penalty": conf().get("frequency_penalty", 0.0),

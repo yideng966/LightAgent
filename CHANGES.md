@@ -2,6 +2,35 @@
 
 ## 2026-08-02
 
+### 统一 Agent 深度思考开关与强度适配
+
+- Web 控制台 Agent 配置支持独立启停深度思考，并提供低、中、高、极高四档强度；默认档位调整为 `low`，关闭时保留用户选择。
+- 文本模型请求按当前 Provider 和模型协议转换统一配置，适配 OpenAI、Claude、Gemini、DeepSeek、DashScope、ModelScope 等内置渠道，内部关闭标记不再作为 `reasoning_effort=none` 透传上游。
+- Custom Provider 增加受控思考协议选择，旧配置默认不发送未知参数；同步补充配置、路由、最终请求体和 Web UI 回归测试及中英文文档。
+
+关键文件：
+
+- `models/thinking_policy.py`
+- `bridge/agent_bridge.py`
+- `models/openai_compatible_bot.py`
+- `models/custom_provider.py`
+- `channel/web/chat.html`
+- `channel/web/static/js/console.js`
+- `channel/web/web_channel.py`
+- `config.py`
+- `config-template.json`
+- `tests/test_thinking_policy.py`
+- `tests/test_thinking_provider_requests.py`
+- `tests/test_thinking_config_ui.py`
+- `plans/20260802_深度思考开关请求透传.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 定向回归与新增配置、策略测试均通过；全部 116 个测试模块分四批运行，共 1274 项通过、1 项跳过。
+- `node --check channel/web/static/js/console.js`、Python 语法编译与 `git diff --check`：通过。
+- 本地 9900 端口 Web 验收通过：桌面端与 375px 移动端无布局溢出或重叠，关闭开关后强度控件保留选中值并原生禁用，Custom 思考协议选项完整，浏览器控制台无错误。
+
 ### 微信群技能管理纳入管理员门禁
 
 - 在“群聊 -> 群与管理员 -> 管理员门禁能力”新增默认开启的 `skill_manage`，独立控制普通群成员是否可以新增、修改或删除技能；技能列表、搜索、详情、更新检查和校验保持只读可用。

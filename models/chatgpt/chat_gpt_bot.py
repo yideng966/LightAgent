@@ -17,7 +17,12 @@ from common import const
 from common.i18n import t as _t
 from models.bot import Bot
 from models.openai_compatible_bot import OpenAICompatibleBot
-from models.custom_provider import resolve_custom_credentials, parse_custom_bot_type
+from models.custom_provider import (
+    parse_custom_bot_type,
+    resolve_custom_credentials,
+    resolve_custom_thinking_protocol,
+)
+from models.thinking_policy import openai_thinking_protocol_for_model
 from models.chatgpt.chat_gpt_session import ChatGPTSession
 from models.openai.open_ai_image import OpenAIImage
 from models.session_manager import SessionManager
@@ -142,14 +147,17 @@ class ChatGPTBot(Bot, OpenAIImage, OpenAICompatibleBot):
             api_key = custom_key
             api_base = custom_base
             model = custom_model or conf().get("model", "gpt-3.5-turbo")
+            thinking_protocol = resolve_custom_thinking_protocol()
         else:
             api_key = conf().get("open_ai_api_key")
             api_base = conf().get("open_ai_api_base")
             model = conf().get("model", "gpt-3.5-turbo")
+            thinking_protocol = openai_thinking_protocol_for_model(model)
         return {
             'api_key': api_key,
             'api_base': api_base,
             'model': model,
+            'thinking_protocol': thinking_protocol,
             'default_temperature': conf().get("temperature", 0.9),
             'default_top_p': conf().get("top_p", 1.0),
             'default_frequency_penalty': conf().get("frequency_penalty", 0.0),

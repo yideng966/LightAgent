@@ -54,6 +54,10 @@ const I18N = {
         models_custom_base_required: '请填写 API Base',
         models_custom_edit_title: '编辑自定义厂商',
         models_custom_add_title: '添加自定义厂商',
+        models_custom_thinking_protocol: '思考协议',
+        models_custom_thinking_none: '不发送', models_custom_thinking_object: 'thinking 对象（仅开关）',
+        models_custom_thinking_deepseek: 'DeepSeek（开关与强度）', models_custom_thinking_qwen: 'enable_thinking（仅开关）',
+        models_custom_thinking_openai: 'OpenAI reasoning_effort',
         models_capability_chat: '主模型',
         models_capability_chat_desc: '用于基础对话和 Agent 推理',
         models_capability_scorer: 'LLM Scorer',
@@ -176,7 +180,10 @@ const I18N = {
         config_max_tokens: '最大上下文 Token', config_max_tokens_hint: '对话中 Agent 能输入的最大 Token 长度，超过后会智能压缩处理',
         config_max_turns: '最大记忆轮次', config_max_turns_hint: '一问一答为一轮，超过后会智能压缩处理',
         config_max_steps: '最大执行步数', config_max_steps_hint: '单次对话中 Agent 最多调用工具的次数',
-        config_enable_thinking: '深度思考', config_enable_thinking_hint: '是否启用深度思考模式',
+        config_enable_thinking: '深度思考', config_enable_thinking_hint: '是否要求当前模型启用深度思考',
+        config_reasoning_effort: '思考强度',
+        config_reasoning_effort_low: '低', config_reasoning_effort_medium: '中',
+        config_reasoning_effort_high: '高', config_reasoning_effort_max: '极高',
         config_self_evolution: '自主进化', config_self_evolution_hint: '会话空闲后自动复盘，沉淀记忆、优化技能、处理未完成事项',
         evolution_badge: '自主学习',
         config_channel_type: '通道类型',
@@ -1108,6 +1115,10 @@ const I18N = {
         models_custom_base_required: 'API Base is required',
         models_custom_edit_title: 'Edit custom provider',
         models_custom_add_title: 'Add custom provider',
+        models_custom_thinking_protocol: 'Thinking Protocol',
+        models_custom_thinking_none: 'Do not send', models_custom_thinking_object: 'thinking object (toggle only)',
+        models_custom_thinking_deepseek: 'DeepSeek (toggle and effort)', models_custom_thinking_qwen: 'enable_thinking (toggle only)',
+        models_custom_thinking_openai: 'OpenAI reasoning_effort',
         models_capability_chat: 'Main Model',
         models_capability_chat_desc: 'Used for basic chat and agent reasoning',
         models_capability_scorer: 'LLM Scorer',
@@ -1230,7 +1241,10 @@ const I18N = {
         config_max_tokens: 'Max Context Tokens', config_max_tokens_hint: 'Max tokens the Agent can input per conversation, auto-compressed when exceeded',
         config_max_turns: 'Max Memory Turns', config_max_turns_hint: 'One Q&A pair = one turn, auto-compressed when exceeded',
         config_max_steps: 'Max Steps', config_max_steps_hint: 'Max tool calls the Agent can make in a single conversation',
-        config_enable_thinking: 'Deep Thinking', config_enable_thinking_hint: 'Enable deep thinking mode',
+        config_enable_thinking: 'Deep Thinking', config_enable_thinking_hint: 'Request deep thinking from the current model',
+        config_reasoning_effort: 'Reasoning Effort',
+        config_reasoning_effort_low: 'Low', config_reasoning_effort_medium: 'Medium',
+        config_reasoning_effort_high: 'High', config_reasoning_effort_max: 'Max',
         config_self_evolution: 'Self-Evolution', config_self_evolution_hint: 'Auto-review idle conversations to consolidate memory, improve skills, and follow up on unfinished tasks',
         evolution_badge: 'Self-learned',
         config_channel_type: 'Channel Type',
@@ -5893,7 +5907,14 @@ function initConfigView(data) {
     document.getElementById('cfg-max-tokens').value = data.agent_max_context_tokens || 50000;
     document.getElementById('cfg-max-turns').value = data.agent_max_context_turns || 20;
     document.getElementById('cfg-max-steps').value = data.agent_max_steps || 20;
-    document.getElementById('cfg-enable-thinking').checked = data.enable_thinking === true;
+    const thinkingToggle = document.getElementById('cfg-enable-thinking');
+    thinkingToggle.checked = data.enable_thinking === true;
+    const effort = ['low', 'medium', 'high', 'max'].includes(data.reasoning_effort)
+        ? data.reasoning_effort : 'low';
+    const effortInput = document.querySelector(`input[name="cfg-reasoning-effort"][value="${effort}"]`);
+    if (effortInput) effortInput.checked = true;
+    thinkingToggle.onchange = updateReasoningEffortState;
+    updateReasoningEffortState();
     document.getElementById('cfg-self-evolution').checked = data.self_evolution_enabled === true;
 
     // Reflect the current UI language (already resolved, may include the user's
@@ -6145,11 +6166,13 @@ function saveModelConfig() {
 }
 
 function saveAgentConfig() {
+    const effortInput = document.querySelector('input[name="cfg-reasoning-effort"]:checked');
     const updates = {
         agent_max_context_tokens: parseInt(document.getElementById('cfg-max-tokens').value) || 50000,
         agent_max_context_turns: parseInt(document.getElementById('cfg-max-turns').value) || 20,
         agent_max_steps: parseInt(document.getElementById('cfg-max-steps').value) || 20,
         enable_thinking: document.getElementById('cfg-enable-thinking').checked,
+        reasoning_effort: effortInput ? effortInput.value : 'low',
         self_evolution_enabled: document.getElementById('cfg-self-evolution').checked,
     };
 
@@ -9267,6 +9290,14 @@ function initChatFallbackRows(scope) {
     refreshChatFallbackPriorities();
 }
 
+function updateReasoningEffortState() {
+    const enabled = document.getElementById('cfg-enable-thinking').checked;
+    const group = document.getElementById('cfg-reasoning-effort-group');
+    if (!group) return;
+    group.disabled = !enabled;
+    group.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+}
+
 function getChatFallbackModelValue(row) {
     const input = row ? row.querySelector('[data-chat-fallback-model]') : null;
     return input ? String(input.value || '').trim() : '';
@@ -10780,9 +10811,11 @@ function openCustomProviderModal(providerId) {
     const nameInput = document.getElementById('custom-provider-name');
     const baseInput = document.getElementById('custom-provider-base');
     const keyInput = document.getElementById('custom-provider-key');
+    const thinkingProtocolInput = document.getElementById('custom-provider-thinking-protocol');
 
     nameInput.value = card ? (card.custom_name || '') : '';
     baseInput.value = card ? (card.api_base || '') : '';
+    thinkingProtocolInput.value = card ? (card.thinking_protocol || 'none') : 'none';
 
     // Surface the masked key as the value for configured providers so the
     // "already set" state is unambiguous; an untouched masked value means
@@ -10835,6 +10868,7 @@ function saveCustomProviderModal() {
     const name = document.getElementById('custom-provider-name').value.trim();
     const apiBase = document.getElementById('custom-provider-base').value.trim();
     const keyInput = document.getElementById('custom-provider-key');
+    const thinkingProtocol = document.getElementById('custom-provider-thinking-protocol').value;
 
     if (!name) {
         showStatus('custom-provider-modal-status', 'models_custom_name_required', true);
@@ -10858,6 +10892,7 @@ function saveCustomProviderModal() {
         action: 'set_custom_provider',
         name: name,
         api_base: apiBase,
+        thinking_protocol: thinkingProtocol,
     };
     if (apiKey) payload.api_key = apiKey;
     if (editing) payload.id = customProviderModalState.editId;

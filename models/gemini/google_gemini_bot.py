@@ -21,6 +21,7 @@ from bridge.context import ContextType, Context
 from bridge.reply import Reply, ReplyType
 from common.log import logger
 from config import conf
+from models.thinking_policy import normalize_reasoning_effort, thinking_is_enabled
 from models.chatgpt.chat_gpt_session import ChatGPTSession
 from models.baidu.baidu_wenxin_session import BaiduWenxinSession
 
@@ -475,6 +476,20 @@ class GoogleGeminiBot(Bot):
             gen_config = {}
             if kwargs.get("temperature") is not None:
                 gen_config["temperature"] = kwargs["temperature"]
+
+            thinking = kwargs.get("thinking")
+            effort = normalize_reasoning_effort(kwargs.get("reasoning_effort", "low"))
+            model_lower = str(model_name).lower()
+            if model_lower.startswith("gemini-3"):
+                level = {"low": "low", "medium": "medium", "high": "high", "max": "high"}[effort]
+                gen_config["thinkingConfig"] = {
+                    "thinkingLevel": level if thinking_is_enabled(thinking) else "low"
+                }
+            elif model_lower.startswith("gemini-2.5"):
+                budgets = {"low": 1024, "medium": 4096, "high": 8192, "max": 16384}
+                gen_config["thinkingConfig"] = {
+                    "thinkingBudget": budgets[effort] if thinking_is_enabled(thinking) else 0
+                }
 
             if gen_config:
                 payload["generationConfig"] = gen_config

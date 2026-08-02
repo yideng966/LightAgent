@@ -34,6 +34,10 @@ Claude is provided by Anthropic and supports both text chat and image understand
 | `claude-sonnet-4-6` | Balanced cost and speed, lower cost |
 | `claude-opus-4-6` / `claude-sonnet-4-5` / `claude-sonnet-4-0` | Earlier flagships at a lower price |
 
+## Thinking Control
+
+The Agent Configuration page controls Claude text reasoning with the global `enable_thinking` switch and `reasoning_effort` level. When enabled, LightAgent uses adaptive thinking and maps `low`, `medium`, `high`, and `max` to Claude's output effort. When disabled, it sends Claude's explicit disabled thinking mode. This setting affects Agent text requests only and does not change Vision routing.
+
 ## Image Understanding
 
 Once `claude_api_key` is configured, the Agent's Vision tool automatically uses the Claude main model to recognize images, with no extra setup required.
