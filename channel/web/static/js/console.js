@@ -1017,6 +1017,10 @@ const I18N = {
         task_action_agent_task: 'AI 任务',
         task_channel_type: '通道类型',
         task_channel_hint: '选择定时消息发送的通道',
+        task_target_group: '目标群',
+        task_target_group_hint: '可选择个人微信群设置中已选定的稳定群',
+        task_target_group_current: '当前目标',
+        task_target_group_required: '请选择目标群',
         task_message_content: '消息内容',
         task_task_description: '任务描述',
         task_delete_btn: '删除任务',
@@ -2067,6 +2071,10 @@ const I18N = {
         task_action_agent_task: 'AI Task',
         task_channel_type: 'Channel Type',
         task_channel_hint: 'Select the channel to send scheduled messages',
+        task_target_group: 'Target Group',
+        task_target_group_hint: 'Choose from the stable groups selected in Personal WeChat Groups settings',
+        task_target_group_current: 'Current target',
+        task_target_group_required: 'Please select a target group',
         task_message_content: 'Message Content',
         task_task_description: 'Task Description',
         task_delete_btn: 'Delete Task',
@@ -19462,12 +19470,101 @@ requestAnimationFrame(() => {
 // =====================================================================
 let currentEditingTask = null;
 
-function loadTaskChannelOptions(selectedChannelType) {
+function populateTaskWechatGroupTargets(allChannels, channelType, taskAction) {
+    const wrap = document.getElementById('task-edit-target-group-wrap');
+    const select = document.getElementById('task-edit-target-group');
+    const isWechatGroupTask = channelType === 'wechat_group';
+    wrap.classList.toggle('hidden', !isWechatGroupTask);
+    select.innerHTML = '';
+    if (!isWechatGroupTask) return;
+
+    const action = taskAction || {};
+    const channel = (allChannels || []).find(item => item.name === 'wechat_group');
+    const extra = channel?.extra || {};
+    const rooms = Array.isArray(extra.rooms) ? extra.rooms : [];
+    const selectedIds = Array.isArray(extra.stable_selected_room_ids) && extra.stable_selected_room_ids.length
+        ? extra.stable_selected_room_ids
+        : (Array.isArray(extra.selected_room_ids) ? extra.selected_room_ids : []);
+    const selectedRuntimeIds = Array.isArray(extra.runtime_selected_room_ids) ? extra.runtime_selected_room_ids : [];
+    const selectedNames = Array.isArray(extra.selected_room_names) ? extra.selected_room_names : [];
+    const roomByAnyId = new Map();
+    rooms.forEach(room => {
+        const stableId = String(room.stable_room_id || (String(room.id || '').startsWith('wgr_') ? room.id : '') || '').trim();
+        const runtimeId = String(room.runtime_room_id || (!String(room.id || '').startsWith('wgr_') ? room.id : '') || '').trim();
+        if (!stableId) return;
+        const item = {
+            stableId,
+            runtimeId,
+            name: String(room.name || room.topic || stableId).trim(),
+        };
+        [stableId, runtimeId, room.id].forEach(value => {
+            const key = String(value || '').trim();
+            if (key) roomByAnyId.set(key, item);
+        });
+    });
+
+    const options = [];
+    const seenStableIds = new Set();
+    selectedIds.forEach((value, index) => {
+        const selectedId = String(value || '').trim();
+        const resolved = roomByAnyId.get(selectedId);
+        const stableId = String(resolved?.stableId || (selectedId.startsWith('wgr_') ? selectedId : '')).trim();
+        if (!stableId || seenStableIds.has(stableId)) return;
+        seenStableIds.add(stableId);
+        options.push({
+            stableId,
+            runtimeId: String(resolved?.runtimeId || selectedRuntimeIds[index] || '').trim(),
+            name: String(resolved?.name || selectedNames[index] || stableId).trim(),
+        });
+    });
+
+    const originalStableId = String(action.stable_receiver || '').trim();
+    const originalRuntimeId = String(action.runtime_receiver || action.receiver || '').trim();
+    const resolvedCurrent = roomByAnyId.get(originalStableId) || roomByAnyId.get(originalRuntimeId);
+    const currentStableId = String(resolvedCurrent?.stableId || originalStableId).trim();
+    const currentRuntimeId = String(resolvedCurrent?.runtimeId || originalRuntimeId).trim();
+    if (currentStableId && !seenStableIds.has(currentStableId)) {
+        seenStableIds.add(currentStableId);
+        options.push({
+            stableId: currentStableId,
+            runtimeId: currentRuntimeId,
+            name: String(action.receiver_name || resolvedCurrent?.name || currentStableId).trim(),
+        });
+    }
+
+    if (!options.length && originalRuntimeId) {
+        options.push({
+            stableId: '',
+            runtimeId: originalRuntimeId,
+            name: String(action.receiver_name || originalRuntimeId).trim(),
+            legacy: true,
+        });
+    }
+
+    options.forEach(item => {
+        const option = document.createElement('option');
+        option.value = item.legacy ? '__current__' : item.stableId;
+        option.dataset.stableReceiver = item.stableId;
+        option.dataset.runtimeReceiver = item.runtimeId;
+        option.dataset.receiverName = item.name;
+        const isCurrent = item.stableId
+            ? item.stableId === currentStableId
+            : item.runtimeId === originalRuntimeId;
+        option.textContent = isCurrent ? `${item.name} (${t('task_target_group_current')})` : item.name;
+        option.selected = isCurrent;
+        select.appendChild(option);
+    });
+    select.disabled = options.length === 0;
+}
+
+function loadTaskChannelOptions(selectedChannelType, taskAction) {
     const select = document.getElementById('task-edit-channel-type');
     select.innerHTML = '';
+    populateTaskWechatGroupTargets([], selectedChannelType, taskAction);
     fetch('/api/channels').then(r => r.json()).then(data => {
         if (data.status !== 'success') return;
         const allChannels = data.channels || [];
+        populateTaskWechatGroupTargets(allChannels, selectedChannelType, taskAction);
         // Only include currently active channels, strictly following the channel management page logic
         let channels = allChannels.filter(c => c.active).map(c => {
             const label = (typeof c.label === 'object') ? (c.label[currentLang] || c.label.en || c.name) : (c.label || c.name);
@@ -19574,7 +19671,7 @@ function openTaskEditModal(task) {
     contentInput.value = action.content || action.task_description || '';
 
     // Load channel options and set selected value
-    loadTaskChannelOptions(action.channel_type || 'web');
+    loadTaskChannelOptions(action.channel_type || 'web', action);
 
     // Disable channel type selector — channel is read-only when editing.
     // Switching the channel after a task is created is problematic because:
@@ -19643,6 +19740,7 @@ function saveTaskEdit() {
     const onceInput = document.getElementById('task-edit-once-time');
     const actionTypeSelect = document.getElementById('task-edit-action-type');
     const channelTypeSelect = document.getElementById('task-edit-channel-type');
+    const targetGroupSelect = document.getElementById('task-edit-target-group');
     const receiverInput = document.getElementById('task-edit-receiver');
     const contentInput = document.getElementById('task-edit-content');
     const statusEl = document.getElementById('task-edit-modal-status');
@@ -19750,10 +19848,31 @@ function saveTaskEdit() {
         action.receiver_kind = currentEditingTask.action.receiver_kind || '';
         action.stable_receiver = currentEditingTask.action.stable_receiver || '';
         action.runtime_receiver = currentEditingTask.action.runtime_receiver || '';
+        action.creator_stable_member_id = currentEditingTask.action.creator_stable_member_id || '';
         
         // Preserve channel-specific fields (e.g. DingTalk sender_staff_id)
         if (channelType === 'dingtalk' && currentEditingTask.action.dingtalk_sender_staff_id) {
             action.dingtalk_sender_staff_id = currentEditingTask.action.dingtalk_sender_staff_id;
+        }
+    }
+
+    if (channelType === 'wechat_group') {
+        const selectedTarget = targetGroupSelect.selectedOptions[0];
+        if (!selectedTarget) {
+            statusEl.textContent = t('task_target_group_required');
+            statusEl.style.opacity = '1';
+            setTimeout(() => { statusEl.style.opacity = '0'; }, 3000);
+            return;
+        }
+        const stableReceiver = String(selectedTarget.dataset.stableReceiver || '').trim();
+        if (stableReceiver) {
+            action.receiver_kind = 'wechat_group';
+            action.stable_receiver = stableReceiver;
+            action.runtime_receiver = String(selectedTarget.dataset.runtimeReceiver || '').trim();
+            action.receiver = action.runtime_receiver;
+            action.receiver_name = String(selectedTarget.dataset.receiverName || selectedTarget.textContent || stableReceiver).trim();
+            action.is_group = true;
+            action.notify_session_id = `wechat_group:${stableReceiver}`;
         }
     }
     

@@ -8613,7 +8613,33 @@ class SchedulerUpdateHandler:
                         "status": "error",
                         "message": f"Cannot change channel type from '{old_channel}' to '{channel_type}'. Please create a new task on the target channel instead."
                     }, ensure_ascii=False)
-                if not action.get("receiver"):
+                has_stable_wechat_receiver = (
+                    channel_type == "wechat_group"
+                    and action.get("receiver_kind") == "wechat_group"
+                    and str(action.get("stable_receiver") or "").strip()
+                )
+                old_stable_receiver = str(
+                    original_task.get("action", {}).get("stable_receiver") or ""
+                ).strip()
+                new_stable_receiver = str(action.get("stable_receiver") or "").strip()
+                if has_stable_wechat_receiver and new_stable_receiver != old_stable_receiver:
+                    allowed_stable_receivers = {
+                        str(room_id or "").strip()
+                        for room_id in conf().get("wechat_group_stable_room_ids", []) or []
+                        if str(room_id or "").strip()
+                    }
+                    if new_stable_receiver not in allowed_stable_receivers:
+                        return json.dumps({
+                            "status": "error",
+                            "message": "The target WeChat group is not selected in channel settings."
+                        }, ensure_ascii=False)
+                    updates.update({
+                        "delivery_status": "",
+                        "delivery_status_reason": "",
+                        "last_error": "",
+                        "last_error_at": "",
+                    })
+                if not action.get("receiver") and not has_stable_wechat_receiver:
                     return json.dumps({
                         "status": "error",
                         "message": "Receiver is required. Please create a new task through the chat interface."

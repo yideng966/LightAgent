@@ -2,6 +2,31 @@
 
 ## 2026-08-01
 
+### 定时任务支持修改个人微信群目标群
+
+- Web 控制台编辑个人微信群定时任务时新增目标群下拉，显示当前目标，并允许切换到通道设置中已选择的其他稳定群。
+- 当前任务目标暂时离线或已不在已选列表时仍保留显示；保存切换后同步更新稳定群、运行时快照、群名和目标会话，投递前继续按现有稳定身份链路解析当前 runtime 群。
+- 后端仅接受当前已选稳定群作为新目标；切换目标时清除旧群遗留的身份绑定失败状态，其他通道和 scheduler 执行行为保持不变。
+
+关键文件：
+
+- `channel/web/chat.html`
+- `channel/web/static/js/console.js`
+- `channel/web/web_channel.py`
+- `tests/test_scheduler_ui.py`
+- `README.md`
+- `docs/zh/channels/web.mdx`
+- `docs/channels/web.mdx`
+- `plans/20260801_定时任务目标群编辑.md`
+- `CHANGES.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest tests.test_scheduler_ui tests.test_scheduler_wechat_group_delivery tests.test_web_console_mobile tests.test_wechat_group_web`：136 项通过。
+- `python -X utf8 -m py_compile channel/web/web_channel.py tests/test_scheduler_ui.py` 与 `node --check channel/web/static/js/console.js`：通过。
+- Playwright 隔离验收通过：1440px 与 375px 均无横向溢出或控件重叠；当前目标正确回填，切换后保存请求同步更新稳定群、runtime 群、群名和会话作用域，并保留创建者稳定成员身份。
+- `git diff --check`：通过。
+
 ### 发布 LightAgent 2.2.4
 
 - 发布 GitHub Release 群通知详情增强：直接展示版本摘要与变更内容，并过滤安装命令和文档链接等尾部信息。
