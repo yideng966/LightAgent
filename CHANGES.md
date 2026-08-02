@@ -31,6 +31,27 @@
 - `python -X utf8 -m py_compile channel/wechat_group/wechat_group_permissions.py plugins/lightagent_cli/lightagent_cli.py agent/protocol/agent_stream.py tests/test_wechat_group_permissions.py tests/test_skill_hub_integration.py tests/test_wechat_group_web.py`：通过。
 - `node --check channel/web/static/js/console.js`：通过。
 
+### 发布 LightAgent 2.2.6
+
+- 发布个人微信群技能管理管理员门禁：Web 控制台可独立控制普通群成员是否能新增、修改或删除技能，只读查询能力保持可用。
+- 聊天技能变更命令和 Agent 对 workspace 技能目录的直接修改统一按稳定群管理员身份复核，普通成员命中门禁时保持静默。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.6`，新增版本化发行说明和发布计划；不包含数据库或 sidecar 协议迁移。
+
+关键文件：
+
+- `CHANGES.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.6.md`
+- `plans/20260802_发布2.2.6.md`
+
+验证记录：
+
+- `python -X utf8 scripts/validate_release_notes.py --tag v2.2.6 docs/releases/v2.2.6.md`：通过。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- 分进程运行 `tests.test_wechat_group_permissions`、`tests.test_skill_hub_integration`、`tests.test_wechat_group_web`：合计 152 项通过。
+- Python 语法编译与 `node --check channel/web/static/js/console.js`：通过。
+
 ### 发布 LightAgent 2.2.5
 
 - 发布个人微信群定时任务目标群编辑能力：Web 控制台可显示当前目标，并切换到通道设置中已选择的其他稳定群。
