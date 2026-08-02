@@ -848,9 +848,9 @@ class LightAgentCliPlugin(Plugin):
         elif sub == "info":
             return self._skill_info(sub_args)
         elif sub == "enable":
-            return self._skill_set_enabled(sub_args, True)
+            return self._skill_set_enabled(sub_args, True, e_context)
         elif sub == "disable":
-            return self._skill_set_enabled(sub_args, False)
+            return self._skill_set_enabled(sub_args, False, e_context)
         else:
             return _t(
                 "用法: /skill <子命令>\n\n"
@@ -1060,8 +1060,18 @@ class LightAgentCliPlugin(Plugin):
             return False
         try:
             context = e_context["context"]
-            if context.kwargs.get("wechat_group_is_admin") is not None:
-                return bool(context.kwargs.get("wechat_group_is_admin"))
+            if context.get("channel_type") == "wechat_group":
+                from channel.wechat_group.wechat_group_permissions import (
+                    can_manage_wechat_group_skills,
+                )
+
+                room_id = context.get("wechat_group_stable_room_id") or ""
+                member_id = context.get("wechat_group_stable_member_id") or ""
+                return can_manage_wechat_group_skills(
+                    room_id,
+                    member_id,
+                    identity_confirmed=context.get("wechat_group_identity_requires_confirmation") is not True,
+                )
         except Exception:
             pass
         try:
@@ -1073,6 +1083,12 @@ class LightAgentCliPlugin(Plugin):
     def _require_skill_admin(self, e_context):
         if self._can_manage_skills(e_context):
             return None
+        try:
+            context = e_context["context"]
+            if context.get("channel_type") == "wechat_group":
+                context["wechat_group_silent_admin_guard"] = True
+        except Exception:
+            pass
         return _t(
             "此操作会修改 LightAgent 主机，仅所有者或管理员可以执行。",
             "This operation changes the LightAgent host and requires an owner or administrator.",
@@ -1295,7 +1311,10 @@ class LightAgentCliPlugin(Plugin):
             result += f"\n\n... ({len(lines) - 30} more lines)"
         return result
 
-    def _skill_set_enabled(self, name: str, enabled: bool) -> str:
+    def _skill_set_enabled(self, name: str, enabled: bool, e_context=None) -> str:
+        denied = self._require_skill_admin(e_context)
+        if denied:
+            return denied
         if not name:
             return _t(
                 f"请指定技能名称: /skill {'enable' if enabled else 'disable'} <名称>",

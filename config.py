@@ -122,6 +122,7 @@ available_setting = {
         "wechat_group_profile_write": True,
         "wechat_group_learning": True,
         "self_evolution": True,
+        "skill_manage": True,
         "workspace_write": True,
         "wechat_group_config": True,
         "scheduler_write": True,

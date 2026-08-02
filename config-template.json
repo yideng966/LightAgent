@@ -83,6 +83,7 @@
     "wechat_group_profile_write": true,
     "wechat_group_learning": true,
     "self_evolution": true,
+    "skill_manage": true,
     "workspace_write": true,
     "wechat_group_config": true,
     "scheduler_write": true,

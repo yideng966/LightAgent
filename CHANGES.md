@@ -2,6 +2,35 @@
 
 ## 2026-08-02
 
+### 微信群技能管理纳入管理员门禁
+
+- 在“群聊 -> 群与管理员 -> 管理员门禁能力”新增默认开启的 `skill_manage`，独立控制普通群成员是否可以新增、修改或删除技能；技能列表、搜索、详情、更新检查和校验保持只读可用。
+- 聊天 `/skill` 安装、更新、回滚、启停和卸载命令改为按当前 `stable_room_id + stable_member_id` 管理员身份及门禁开关执行，普通成员命中门禁时继续静默处理。
+- Agent 使用 `write`、`edit` 或 `bash` 修改 workspace 技能目录前增加执行期复核，避免关闭通用 `workspace_write` 门禁后绕过技能管理权限。
+
+关键文件：
+
+- `AGENTS.md`
+- `agent/protocol/agent_stream.py`
+- `channel/wechat_group/wechat_group_permissions.py`
+- `plugins/lightagent_cli/lightagent_cli.py`
+- `channel/web/static/js/console.js`
+- `config.py`
+- `config-template.json`
+- `tests/test_wechat_group_permissions.py`
+- `tests/test_skill_hub_integration.py`
+- `tests/test_wechat_group_web.py`
+- `docs/zh/channels/wechat-group.mdx`
+- `docs/channels/wechat-group.mdx`
+- `plans/20260802_微信群技能管理管理员门禁.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 分别运行 `python -X utf8 -m unittest` 验证 `tests.test_wechat_group_permissions`、`tests.test_skill_hub_integration`、`tests.test_wechat_group_web`、`tests.test_wechat_group_channel`、`tests.test_wechat_group_skill_access`：合计 312 项通过。
+- `python -X utf8 -m py_compile channel/wechat_group/wechat_group_permissions.py plugins/lightagent_cli/lightagent_cli.py agent/protocol/agent_stream.py tests/test_wechat_group_permissions.py tests/test_skill_hub_integration.py tests/test_wechat_group_web.py`：通过。
+- `node --check channel/web/static/js/console.js`：通过。
+
 ### 发布 LightAgent 2.2.5
 
 - 发布个人微信群定时任务目标群编辑能力：Web 控制台可显示当前目标，并切换到通道设置中已选择的其他稳定群。

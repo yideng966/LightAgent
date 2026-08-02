@@ -156,6 +156,15 @@ class SkillHubIntegrationSurfaceTest(unittest.TestCase):
         plugin = (ROOT / "plugins/lightagent_cli/lightagent_cli.py").read_text(encoding="utf-8")
         self.assertIn("def _require_skill_admin", plugin)
         self.assertIn("denied = self._require_skill_admin(e_context)", plugin)
+        self.assertIn("self._skill_set_enabled(sub_args, True, e_context)", plugin)
+        self.assertIn("self._skill_set_enabled(sub_args, False, e_context)", plugin)
+
+    def test_wechat_group_skill_mutations_follow_configured_admin_gate(self):
+        plugin = (ROOT / "plugins/lightagent_cli/lightagent_cli.py").read_text(encoding="utf-8")
+        self.assertIn("can_manage_wechat_group_skills", plugin)
+        self.assertIn('context.get("wechat_group_stable_room_id")', plugin)
+        self.assertIn('context.get("wechat_group_stable_member_id")', plugin)
+        self.assertIn('context["wechat_group_silent_admin_guard"] = True', plugin)
 
     def test_cli_searches_both_catalogs_but_installs_only_from_official_hub(self):
         cli = (ROOT / "cli/commands/skill.py").read_text(encoding="utf-8")

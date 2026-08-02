@@ -33,6 +33,7 @@ If the image send result times out and delivery cannot be confirmed, the system 
 - Report statistics, snapshots, preview resources, delivery records, scheduled tasks, and daily report memory are all isolated by `stable_room_id`; legacy runtime room IDs are only read within confirmed historical alias scopes.
 - Manual in-group generation defaults to current group admins only. Web admins can configure, preview, and send but cannot specify other group IDs.
 - Regular group members cannot use Agent tools to create reports, modify report settings, or write daily report memory.
+- "Group Chat -> Groups & Admins -> Admin-gated Permissions" includes a dedicated "Add/Edit/Delete Skills" switch. When enabled, only an admin matching the current `stable_room_id + stable_member_id` may install, create, update, roll back, edit, enable, disable, or uninstall skills; list, search, info, update-check, and verify operations remain read-only.
 - When a regular member triggers an admin-gated capability, the channel rejects it silently without posting a permission notice to the group. Other business errors, such as unconfirmed identity or disabled reports, are still reported normally.
 - Report link fetching always uses strict SSRF validation with per-hop redirect checks; links that are rejected, timeout, require authentication, or have empty bodies retain explicit status without the model guessing page content.
 

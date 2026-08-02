@@ -593,7 +593,8 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertTrue(item["extra"]["admin"]["required_permissions"]["knowledge_write"])
         self.assertFalse(item["extra"]["admin"]["required_permissions"]["workspace_write"])
         definitions = item["extra"]["admin"]["permission_definitions"]
-        self.assertEqual(10, len(definitions))
+        self.assertEqual(11, len(definitions))
+        self.assertTrue(item["extra"]["admin"]["required_permissions"]["skill_manage"])
         self.assertEqual("knowledge_write", definitions[0]["id"])
         self.assertIn("blocked_behavior", definitions[0])
         self.assertIn("allowed_behavior", definitions[0])
@@ -2046,6 +2047,7 @@ class WechatGroupWebTest(unittest.TestCase):
         self.assertIn("groups_admin_permission_examples", console_js)
         self.assertIn("groups_admin_permission_guard_layers", console_js)
         self.assertIn("groups_admin_permission_affected_objects", console_js)
+        self.assertIn("id: 'skill_manage'", console_js)
         self.assertIn("toggleGroupsAdminPermissionDetails", console_js)
         detail_toggle_start = console_js.find("function toggleGroupsAdminPermissionDetails")
         status_update_start = console_js.find("function updateGroupsAdminPermissionStatus")

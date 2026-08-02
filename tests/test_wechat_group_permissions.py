@@ -1,5 +1,7 @@
 import os
+import tempfile
 import unittest
+from types import SimpleNamespace
 
 from config import conf
 
@@ -205,8 +207,9 @@ class WechatGroupPermissionsTest(unittest.TestCase):
         self.assertTrue(permissions["knowledge_write"])
         self.assertTrue(permissions["memory_write"])
         self.assertTrue(permissions["wechat_group_memory_write"])
+        self.assertTrue(permissions["skill_manage"])
         self.assertTrue(permissions["workspace_write"])
-        self.assertEqual(10, len(definitions))
+        self.assertEqual(11, len(definitions))
         first = definitions[0]
         self.assertIn("id", first)
         self.assertIn("label", first)
@@ -229,6 +232,137 @@ class WechatGroupPermissionsTest(unittest.TestCase):
         self.assertIn("knowledge_write", detected)
         self.assertIn("memory_write", detected)
         self.assertIn("workspace_write", detected)
+
+    def test_detects_skill_mutations_but_keeps_skill_queries_read_only(self):
+        from channel.wechat_group.wechat_group_permissions import (
+            detect_wechat_group_admin_required_permissions,
+        )
+
+        for text in (
+            "安装技能 image-generation",
+            "帮我修改 SKILL.md",
+            "卸载这个技能",
+            "/skill update sample",
+            "lightagent skill disable sample",
+        ):
+            with self.subTest(text=text):
+                self.assertIn(
+                    "skill_manage",
+                    detect_wechat_group_admin_required_permissions(text),
+                )
+
+        for text in ("有哪些技能", "/skill list", "/skill info sample", "/skill verify sample"):
+            with self.subTest(text=text):
+                self.assertNotIn(
+                    "skill_manage",
+                    detect_wechat_group_admin_required_permissions(text),
+                )
+
+    def test_skill_management_gate_uses_stable_admin_and_config_switch(self):
+        from channel.wechat_group.wechat_group_permissions import (
+            can_manage_wechat_group_skills,
+        )
+
+        config = {
+            "wechat_group_admin_members": [{
+                "stable_room_id": "wgr_room",
+                "stable_member_id": "wgm_admin",
+                "identity_status": "confirmed",
+            }],
+            "wechat_group_admin_required_permissions": {"skill_manage": True},
+        }
+        self.assertTrue(can_manage_wechat_group_skills("wgr_room", "wgm_admin", config))
+        self.assertFalse(can_manage_wechat_group_skills("wgr_room", "wgm_member", config))
+        self.assertFalse(can_manage_wechat_group_skills(
+            "wgr_room", "wgm_admin", config, identity_confirmed=False
+        ))
+
+        config["wechat_group_admin_required_permissions"]["skill_manage"] = False
+        self.assertTrue(can_manage_wechat_group_skills("wgr_room", "wgm_member", config))
+
+    def test_skill_mutation_tool_detection_is_scoped_to_skill_storage(self):
+        from channel.wechat_group.wechat_group_permissions import (
+            is_wechat_group_skill_mutation_tool_call,
+        )
+
+        with tempfile.TemporaryDirectory() as workspace:
+            skills_dir = os.path.join(workspace, "skills")
+            os.makedirs(skills_dir)
+            self.assertTrue(is_wechat_group_skill_mutation_tool_call(
+                "write", {"path": "skills/sample/SKILL.md"}, skills_dir, cwd=workspace
+            ))
+            self.assertTrue(is_wechat_group_skill_mutation_tool_call(
+                "edit", {"path": os.path.join(skills_dir, "skills_config.json")}, skills_dir, cwd=workspace
+            ))
+            self.assertTrue(is_wechat_group_skill_mutation_tool_call(
+                "bash", {"command": "python skills/skill-creator/init.py --path skills"}, skills_dir, cwd=workspace
+            ))
+            self.assertTrue(is_wechat_group_skill_mutation_tool_call(
+                "bash", {"command": "lightagent skill uninstall sample"}, skills_dir, cwd=workspace
+            ))
+            self.assertFalse(is_wechat_group_skill_mutation_tool_call(
+                "write", {"path": "notes/result.md"}, skills_dir, cwd=workspace
+            ))
+            self.assertFalse(is_wechat_group_skill_mutation_tool_call(
+                "bash", {"command": "Get-ChildItem skills"}, skills_dir, cwd=workspace
+            ))
+
+    def test_agent_runtime_blocks_non_admin_skill_directory_write(self):
+        from agent.protocol.agent_stream import AgentStreamExecutor
+
+        class FakeWriteTool:
+            name = "write"
+
+            def __init__(self, cwd):
+                self.cwd = cwd
+
+        with tempfile.TemporaryDirectory() as workspace:
+            skills_dir = os.path.join(workspace, "skills")
+            os.makedirs(skills_dir)
+            conf()["wechat_group_admin_members"] = [{
+                "stable_room_id": "wgr_room",
+                "stable_member_id": "wgm_admin",
+                "identity_status": "confirmed",
+            }]
+            conf()["wechat_group_admin_required_permissions"] = {
+                "workspace_write": False,
+                "skill_manage": True,
+            }
+            context = {
+                "channel_type": "wechat_group",
+                "wechat_group_stable_room_id": "wgr_room",
+                "wechat_group_stable_member_id": "wgm_member",
+            }
+            executor = AgentStreamExecutor(
+                agent=SimpleNamespace(
+                    skill_manager=SimpleNamespace(custom_dir=skills_dir)
+                ),
+                model=None,
+                system_prompt="",
+                tools=[FakeWriteTool(workspace)],
+                context=context,
+            )
+
+            result = executor._execute_tool({
+                "id": "tool-1",
+                "name": "write",
+                "arguments": {
+                    "path": "skills/sample/SKILL.md",
+                    "content": "instructions",
+                },
+            })
+
+            self.assertEqual("critical_error", result["status"])
+            self.assertIn("新增、修改或删除技能", result["result"])
+            self.assertTrue(context["wechat_group_silent_admin_guard"])
+
+            conf()["wechat_group_admin_required_permissions"]["skill_manage"] = False
+            self.assertEqual(
+                "",
+                executor._guard_wechat_group_skill_management_tool(
+                    "write", {"path": "skills/sample/SKILL.md"}
+                ),
+            )
 
     def test_tool_filter_removes_non_admin_write_tools(self):
         from channel.wechat_group.wechat_group_permissions import filter_wechat_group_tools_for_permissions

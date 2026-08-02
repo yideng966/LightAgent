@@ -1,6 +1,8 @@
 # encoding:utf-8
 """Permission helpers for the WeChat group channel."""
 
+import os
+import re
 from typing import Any, Dict, Iterable, List, Optional
 
 from config import conf
@@ -13,6 +15,7 @@ DEFAULT_WECHAT_GROUP_ADMIN_REQUIRED_PERMISSIONS: Dict[str, bool] = {
     "wechat_group_profile_write": True,
     "wechat_group_learning": True,
     "self_evolution": True,
+    "skill_manage": True,
     "workspace_write": True,
     "wechat_group_config": True,
     "scheduler_write": True,
@@ -81,6 +84,16 @@ WECHAT_GROUP_ADMIN_PERMISSION_DEFINITIONS: List[Dict[str, Any]] = [
         "affected_objects": ["agent/evolution", "evolution_undo"],
     },
     {
+        "id": "skill_manage",
+        "label": "新增/修改/删除技能",
+        "summary": "限制普通成员改变 LightAgent 的技能目录和启用状态。",
+        "blocked_behavior": "安装、创建、更新、回滚、编辑、启停或卸载技能。",
+        "allowed_behavior": "列出、搜索、查看详情、检查更新或校验技能。",
+        "examples": ["安装这个技能", "修改 SKILL.md", "卸载这个技能"],
+        "guard_layers": ["通道意图识别", "技能命令校验", "Agent 工具执行期校验", "Prompt 权限提示"],
+        "affected_objects": ["workspace/skills/**", "skills_config.json", "/skill 变更命令"],
+    },
+    {
         "id": "workspace_write",
         "label": "写入/编辑工作区文件",
         "summary": "限制普通成员要求机器人改写本地工作区。",
@@ -129,6 +142,7 @@ PERMISSION_LABELS_ZH: Dict[str, str] = {
     "wechat_group_profile_write": "新增或修改群友画像",
     "wechat_group_learning": "触发微信群学习沉淀",
     "self_evolution": "触发自主进化",
+    "skill_manage": "新增、修改或删除技能",
     "workspace_write": "写入或编辑工作区文件",
     "wechat_group_config": "修改微信群人设或配置",
     "scheduler_write": "新增或修改定时任务",
@@ -336,6 +350,20 @@ def is_wechat_group_admin(
     return sender_text in {str(item).strip() for item in legacy_ids if str(item).strip()}
 
 
+def can_manage_wechat_group_skills(
+    room_id: Any,
+    sender_id: Any,
+    config: Optional[Dict[str, Any]] = None,
+    identity_confirmed: bool = True,
+) -> bool:
+    """Apply the configurable skill management gate to one stable group identity."""
+    if not get_wechat_group_admin_required_permissions(config).get("skill_manage", True):
+        return True
+    if not identity_confirmed:
+        return False
+    return is_wechat_group_admin(room_id, sender_id, config=config)
+
+
 def detect_wechat_group_admin_required_permissions(text: Any) -> List[str]:
     content = _clean_text(text)
     if not content:
@@ -352,6 +380,11 @@ def detect_wechat_group_admin_required_permissions(text: Any) -> List[str]:
     profile_words = ("群友画像", "画像", "别名", "常用词", "发言风格")
     learning_words = ("群学习", "沉淀一下", "学习沉淀", "归档学习", "最近聊天沉淀")
     evolution_words = ("自主进化", "自我进化", "你进化", "沉淀成技能", "进化一下")
+    skill_manage_words = (
+        "安装技能", "新增技能", "新建技能", "创建技能", "修改技能", "编辑技能",
+        "更新技能", "升级技能", "回滚技能", "启用技能", "禁用技能", "停用技能",
+        "卸载技能", "删除技能", "修改 SKILL.md", "编辑 SKILL.md", "沉淀成技能",
+    )
     workspace_words = ("写入工作区", "编辑文件", "改这个文件", "整理成 md", "整理成md", "保存成文件", "创建文件")
     config_words = ("修改人设", "改人设", "群配置", "自由回复", "管理员", "运行状态")
     scheduler_words = ("定时任务", "提醒我", "每天", "每周", "删除这个定时")
@@ -369,6 +402,19 @@ def detect_wechat_group_admin_required_permissions(text: Any) -> List[str]:
         add("wechat_group_learning")
     if any(word in content for word in evolution_words):
         add("self_evolution")
+    if (
+        any(word.lower() in content.lower() for word in skill_manage_words)
+        or re.search(
+            r"(?:安装|新增|新建|创建|修改|编辑|更新|升级|回滚|启用|禁用|停用|卸载|删除).{0,8}技能",
+            content,
+        )
+        or re.search(
+            r"(?:^|\s)/?skill\s+(?:install|update|rollback|enable|disable|uninstall)(?:\s|$)",
+            content,
+            re.IGNORECASE,
+        )
+    ):
+        add("skill_manage")
     if any(word in content for word in workspace_words):
         add("workspace_write")
     if any(word in content for word in config_words):
@@ -487,3 +533,62 @@ def filter_wechat_group_tools_for_permissions(
         for tool in tool_list
         if _clean_text(getattr(tool, "name", "")) not in blocked_names
     ]
+
+
+_SKILL_SHELL_MUTATION_RE = re.compile(
+    r"(?:^|\s|[;&|])(?:rm|del|erase|rmdir|mkdir|mv|move|cp|copy|touch|"
+    r"set-content|add-content|out-file|new-item|remove-item|move-item|copy-item|"
+    r"python(?:3)?|node|git\s+(?:add|apply|checkout|clean|commit|merge|mv|pull|rebase|reset|restore))\b"
+    r"|(?:>>?|\|\s*(?:set-content|add-content|out-file)\b)",
+    re.IGNORECASE,
+)
+
+
+def is_wechat_group_skill_mutation_tool_call(
+    tool_name: Any,
+    arguments: Any,
+    skills_dir: Any,
+    cwd: Any = "",
+) -> bool:
+    """Return whether a file/shell tool can mutate the workspace skill directory."""
+    name = _clean_text(tool_name).lower()
+    if name not in {"write", "edit", "bash"} or not isinstance(arguments, dict):
+        return False
+    raw_root = _clean_text(skills_dir)
+    if not raw_root:
+        return False
+    root = os.path.realpath(os.path.expanduser(raw_root))
+
+    if name in {"write", "edit"}:
+        path = _clean_text(arguments.get("path"))
+        if not path:
+            return False
+        expanded = os.path.expanduser(path)
+        resolved = os.path.realpath(
+            expanded if os.path.isabs(expanded) else os.path.join(_clean_text(cwd) or os.getcwd(), expanded)
+        )
+        try:
+            return os.path.commonpath([root, resolved]) == root
+        except ValueError:
+            return False
+
+    command = _clean_text(arguments.get("command"))
+    if not command:
+        return False
+    normalized = command.replace("\\", "/").lower()
+    mutating_skill_command = bool(re.search(
+        r"\blightagent\s+skill\s+(?:install|update|rollback|enable|disable|uninstall)\b",
+        normalized,
+    ))
+    if mutating_skill_command:
+        return True
+    if not _SKILL_SHELL_MUTATION_RE.search(command):
+        return False
+    normalized_root = root.replace("\\", "/").lower()
+    references_skill_storage = (
+        normalized_root in normalized
+        or bool(re.search(r"(?:^|[\s\"'=;|])(?:\.{0,2}/)*skills(?:/|\b)", normalized))
+        or "skill.md" in normalized
+        or "skills_config.json" in normalized
+    )
+    return references_skill_storage

@@ -1484,7 +1484,9 @@ class AgentStreamExecutor:
         tool_id = tool_call["id"]
         arguments = tool_call["arguments"]
 
-        denied_message = self._guard_wechat_group_skill_tool(tool_name, arguments)
+        denied_message = self._guard_wechat_group_skill_management_tool(tool_name, arguments)
+        if not denied_message:
+            denied_message = self._guard_wechat_group_skill_tool(tool_name, arguments)
         if denied_message:
             result = {
                 "status": "critical_error",
@@ -1665,6 +1667,43 @@ class AgentStreamExecutor:
         if referenced_skill and self._arguments_read_skill_md(tool_name, arguments):
             context["wechat_group_active_skill_key"] = referenced_skill
         return ""
+
+    def _guard_wechat_group_skill_management_tool(
+        self, tool_name: str, arguments: Dict[str, Any]
+    ) -> str:
+        """Block non-admin writes to workspace skills even when workspace writes are allowed."""
+        context = self.context
+        if not context or context.get("channel_type") != "wechat_group":
+            return ""
+        try:
+            from channel.wechat_group.wechat_group_permissions import (
+                build_wechat_group_admin_reject_message,
+                can_manage_wechat_group_skills,
+                is_wechat_group_skill_mutation_tool_call,
+            )
+
+            room_id = context.get("wechat_group_stable_room_id") or ""
+            member_id = context.get("wechat_group_stable_member_id") or ""
+            if can_manage_wechat_group_skills(
+                room_id,
+                member_id,
+                identity_confirmed=context.get("wechat_group_identity_requires_confirmation") is not True,
+            ):
+                return ""
+            manager = getattr(self.agent, "skill_manager", None)
+            skills_dir = getattr(manager, "custom_dir", "")
+            tool = self.tools.get(tool_name)
+            cwd = getattr(tool, "cwd", "")
+            if not is_wechat_group_skill_mutation_tool_call(
+                tool_name, arguments, skills_dir, cwd=cwd
+            ):
+                return ""
+            context["wechat_group_admin_blocked_permissions"] = ["skill_manage"]
+            context["wechat_group_silent_admin_guard"] = True
+            return build_wechat_group_admin_reject_message(["skill_manage"])
+        except Exception as e:
+            logger.warning(f"[Agent] WeChat group skill management gate failed: {e}")
+            return ""
 
     @staticmethod
     def _argument_strings(value: Any):
