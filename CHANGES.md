@@ -2,6 +2,26 @@
 
 ## 2026-08-02
 
+### 发布 LightAgent 2.2.7
+
+- 发布 Agent 深度思考统一配置：Web 控制台支持独立启停和低、中、高、极高四档强度，由各文本模型 Provider 转换为实际支持的协议。
+- Custom Provider 支持受控思考协议选择，旧配置默认不发送未知参数；内部请求级关闭标记不再作为通用 `reasoning_effort=none` 透传上游。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.7`，新增版本化发行说明和发布计划；不包含数据库、消息渠道协议或非文本模型路由迁移。
+
+关键文件：
+
+- `CHANGES.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.7.md`
+- `plans/20260802_发布2.2.7.md`
+
+验证记录：
+
+- `python -X utf8 scripts/validate_release_notes.py --tag v2.2.7 docs/releases/v2.2.7.md`：通过。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：通过。
+- 功能全量回归分批运行共 1274 项通过、1 项跳过；最终定向回归 88 项通过，Python 编译、JavaScript 语法和 `git diff --check` 通过。
+
 ### 统一 Agent 深度思考开关与强度适配
 
 - Web 控制台 Agent 配置支持独立启停深度思考，并提供低、中、高、极高四档强度；默认档位调整为 `low`，关闭时保留用户选择。
