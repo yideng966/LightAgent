@@ -1,5 +1,28 @@
 # CHANGES
 
+## 2026-08-02
+
+### 发布 LightAgent 2.2.5
+
+- 发布个人微信群定时任务目标群编辑能力：Web 控制台可显示当前目标，并切换到通道设置中已选择的其他稳定群。
+- 当前目标暂时离线或已不在已选列表时继续保留显示；切换后同步目标身份和会话字段，并限制新目标必须属于当前已选择的稳定群。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.5`，新增版本化发行说明和发布计划；不包含配置、数据库或渠道协议迁移。
+
+关键文件：
+
+- `CHANGES.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.5.md`
+- `plans/20260802_发布2.2.5.md`
+
+验证记录：
+
+- `python -X utf8 scripts/validate_release_notes.py --tag v2.2.5 docs/releases/v2.2.5.md`：通过。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- `python -X utf8 -m unittest tests.test_scheduler_ui tests.test_scheduler_wechat_group_delivery tests.test_web_console_mobile tests.test_wechat_group_web`：136 项通过。
+- `python -X utf8 -m py_compile channel/web/web_channel.py tests/test_scheduler_ui.py`、`node --check channel/web/static/js/console.js` 与 `git diff --check`：通过。
+
 ## 2026-08-01
 
 ### 定时任务支持修改个人微信群目标群
