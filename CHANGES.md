@@ -1,5 +1,31 @@
 # CHANGES
 
+## 2026-08-03
+
+### 新部署默认回复不主动使用微信表情
+
+- 删除新工作区中英文 `AGENT.md`、Agent 通用系统提示和首次初始化提示里的 emoji 使用要求，微信群内置人设不再提供微信文字表情示例。
+- 明确区分回复正文中的微信文字表情与独立媒体表情包；表情包自动收集、主动回复频率、检索、发送及 Web 配置均保持原有行为。
+- 升级不覆盖现有 `config.json`、工作区 `AGENT.md` 或自定义微信群人设，既有部署可在 Web 控制台按需调整。
+
+关键文件：
+
+- `agent/prompt/workspace.py`
+- `agent/prompt/builder.py`
+- `channel/wechat_group/wechat_group_persona.py`
+- `tests/test_default_reply_style.py`
+- `README.md`
+- `docs/zh/channels/wechat-group.mdx`
+- `docs/channels/wechat-group.mdx`
+- `plans/20260803_默认回复移除表情约束.md`
+- `CHANGES.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest tests.test_default_reply_style tests.test_wechat_group_persona tests.test_wechat_group_context tests.test_wechat_group_web`：158 项通过。
+- `python -X utf8 -m unittest tests.test_prompt_scheduler_guidance tests.test_docker_deployment`：9 项通过。
+- Python 语法编译、配置模板 JSON 解析、表情包文件无差异检查和 `git diff --check`：通过。
+
 ## 2026-08-02
 
 ### 发布 LightAgent 2.2.7

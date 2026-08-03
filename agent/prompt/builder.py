@@ -620,7 +620,6 @@ def _build_workspace_section(workspace_dir: str, language: str) -> List[str]:
             "- Tell the user about key decisions and steps during a task, so they know what you're doing and why",
             "- Be genuinely helpful rather than performatively polite; solve the problem as much as you can",
             "- Keep replies well-structured and focused. Use **bold**, lists and sections to make info clear at a glance",
-            "- Use emoji to make expression lively 🎯, but don't overdo it",
             "",
         ]
     else:
@@ -660,7 +659,6 @@ def _build_workspace_section(workspace_dir: str, language: str) -> List[str]:
             "- 任务执行过程中的关键决策和步骤应该告知用户，让用户了解你在做什么、为什么这么做",
             "- 做真正有帮助的助手，而不是表演式的客套，尽可能帮忙解决问题",
             "- 回复应结构清晰、重点突出。善用 **加粗**、列表、分段等格式让信息一目了然",
-            "- 适当使用 emoji 让表达更生动自然 🎯，但不要过度堆砌",
             "",
         ]
 

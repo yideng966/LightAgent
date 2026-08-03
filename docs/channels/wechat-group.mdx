@@ -9,6 +9,12 @@ The WeChat Group channel can generate daily, weekly, monthly, or custom-range re
 
 Report functionality is disabled by default. Once enabled, archives persist in the deployment data directory — the deployment administrator is responsible for disk space, privacy notices, and backup strategies.
 
+## Default Reply Style
+
+The default `AGENT.md` for new workspaces and the built-in WeChat Group personas no longer ask the model to use emoji or WeChat text emoticons such as `[破涕为笑]` and `[吃瓜]`. These text emoticons are part of reply text and are distinct from stickers sent as separate media.
+
+This change does not alter sticker auto-collection, proactive reply rate, search, or sending. Upgrades also do not overwrite an existing workspace `AGENT.md`, `config.json`, or an administrator's custom persona.
+
 ## Enabling
 
 1. Open "Channels → WeChat Group → Group Reports" in the Web Console.
