@@ -2,6 +2,26 @@
 
 ## 2026-08-03
 
+### 发布 LightAgent 2.2.8
+
+- 发布新部署默认回复风格调整：Agent 与微信群内置人设不再主动引导 emoji 或微信文字表情，独立媒体表情包行为保持不变。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.8`，新增版本化发行说明和发布计划；不涉及数据库、消息渠道协议或现有用户配置迁移。
+
+关键文件：
+
+- `CHANGES.md`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.8.md`
+- `plans/20260803_发布2.2.8.md`
+
+验证记录：
+
+- `python -X utf8 scripts/validate_release_notes.py --tag v2.2.8 docs/releases/v2.2.8.md`：通过。
+- `python -X utf8 -m unittest tests.test_default_reply_style tests.test_wechat_group_persona`：14 项通过。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- Python 语法编译、版本来源一致性和 `git diff --check`：通过；按用户要求未运行全量回归。
+
 ### 新部署默认回复不主动使用微信表情
 
 - 删除新工作区中英文 `AGENT.md`、Agent 通用系统提示和首次初始化提示里的 emoji 使用要求，微信群内置人设不再提供微信文字表情示例。
