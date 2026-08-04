@@ -30,13 +30,15 @@ Optional dependencies (recommended):
 pip3 install -r requirements-optional.txt
 ```
 
-To connect a personal WeChat group from a source deployment, install Node.js and the sidecar dependencies:
+To connect a personal WeChat group from a manual source deployment, install Node.js 18+ and npm, then install locked production dependencies in the sidecar directory:
 
 ```bash
 cd channel/wechat_group/sidecar
-npm install
+npm ci --omit=dev
 cd ../../..
 ```
+
+When Personal WeChat Group is selected in the one-click installer, the script performs these checks, installation, and module verification automatically and stops configuration on any failure. Windows does not silently install system-level Node.js; install a Node.js LTS distribution that includes npm before retrying.
 
 ### 3. Install LightAgent CLI
 

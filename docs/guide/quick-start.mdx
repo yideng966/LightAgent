@@ -29,7 +29,10 @@ The script automatically performs these steps:
 3. Clone project to `~/LightAgent`
 4. Install Python dependencies and LightAgent CLI
 5. Guided configuration for AI model and channel
-6. Start service
+6. When Personal WeChat Group is selected, require Node.js 18+ and npm, then install and verify locked sidecar production dependencies
+7. Start service
+
+On Linux/macOS, the script attempts to install Node.js 22 through the system package manager when Node.js is missing. On Windows, install a Node.js LTS distribution that includes npm first. If the Personal WeChat Group sidecar dependencies are not ready, the script stops without writing the channel configuration or starting the service.
 
 By default, the Web console starts after installation. Access `http://localhost:9899` to begin chatting.
 

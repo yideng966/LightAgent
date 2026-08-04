@@ -1,5 +1,32 @@
 # CHANGES
 
+## 2026-08-04
+
+### 一键安装补齐个人微信群 Sidecar 依赖
+
+- Linux/macOS 与 Windows 一键安装脚本在选择个人微信群时检查 Node.js 18+、npm 和 sidecar 锁文件，并使用 `npm ci --omit=dev` 安装、验证生产依赖。
+- Linux/macOS 自动安装 Node.js 时兼容 root 与 sudo 环境；Windows 明确要求预装包含 npm 的 Node.js LTS。
+- sidecar 安装或模块验证失败时停止生成微信群配置和启动服务，避免把不可用部署报告为成功；同步补充安装器回归测试和中英文部署文档。
+
+关键文件：
+
+- `run.sh`
+- `scripts/run.ps1`
+- `tests/test_source_installer_sidecar.py`
+- `README.md`
+- `docs/zh/guide/quick-start.mdx`
+- `docs/guide/quick-start.mdx`
+- `docs/zh/guide/manual-install.mdx`
+- `docs/guide/manual-install.mdx`
+- `plans/20260804_一键部署微信群Sidecar依赖.md`
+- `CHANGES.md`
+
+验证记录：
+
+- `python -X utf8 -m unittest tests.test_source_installer_sidecar tests.test_docker_deployment`：11 项通过。
+- PowerShell UTF-8 解析、Git Bash `run.sh -n`、配置模板 JSON 解析和 `git diff --check`：通过。
+- sidecar `npm ci --omit=dev --dry-run`、五个核心模块导入和 `npm test`：锁文件验证通过、61 项测试通过；本机实际 `npm ci` 清理 `leveldown` 原生文件时受现有 Node 进程占用影响返回 Windows `EPERM`，随后使用 `npm install --omit=dev` 修复本地生成目录。
+
 ## 2026-08-03
 
 ### 发布 LightAgent 2.2.8

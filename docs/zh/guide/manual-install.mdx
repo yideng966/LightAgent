@@ -30,13 +30,15 @@ pip3 install -r requirements.txt
 pip3 install -r requirements-optional.txt
 ```
 
-如需接入个人微信群，源码部署还需要 Node.js，并在 sidecar 目录安装 npm 依赖：
+如需接入个人微信群，手动源码部署还需要 Node.js 18+ 和 npm，并在 sidecar 目录按锁文件安装生产依赖：
 
 ```bash
 cd channel/wechat_group/sidecar
-npm install
+npm ci --omit=dev
 cd ../../..
 ```
+
+使用一键安装脚本并选择个人微信群时，脚本会自动执行上述检查、安装和模块验证；任一步失败都会停止配置。Windows 不会静默安装系统级 Node.js，需先安装包含 npm 的 Node.js LTS 后重试。
 
 > 国内网络可使用镜像源加速：`pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple`
 

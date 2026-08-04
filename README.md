@@ -44,6 +44,8 @@ Windows PowerShell:
 irm https://raw.githubusercontent.com/yideng966/LightAgent/master/scripts/run.ps1 | iex
 ```
 
+一键安装时如选择个人微信群，脚本会额外检查 Node.js 18+ 与 npm，并按 `package-lock.json` 安装、验证 Wechaty sidecar 生产依赖。Linux/macOS 会在 Node.js 缺失时尝试通过系统包管理器安装 Node.js 22；Windows 需先安装包含 npm 的 Node.js LTS。依赖未就绪时脚本会停止，不会写入微信群配置或启动不可用的服务。
+
 Docker:
 
 ```bash
@@ -72,15 +74,15 @@ python -m pip install -r requirements-optional.txt
 python -m pip install -e .
 ```
 
-个人微信群 sidecar 依赖（仅源码部署且需要接入 `wechat_group` 渠道时执行）：
+个人微信群 sidecar 依赖（仅手动源码部署且需要接入 `wechat_group` 渠道时执行，需要 Node.js 18+）：
 
 ```powershell
 Set-Location -LiteralPath .\channel\wechat_group\sidecar
-npm install
+npm ci --omit=dev
 Set-Location -LiteralPath ..\..\..
 ```
 
-这一步会安装 `channel/wechat_group/sidecar/package.json` 中声明的 Wechaty 相关依赖，包括 `wechaty`、`wechaty-puppet-wechat4u`、`file-box` 等。Python 通道启动时会在该目录运行 `node wechaty-sidecar.mjs`；如果 `node` 不在 `PATH` 中，可在 `config.json` 中把 `wechat_group_sidecar_node` 配置为 Node.js 可执行文件路径。Docker 镜像已经内置 `/usr/local/bin/node` 和 sidecar 依赖，不执行此步骤。
+这一步会按 `package-lock.json` 安装 `channel/wechat_group/sidecar/package.json` 中声明的 Wechaty 相关生产依赖，包括 `wechaty`、`wechaty-puppet-wechat4u`、`file-box` 等。Python 通道启动时会在该目录运行 `node wechaty-sidecar.mjs`；如果 `node` 不在 `PATH` 中，可在 `config.json` 中把 `wechat_group_sidecar_node` 配置为 Node.js 可执行文件路径。一键安装脚本在选择个人微信群时会自动执行此步骤；Docker 镜像已经内置 `/usr/local/bin/node` 和 sidecar 依赖，无需执行。
 
 启动后端：
 

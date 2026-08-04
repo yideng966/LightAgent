@@ -29,7 +29,10 @@ description: 使用脚本一键安装和管理 LightAgent
 3. 克隆项目代码到 `~/LightAgent`
 4. 安装 Python 依赖和 LightAgent CLI
 5. 引导配置 AI 模型和通信渠道
-6. 启动服务
+6. 选择个人微信群时检查 Node.js 18+ 与 npm，并按锁文件安装、验证 sidecar 生产依赖
+7. 启动服务
+
+Linux/macOS 在 Node.js 缺失时会尝试通过系统包管理器安装 Node.js 22；Windows 需先安装包含 npm 的 Node.js LTS。个人微信群 sidecar 依赖未就绪时，脚本会停止且不会写入微信群配置或启动服务。
 
 运行后默认启动 Web 控制台，访问 `http://localhost:9899` 开始对话和管理Agent。
 

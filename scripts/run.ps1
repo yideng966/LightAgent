@@ -517,6 +517,94 @@ function Configure-Model {
     if ($m.Linkai)    { $script:UseLinkai = $true }
 }
 
+# Install the Node.js Wechaty sidecar dependency for the WeChat group channel.
+# Checks for Node.js (>= 18), installs locked npm packages, and verifies the
+# sidecar can load its modules. Called from Configure-Channel for "weixin".
+function Install-WechatSidecar {
+    Write-LightAgent (T "正在安装微信群 sidecar 依赖 (Node.js)..." "Installing WeChat group sidecar dependencies (Node.js)...")
+
+    # 1. Detect Node.js
+    $nodeBin = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $nodeBin) {
+        Write-Err (T "未找到 Node.js，微信群渠道需要 Node.js >= 18" "Node.js not found, WeChat group channel requires Node.js >= 18")
+        Write-Warn (T "请从 https://nodejs.org/ 下载安装 Node.js (LTS 版本)" "Please download and install Node.js (LTS) from https://nodejs.org/")
+        Write-Warn (T "安装完成后重新运行 .\scripts\run.ps1 config" "After installation, re-run .\scripts\run.ps1 config")
+        return $false
+    }
+
+    $nodeVer = $null
+    try {
+        $nodeVerOutput = & node -v 2>&1
+        if ($nodeVerOutput -match 'v(\d+)') {
+            $nodeVer = [int]$Matches[1]
+        }
+    } catch {}
+    if (-not $nodeVer -or $nodeVer -lt 18) {
+        Write-Err ((T "Node.js 版本无效或过低 (需要 >= 18)，当前" "Invalid or unsupported Node.js version (>= 18 required), current") + ": " + ($nodeVerOutput | Out-String).Trim())
+        Write-Warn (T "请升级 Node.js 后重新运行配置: https://nodejs.org/" "Upgrade Node.js and re-run configuration: https://nodejs.org/")
+        return $false
+    }
+    $npmBin = Get-Command npm -ErrorAction SilentlyContinue
+    if (-not $npmBin) {
+        Write-Err (T "未找到 npm，请安装包含 npm 的 Node.js LTS" "npm not found. Install a Node.js LTS distribution that includes npm")
+        return $false
+    }
+    Write-LightAgent ("Node.js " + (& node -v) + ", npm " + (& npm -v))
+
+    # 2. Install sidecar npm dependencies
+    $sidecarDir = Join-Path $BaseDir "channel\wechat_group\sidecar"
+    if (-not (Test-Path (Join-Path $sidecarDir "package.json"))) {
+        Write-Err ((T "未找到 sidecar package.json" "sidecar package.json not found") + ": $sidecarDir")
+        return $false
+    }
+    if (-not (Test-Path (Join-Path $sidecarDir "package-lock.json"))) {
+        Write-Err ((T "未找到 sidecar package-lock.json，无法执行锁定安装" "sidecar package-lock.json not found; cannot perform a locked install") + ": $sidecarDir")
+        return $false
+    }
+
+    Write-LightAgent (T "按锁文件安装 sidecar npm 依赖 (可能需要几分钟)..." "Installing locked sidecar npm dependencies (may take a few minutes)...")
+    Push-Location $sidecarDir
+    try {
+        $prevEAP = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            & npm ci --omit=dev 2>&1 | ForEach-Object { Write-Host $_ }
+            $npmExit = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
+    } finally {
+        Pop-Location
+    }
+    if ($npmExit -ne 0) {
+        Write-Err (T "sidecar npm 依赖安装失败，已停止配置" "sidecar npm dependency installation failed; configuration stopped")
+        return $false
+    }
+
+    # 3. Verify sidecar modules can be imported
+    Write-LightAgent (T "验证 sidecar 模块..." "Verifying sidecar modules...")
+    Push-Location $sidecarDir
+    try {
+        $prevEAP = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = "Continue"
+            $verifyOutput = & node -e "Promise.all([import('wechaty'),import('wechaty-puppet-wechat4u'),import('file-box'),import('memory-card'),import('xml2js')]).then(function(){console.log('sidecar ok')}).catch(function(e){console.error(e);process.exit(1)})" 2>&1
+            $verifyExit = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $prevEAP
+        }
+    } finally {
+        Pop-Location
+    }
+    if ($verifyExit -ne 0) {
+        $verifyOutput | ForEach-Object { Write-Host $_ }
+        Write-Err (T "sidecar 模块验证失败，已停止配置" "sidecar module verification failed; configuration stopped")
+        return $false
+    }
+    Write-LightAgent (T "sidecar 模块验证通过" "sidecar modules verified")
+    return $true
+}
+
 # ── channel selection ────────────────────────────────────────────
 # Channel label by stable key (independent of menu order).
 function Get-ChannelLabel {
@@ -568,7 +656,9 @@ function Configure-Channel {
             $script:AccessInfo = (T "Web 控制台地址" "Web console") + " : http://localhost:9899/chat"
         }
         "weixin" {
+            # Weixin (个人微信，需要 Node.js sidecar)
             $script:ChannelType = "weixin"
+            if (-not (Install-WechatSidecar)) { return $false }
             $script:AccessInfo = T "微信渠道已配置，请在终端或 Web 控制台扫码登录" "Weixin channel configured. Scan QR code in terminal or web console to login."
         }
         "feishu" {
@@ -633,6 +723,7 @@ function Configure-Channel {
             $script:AccessInfo = T "Discord 渠道已配置" "Discord channel configured"
         }
     }
+    return $true
 }
 
 # ── generate config.json ─────────────────────────────────────────
@@ -674,6 +765,12 @@ function New-ConfigFile {
         agent_max_steps           = 20
         # New installs opt into self-evolution (matches run.sh).
         self_evolution_enabled    = $true
+        # WeChat group sidecar (Node.js Wechaty subprocess) settings.
+        # Only used when channel_type == 'weixin'.
+        wechat_group_sidecar_node          = "node"
+        wechat_group_puppet                = "wechaty-puppet-wechat4u"
+        wechat_group_sidecar_memory_path   = ""
+        wechat_group_sidecar_start_timeout = 60
     }
 
     # Set the API key into the right field (skipped models leave it empty).
@@ -798,7 +895,10 @@ function Install-Mode {
     Select-Model
     Configure-Model
     Select-Channel
-    Configure-Channel
+    if (-not (Configure-Channel)) {
+        Write-Err (T "微信群 sidecar 依赖未就绪，安装已停止" "WeChat group sidecar dependencies are not ready; installation stopped")
+        exit 1
+    }
     New-ConfigFile
 
     # Auto-start after configuration for a true out-of-the-box experience.
@@ -863,7 +963,10 @@ switch ($Command.ToLower()) {
         Select-Model
         Configure-Model
         Select-Channel
-        Configure-Channel
+        if (-not (Configure-Channel)) {
+            Write-Err (T "微信群 sidecar 依赖未就绪，配置未写入" "WeChat group sidecar dependencies are not ready; configuration was not written")
+            exit 1
+        }
         New-ConfigFile
         $r = Read-Host (T "现在重启服务吗？[Y/n]" "Restart service now? [Y/n]")
         if ($r -ne "n" -and $r -ne "N") { Invoke-LightAgentCommand "restart" }

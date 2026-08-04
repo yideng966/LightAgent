@@ -670,6 +670,105 @@ channel_label() {
     esac
 }
 
+run_wechat_sidecar_privileged() {
+    if [ "$(id -u)" -eq 0 ]; then
+        "$@"
+    elif command -v sudo &> /dev/null; then
+        sudo -E "$@"
+    else
+        echo -e "${RED}❌ $(t "安装 Node.js 需要 root 权限或 sudo" "Installing Node.js requires root privileges or sudo")${NC}"
+        return 1
+    fi
+}
+
+# Install the Node.js Wechaty sidecar dependency for the WeChat group channel.
+# Checks for Node.js (>= 18), installs locked npm packages, and verifies the
+# sidecar can load its modules. Called from configure_channel() for "weixin".
+install_wechat_sidecar() {
+    echo -e "${GREEN}📦 $(t "正在安装微信群 sidecar 依赖 (Node.js)" "Installing WeChat group sidecar dependencies (Node.js)")...${NC}"
+
+    # 1. Detect / install Node.js
+    if ! command -v node &> /dev/null; then
+        echo -e "${YELLOW}⚠️  $(t "未找到 Node.js，微信群渠道需要 Node.js >= 18" "Node.js not found, WeChat group channel requires Node.js >= 18")${NC}"
+        local node_installed=false
+        local setup_script=""
+        if command -v apt-get &> /dev/null; then
+            echo -e "${YELLOW}$(t "正在通过 apt 安装 Node.js 22.x..." "Installing Node.js 22.x via apt...")${NC}"
+            setup_script=$(mktemp 2>/dev/null)
+            if [ -n "$setup_script" ] \
+                && curl -fsSL https://deb.nodesource.com/setup_22.x -o "$setup_script" \
+                && run_wechat_sidecar_privileged bash "$setup_script" \
+                && run_wechat_sidecar_privileged apt-get install -y nodejs; then
+                node_installed=true
+            fi
+            [ -z "$setup_script" ] || rm -f "$setup_script"
+        elif command -v yum &> /dev/null; then
+            echo -e "${YELLOW}$(t "正在通过 yum 安装 Node.js 22.x..." "Installing Node.js 22.x via yum...")${NC}"
+            setup_script=$(mktemp 2>/dev/null)
+            if [ -n "$setup_script" ] \
+                && curl -fsSL https://rpm.nodesource.com/setup_22.x -o "$setup_script" \
+                && run_wechat_sidecar_privileged bash "$setup_script" \
+                && run_wechat_sidecar_privileged yum install -y nodejs; then
+                node_installed=true
+            fi
+            [ -z "$setup_script" ] || rm -f "$setup_script"
+        elif command -v brew &> /dev/null; then
+            echo -e "${YELLOW}$(t "正在通过 Homebrew 安装 Node.js..." "Installing Node.js via Homebrew...")${NC}"
+            if brew install node@22; then
+                export PATH="$(brew --prefix node@22)/bin:${PATH}"
+                node_installed=true
+            fi
+        fi
+        if [ "$node_installed" = false ] || ! command -v node &> /dev/null; then
+            echo -e "${RED}❌ $(t "自动安装 Node.js 失败，请手动安装 Node.js >= 18:" "Failed to auto-install Node.js. Please install Node.js >= 18 manually:")${NC}"
+            echo -e "${YELLOW}   https://nodejs.org/${NC}"
+            echo -e "${YELLOW}   $(t "或运行: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs" "Or run: curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs")${NC}"
+            echo -e "${YELLOW}   $(t "安装完成后重新运行 ./run.sh config" "After installation, re-run ./run.sh config")${NC}"
+            return 1
+        fi
+    fi
+
+    local node_version node_major
+    node_version=$(node -v 2>/dev/null) || node_version=""
+    node_major=$(printf '%s' "$node_version" | sed -n 's/^v\([0-9][0-9]*\).*/\1/p')
+    if [ -z "$node_major" ] || [ "$node_major" -lt 18 ] 2>/dev/null; then
+        echo -e "${RED}❌ $(t "Node.js 版本无效或过低 (需要 >= 18)，当前:" "Invalid or unsupported Node.js version (>= 18 required), current:") ${node_version:-unknown}${NC}"
+        echo -e "${YELLOW}   $(t "请升级 Node.js 后重新运行配置: https://nodejs.org/" "Upgrade Node.js and re-run configuration: https://nodejs.org/")${NC}"
+        return 1
+    fi
+    if ! command -v npm &> /dev/null; then
+        echo -e "${RED}❌ $(t "未找到 npm，请安装包含 npm 的 Node.js LTS" "npm not found. Install a Node.js LTS distribution that includes npm")${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}✅ Node.js ${node_version}, npm $(npm -v)${NC}"
+
+    # 2. Install sidecar npm dependencies
+    local sidecar_dir="${BASE_DIR}/channel/wechat_group/sidecar"
+    if [ ! -f "${sidecar_dir}/package.json" ]; then
+        echo -e "${RED}❌ $(t "未找到 sidecar package.json" "sidecar package.json not found"): ${sidecar_dir}${NC}"
+        return 1
+    fi
+    if [ ! -f "${sidecar_dir}/package-lock.json" ]; then
+        echo -e "${RED}❌ $(t "未找到 sidecar package-lock.json，无法执行锁定安装" "sidecar package-lock.json not found; cannot perform a locked install"): ${sidecar_dir}${NC}"
+        return 1
+    fi
+
+    echo -e "${YELLOW}$(t "按锁文件安装 sidecar npm 依赖（可能需要几分钟）..." "Installing locked sidecar npm dependencies (may take a few minutes)...")${NC}"
+    if ! (cd "${sidecar_dir}" && npm ci --omit=dev); then
+        echo -e "${RED}❌ $(t "sidecar npm 依赖安装失败，已停止配置" "sidecar npm dependency installation failed; configuration stopped")${NC}"
+        return 1
+    fi
+
+    # 3. Verify sidecar modules can be imported
+    echo -e "${YELLOW}$(t "验证 sidecar 模块..." "Verifying sidecar modules...")${NC}"
+    if ! (cd "${sidecar_dir}" && node -e "Promise.all([import('wechaty'),import('wechaty-puppet-wechat4u'),import('file-box'),import('memory-card'),import('xml2js')]).then(function(){console.log('sidecar ok')}).catch(function(e){console.error(e);process.exit(1)})"); then
+        echo -e "${RED}❌ $(t "sidecar 模块验证失败，已停止配置" "sidecar module verification failed; configuration stopped")${NC}"
+        return 1
+    fi
+    echo -e "${GREEN}✅ $(t "sidecar 模块验证通过" "sidecar modules verified")${NC}"
+    return 0
+}
+
 # Select channel. The display order depends on the install language:
 #   - English: Web first, then the global IM channels (Telegram/Discord/Slack),
 #     then the China-focused channels.
@@ -705,8 +804,9 @@ configure_channel() {
             ACCESS_INFO="$(t "Web 控制台地址" "Web console") : http://localhost:9899/chat"
             ;;
         weixin)
-            # Weixin
+            # Weixin (个人微信，需要 Node.js sidecar)
             CHANNEL_TYPE="weixin"
+            install_wechat_sidecar || return 1
             ACCESS_INFO="$(t "微信渠道已配置，请在终端或 Web 控制台扫码登录" "Weixin channel configured. Scan QR code in terminal or web console to login.")"
             ;;
         feishu)
@@ -886,6 +986,12 @@ base = {
     # New installs opt into self-evolution; existing users (no key) keep the
     # code default (off) so an upgrade never silently changes their behavior.
     'self_evolution_enabled': True,
+    # WeChat group sidecar (Node.js Wechaty subprocess) settings.
+    # Only used when channel_type == 'weixin'.
+    'wechat_group_sidecar_node': 'node',
+    'wechat_group_puppet': 'wechaty-puppet-wechat4u',
+    'wechat_group_sidecar_memory_path': '',
+    'wechat_group_sidecar_start_timeout': 60,
 }
 channel_map = {
     'feishu': {'feishu_app_id': 'FEISHU_APP_ID', 'feishu_app_secret': 'FEISHU_APP_SECRET'},
@@ -1182,7 +1288,11 @@ cmd_config() {
     select_model
     configure_model
     select_channel
-    configure_channel
+    if ! configure_channel; then
+        menu_session_end
+        echo -e "${RED}${EMOJI_CROSS} $(t "微信群 sidecar 依赖未就绪，配置未写入" "WeChat group sidecar dependencies are not ready; configuration was not written")${NC}"
+        return 1
+    fi
     menu_session_end
     create_config_file
     
@@ -1289,7 +1399,11 @@ install_mode() {
     select_model
     configure_model
     select_channel
-    configure_channel
+    if ! configure_channel; then
+        menu_session_end
+        echo -e "${RED}${EMOJI_CROSS} $(t "微信群 sidecar 依赖未就绪，安装已停止" "WeChat group sidecar dependencies are not ready; installation stopped")${NC}"
+        return 1
+    fi
     menu_session_end
     create_config_file
     
