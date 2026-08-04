@@ -188,12 +188,8 @@ def _should_suppress_free_reply_for_image_failure(context, current_image=False) 
     diagnostics = context.get("wechat_group_multimodal_diagnostics")
     diagnostics = diagnostics if isinstance(diagnostics, dict) else {}
     if current_image:
-        # 当前图片自由回复要求诊断完整、命中原图且摘要真实可用；
-        # 摘要为空/失败/仅自述"无法查看"时一律静默，避免 LLM 复述成"图片没加载出来"。
         return (
-            not diagnostics
-            or not diagnostics.get("matched_image_message_id")
-            or diagnostics.get("reason") != "current_image"
+            diagnostics.get("reason") != "current_image"
             or diagnostics.get("summary_generated") is not True
         )
     matched_images = context.get("wechat_group_multimodal_matched_images")

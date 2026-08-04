@@ -2,25 +2,30 @@
 
 ## 2026-08-04
 
-### 修复微信群图片理解失败摘要误判（自由回复链路）
+### 发布 LightAgent 2.2.10 并回退图片摘要判定调整
 
-- 增强 `_is_successful_image_summary()`：视觉模型返回"我无法查看这张图片""图片加载失败""这是一张图片"等自述失败的摘要时，正确标记为不可用（`summary_generated=False`），避免把无效摘要注入 LLM 后被复述成"图片我这边没加载出来 看不到内容 你重新发一张"。
-- 强化 `_should_suppress_free_reply_for_image_failure()` 的 current_image 分支：同时检查诊断完整性、图片消息 ID、命中原因与摘要可用性，任一条件不满足即静默，防止诊断缺失或摘要不可用时仍进入 Agent。
-- 补充回归测试：`ImageSummarySuccessJudgementTest` 直接验证各类无效/有效摘要的判定；`WechatGroupVisionInvalidSummaryContextTest` 验证无效摘要的端到端上下文构建；`test_worker_approved_image_free_reply_is_silent_without_usable_vision_summary` 新增三种"视觉模型自述失败"的静默场景。
+- 撤销 `0e0d97991fa51b711fab5a06edcb3fbb00f55641` 对微信群图片理解摘要成功判定和自由回复静默条件的调整，恢复该提交之前的运行逻辑与测试基线。
+- 保留目标提交之后的一键安装 Sidecar 依赖改进、发行说明规则和其他变更，不改写既有 Git 历史。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.10`，新增版本化发行说明和中文发布计划。
 
 关键文件：
 
-- `channel/wechat_group/wechat_group_multimodal_context_service.py`：`_is_successful_image_summary()` 与失败语义标记常量
-- `channel/wechat_group/wechat_group_channel.py`：`_should_suppress_free_reply_for_image_failure()`
-- `tests/test_wechat_group_multimodal_context_service.py`
+- `channel/wechat_group/wechat_group_channel.py`
+- `channel/wechat_group/wechat_group_multimodal_context_service.py`
 - `tests/test_wechat_group_channel.py`
+- `tests/test_wechat_group_multimodal_context_service.py`
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.10.md`
+- `plans/20260804_回退图片摘要改动并发布2.2.10.md`
+- `CHANGES.md`
 
 验证记录：
 
-- `python -X utf8 -m unittest tests.test_wechat_group_multimodal_context_service`：20 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_multimodal_context_service`：15 项通过。
 - `python -X utf8 -m unittest tests.test_wechat_group_channel`：152 项通过。
-- `python -X utf8 -m unittest tests.test_wechat_group_free_reply tests.test_wechat_group_free_reply_worker tests.test_wechat_group_message`：65 项通过，无回归。
-- 根因确认：远端容器日志与对照实验验证，Vision 模型（agnes-2.0-flash）对部分图片返回"我无法查看这张图片的内容""图片加载失败"等看似成功实为无效的摘要，旧版 `_is_successful_image_summary()` 将其误判为可用 → LLM 忠实复述 → 群内出现"图片没加载出来 重新发一张"。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- 发行说明校验、Python 语法编译和 `git diff --check`：通过；按用户要求未运行全量回归。
 
 ### 一键安装补齐个人微信群 Sidecar 依赖
 
