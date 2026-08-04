@@ -579,5 +579,115 @@ class WechatGroupMultimodalContextServiceTest(unittest.TestCase):
         self.assertEqual("ambiguous_recent_images", result["diagnostics"]["skipped_reason"])
 
 
+class ImageSummarySuccessJudgementTest(unittest.TestCase):
+    """_is_successful_image_summary 对"看似成功、实为无效"摘要的判定。"""
+
+    def _judge(self, summary):
+        from channel.wechat_group.wechat_group_multimodal_context_service import (
+            _is_successful_image_summary,
+        )
+
+        return _is_successful_image_summary(summary)
+
+    def test_accepts_real_content_summary(self):
+        self.assertTrue(self._judge("图片展示了一个深色背景的标题栏，左侧有蓝绿渐变漩涡图标。"))
+        self.assertTrue(self._judge("画面中有三个人站在海边，天空晴朗。"))
+        self.assertTrue(self._judge("文字内容：欢迎使用 LightAgent"))
+
+    def test_rejects_empty_and_explicit_failure(self):
+        self.assertFalse(self._judge(""))
+        self.assertFalse(self._judge("图片理解未返回内容。"))
+        self.assertFalse(self._judge("图片理解失败：视觉模型调用失败。"))
+        self.assertFalse(self._judge("图片理解失败：所有视觉模型都不可用。"))
+
+    def test_rejects_vision_self_reported_failure(self):
+        # 视觉模型返回"看似成功、实为无效"的摘要：非空且不以"图片理解失败"开头，
+        # 但明确自述看不到图片。修复前会被误判为可用摘要并注入 LLM。
+        for bad in (
+            "我无法查看这张图片的内容。",
+            "图片加载失败，无法显示内容。",
+            "无法识别图片中的内容。",
+            "这张图片无法加载，请稍后再试。",
+            "看不到图片里的信息。",
+            "图片未能成功显示。",
+        ):
+            self.assertFalse(self._judge(bad), "should reject: {!r}".format(bad))
+
+    def test_rejects_generic_placeholder_summary(self):
+        for bad in ("这是一张图片。", "这是图片", "图片", "这是一张图片", "这只是一张图片"):
+            self.assertFalse(self._judge(bad), "should reject: {!r}".format(bad))
+
+
+class WechatGroupVisionInvalidSummaryContextTest(unittest.TestCase):
+    """Vision 返回无效摘要时，多模态服务应标记 summary_generated=False。"""
+
+    def setUp(self):
+        self._original_config = {
+            "wechat_group_multimodal_context_enabled": conf().get("wechat_group_multimodal_context_enabled"),
+            "wechat_group_image_understanding_enabled": conf().get("wechat_group_image_understanding_enabled"),
+            "wechat_group_image_understanding_prompt": conf().get("wechat_group_image_understanding_prompt"),
+        }
+
+    def tearDown(self):
+        for key, value in self._original_config.items():
+            if value is None:
+                conf().pop(key, None)
+            else:
+                conf()[key] = value
+
+    def test_vision_cannot_view_summary_marks_summary_generated_false(self):
+        from channel.wechat_group.wechat_group_multimodal_context_service import (
+            WechatGroupMultimodalContextService,
+        )
+
+        conf()["wechat_group_image_understanding_enabled"] = True
+        conf()["wechat_group_image_understanding_prompt"] = "Describe this image"
+        service = WechatGroupMultimodalContextService(Mock())
+
+        with patch(
+            "agent.tools.vision.vision.Vision.execute",
+            return_value=ToolResult.success({"content": "我无法查看这张图片的内容。"}),
+        ):
+            result = service.build_context(
+                self._image_msg(),
+                query="",
+                trigger_source="image_message",
+                now=100000,
+            )
+
+        self.assertIn("<wechat-group-multimodal>", result["block"])
+        self.assertEqual("current_image", result["diagnostics"]["reason"])
+        self.assertEqual("msg-image", result["diagnostics"].get("matched_image_message_id"))
+        self.assertFalse(result["diagnostics"].get("summary_generated"))
+        self.assertNotIn("media_path", result["diagnostics"])
+
+    def _image_msg(self, media_path="D:/tmp/cat.jpg", ts=100000):
+        from bridge.context import ContextType
+
+        return SimpleNamespace(
+            ctype=ContextType.IMAGE,
+            content=media_path,
+            text="",
+            other_user_id="room@@abc",
+            other_user_nickname="Test Room",
+            actual_user_id="wxid_alice",
+            actual_user_nickname="Alice",
+            to_user_id="wxid_bot",
+            to_user_nickname="LightBot",
+            is_at=False,
+            is_quote_self=False,
+            is_group=True,
+            at_list=[],
+            self_display_name="LightBot",
+            create_time=ts,
+            msg_id="msg-image",
+            message_type="image",
+            media_path=media_path,
+            quote={},
+            forward={},
+            raw_app_type="",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

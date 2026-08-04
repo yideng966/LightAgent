@@ -18,6 +18,21 @@ IMAGE_UNDERSTANDING_FAILURE_SUMMARY = "图片理解失败：视觉模型调用�
 IMAGE_UNDERSTANDING_EMPTY_SUMMARY = "图片理解未返回内容。"
 IMAGE_REFERENCE_AMBIGUOUS_SUMMARY = "图片引用无法唯一定位，不得猜测图片内容；请让用户重新引用目标图片或重新发送。"
 
+# 视觉模型自述"看不到/无法识别"的失败语义；命中即视为没有可用摘要，
+# 避免把这类内容注入 LLM 后，模型复述成"图片没加载出来，重新发一张"。
+_IMAGE_SUMMARY_FAILURE_MARKERS = (
+    "无法查看", "无法识别", "无法加载", "无法读取", "无法解析",
+    "无法打开",
+    "加载失败", "加载不出来", "加载不了", "显示失败", "未显示",
+    "看不到", "看不见", "看不了", "不能查看", "不能看", "不能读取", "无法显示",
+    "未能成功显示", "无法成功显示", "没有内容", "无内容",
+    "cannot view", "cannot load", "cannot see", "failed to load",
+    "unable to view", "unable to load", "no content", "not visible",
+)
+
+# 只有主语没有实际信息的空泛摘要，例如"这是一张图片""这只是一张图片""图片"。
+_IMAGE_SUMMARY_EMPTY_RE = re.compile(r"^这?[只是就]*[一]?[张幅个]?图片[。.!！]?$")
+
 
 def _as_bool(value, default=False) -> bool:
     if value is None:
@@ -145,11 +160,16 @@ def _normalize_quote_message_type(value) -> str:
 
 def _is_successful_image_summary(summary: str) -> bool:
     value = str(summary or "").strip()
-    return bool(
-        value
-        and value != IMAGE_UNDERSTANDING_EMPTY_SUMMARY
-        and not value.startswith("图片理解失败")
-    )
+    if not value or value == IMAGE_UNDERSTANDING_EMPTY_SUMMARY:
+        return False
+    if value.startswith("图片理解失败"):
+        return False
+    lowered = value.lower()
+    if any(marker in lowered for marker in _IMAGE_SUMMARY_FAILURE_MARKERS):
+        return False
+    if _IMAGE_SUMMARY_EMPTY_RE.match(value):
+        return False
+    return True
 
 
 def _scope_text(value) -> str:

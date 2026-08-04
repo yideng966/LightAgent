@@ -2,6 +2,26 @@
 
 ## 2026-08-04
 
+### 修复微信群图片理解失败摘要误判（自由回复链路）
+
+- 增强 `_is_successful_image_summary()`：视觉模型返回"我无法查看这张图片""图片加载失败""这是一张图片"等自述失败的摘要时，正确标记为不可用（`summary_generated=False`），避免把无效摘要注入 LLM 后被复述成"图片我这边没加载出来 看不到内容 你重新发一张"。
+- 强化 `_should_suppress_free_reply_for_image_failure()` 的 current_image 分支：同时检查诊断完整性、图片消息 ID、命中原因与摘要可用性，任一条件不满足即静默，防止诊断缺失或摘要不可用时仍进入 Agent。
+- 补充回归测试：`ImageSummarySuccessJudgementTest` 直接验证各类无效/有效摘要的判定；`WechatGroupVisionInvalidSummaryContextTest` 验证无效摘要的端到端上下文构建；`test_worker_approved_image_free_reply_is_silent_without_usable_vision_summary` 新增三种"视觉模型自述失败"的静默场景。
+
+关键文件：
+
+- `channel/wechat_group/wechat_group_multimodal_context_service.py`：`_is_successful_image_summary()` 与失败语义标记常量
+- `channel/wechat_group/wechat_group_channel.py`：`_should_suppress_free_reply_for_image_failure()`
+- `tests/test_wechat_group_multimodal_context_service.py`
+- `tests/test_wechat_group_channel.py`
+
+验证记录：
+
+- `python -X utf8 -m unittest tests.test_wechat_group_multimodal_context_service`：20 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_channel`：152 项通过。
+- `python -X utf8 -m unittest tests.test_wechat_group_free_reply tests.test_wechat_group_free_reply_worker tests.test_wechat_group_message`：65 项通过，无回归。
+- 根因确认：远端容器日志与对照实验验证，Vision 模型（agnes-2.0-flash）对部分图片返回"我无法查看这张图片的内容""图片加载失败"等看似成功实为无效的摘要，旧版 `_is_successful_image_summary()` 将其误判为可用 → LLM 忠实复述 → 群内出现"图片没加载出来 重新发一张"。
+
 ### 一键安装补齐个人微信群 Sidecar 依赖
 
 - Linux/macOS 与 Windows 一键安装脚本在选择个人微信群时检查 Node.js 18+、npm 和 sidecar 锁文件，并使用 `npm ci --omit=dev` 安装、验证生产依赖。

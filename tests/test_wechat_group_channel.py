@@ -4547,6 +4547,11 @@ class WechatGroupChannelTest(unittest.TestCase):
             ("tool_failure", {"return_value": ToolResult.fail("vision backend down")}, "D:/tmp/cat.jpg", True),
             ("empty_summary", {"return_value": ToolResult.success({"content": ""})}, "D:/tmp/cat.jpg", True),
             ("missing_media", {"return_value": ToolResult.success({"content": "An older image."})}, "", True),
+            # 视觉模型返回"看似成功、实为无效"的摘要：非空且不以"图片理解失败"开头，
+            # 但明确自述看不到图或只有占位主语。修复前会被误判为可用摘要并注入 LLM。
+            ("vision_cannot_view", {"return_value": ToolResult.success({"content": "我无法查看这张图片的内容。"})}, "D:/tmp/cat.jpg", True),
+            ("vision_load_failed", {"return_value": ToolResult.success({"content": "图片加载失败，无法显示内容。"})}, "D:/tmp/cat.jpg", True),
+            ("vision_generic_placeholder", {"return_value": ToolResult.success({"content": "这是一张图片。"})}, "D:/tmp/cat.jpg", True),
         )
 
         for case_name, vision_behavior, media_path, vision_called in cases:
