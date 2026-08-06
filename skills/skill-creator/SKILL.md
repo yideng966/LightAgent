@@ -97,6 +97,12 @@ Do NOT create auxiliary documentation files:
 
 Install target directory: `<workspace>/skills/<name>/` (the `<workspace>` is from the "工作空间" section).
 
+Before creating, installing, or updating a skill, verify that its name is not
+reserved by a LightAgent builtin skill. Builtin names such as
+`image-generation`, `knowledge-wiki`, and `skill-creator` cannot be replaced
+from the workspace. Choose a different name; do not bypass this protection
+with `write`, `edit`, or shell commands.
+
 ### Step 1 — Obtain skill content
 
 | Source | Action |

@@ -122,7 +122,11 @@ class SkillManager:
             entry_dict = {
                 "name": name,
                 "description": skill.description,
-                "source": prev.get("source") or skill.source,
+                "source": (
+                    "builtin"
+                    if skill.source == "builtin"
+                    else (prev.get("source") or skill.source)
+                ),
                 "enabled": enabled,
                 "category": category,
             }

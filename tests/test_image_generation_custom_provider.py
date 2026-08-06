@@ -3,16 +3,19 @@ import base64
 import importlib.util
 import json
 import os
+import shutil
 import sys
 import tempfile
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import config as config_module
 from config import Config
+from agent.skills.manager import SkillManager
 
 
 def set_conf(d):
@@ -391,6 +394,66 @@ class TestImageGenerationCustomProvider(unittest.TestCase):
         self.assertEqual("http://127.0.0.1:7890", proxy_cfg["proxy"])
         self.assertTrue(proxy_cfg["proxy_enabled"])
         self.assertEqual(["assets.grok.com"], proxy_cfg["proxy_domains"])
+
+    def test_builtin_skill_path_survives_stale_workspace_copy(self):
+        project_root = Path(__file__).resolve().parents[1]
+        builtin_skills = project_root / "skills"
+        builtin_image = builtin_skills / "image-generation"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            custom_skills = root / "workspace" / "skills"
+            stale_image = custom_skills / "image-generation"
+            stale_image.parent.mkdir(parents=True)
+            shutil.copytree(builtin_image, stale_image)
+            data_root = root / "data"
+            data_root.mkdir()
+            (data_root / "config.json").write_text(
+                json.dumps({
+                    "custom_providers": [{
+                        "id": "image-provider",
+                        "name": "Image Provider",
+                        "api_key": "sk-test",
+                        "api_base": "https://images.example.com/v1",
+                        "model": "image-model",
+                    }],
+                    "tools": {
+                        "web_fetch": {"proxy": "http://127.0.0.1:7890"},
+                    },
+                    "skills": {
+                        "image-generation": {
+                            "proxy_enabled": True,
+                            "proxy_domains": ["images.example.com"],
+                        },
+                    },
+                }),
+                encoding="utf-8",
+            )
+
+            with patch.object(SkillManager, "_sync_wechat_group_skill_access"):
+                manager = SkillManager(
+                    builtin_dir=str(builtin_skills),
+                    custom_dir=str(custom_skills),
+                )
+            selected = manager.get_skill("image-generation").skill
+            spec = importlib.util.spec_from_file_location(
+                "image_generation_selected_builtin_test",
+                Path(selected.base_dir) / "scripts" / "generate.py",
+            )
+            generate = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(generate)
+
+            with patch.dict(
+                os.environ,
+                {"LIGHTAGENT_DATA_DIR": str(data_root)},
+            ):
+                proxy = generate._load_image_proxy_config_from_config_file()
+                providers = generate._load_custom_providers_from_config_file()
+
+        self.assertEqual(builtin_image.resolve(), Path(selected.base_dir).resolve())
+        self.assertEqual("http://127.0.0.1:7890", proxy["proxy"])
+        self.assertTrue(proxy["proxy_enabled"])
+        self.assertEqual(["images.example.com"], proxy["proxy_domains"])
+        self.assertEqual(["image-provider"], [item["id"] for item in providers])
 
     def test_custom_provider_requires_api_key_base_and_model(self):
         set_conf({

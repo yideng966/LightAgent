@@ -225,11 +225,8 @@ class SkillLoader:
         """
         Load skills from builtin and custom directories.
 
-        Precedence (lowest to highest):
-        1. builtin  — project root ``skills/``, shipped with the codebase
-        2. custom   — workspace ``skills/``, installed via cloud console or skill creator
-
-        Same-name custom skills override builtin ones.
+        Builtin names are protected. Workspace skills are loaded only when
+        their declared names do not conflict with a project builtin.
 
         :param builtin_dir: Built-in skills directory
         :param custom_dir: Custom skills directory
@@ -237,6 +234,7 @@ class SkillLoader:
         """
         skill_map: Dict[str, SkillEntry] = {}
         all_diagnostics = []
+        builtin_names = set()
 
         # Load builtin skills (lower precedence)
         if builtin_dir and os.path.exists(builtin_dir):
@@ -245,12 +243,19 @@ class SkillLoader:
             for skill in result.skills:
                 entry = self._create_skill_entry(skill)
                 skill_map[skill.name] = entry
+                builtin_names.add(skill.name)
 
-        # Load custom skills (higher precedence, overrides builtin)
+        # Load non-conflicting workspace skills.
         if custom_dir and os.path.exists(custom_dir):
             result = self.load_skills_from_dir(custom_dir, source='custom')
             all_diagnostics.extend(result.diagnostics)
             for skill in result.skills:
+                if skill.name in builtin_names:
+                    all_diagnostics.append(
+                        f"Ignored workspace skill '{skill.name}': "
+                        "builtin names are protected"
+                    )
+                    continue
                 entry = self._create_skill_entry(skill)
                 skill_map[skill.name] = entry
 

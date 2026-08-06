@@ -158,7 +158,7 @@ LightAgent 的主链路由五层组成：
 | `translate/` | 翻译 Provider |
 | `desktop/` | 已停止维护的 Electron 历史源码归档 |
 | `docs/` | 文档站内容 |
-| `skills/` | 项目内置技能，启动时同步到 workspace |
+| `skills/` | 项目内置技能，直接从代码目录加载并受名称保护 |
 | `tests/` | `unittest` 回归测试 |
 | `plans/` | 开发计划、迁移计划和阶段性任务记录 |
 
@@ -333,13 +333,14 @@ MCP 逻辑：
 
 ## 技能系统
 
-技能是比工具更高层的工作流说明。项目内置技能在根目录 `skills/`，启动时会同步到 `agent_workspace` 下的 `skills/`。
+技能是比工具更高层的工作流说明。项目内置技能直接从根目录 `skills/` 加载；`agent_workspace/skills/` 只保存用户创建或安装的技能。工作区同名目录不能覆盖内置技能，升级遗留的同名副本会被忽略但不会自动删除。
 
 当前内置技能目录：
 
 - `image-generation`
 - `knowledge-wiki`
 - `skill-creator`
+- `wechat-group-report-cyber-intelligence`
 
 技能能力：
 
@@ -347,6 +348,7 @@ MCP 逻辑：
 - 支持技能启停配置。
 - 支持通过 CLI 或聊天命令安装技能。
 - 支持 Skill Hub、GitHub、本地目录等来源。
+- Skill Hub、GitHub、GitLab、Git URL、ZIP、URL、本地目录、Cloud 和对话创建都不能覆盖内置同名技能；需要自定义版本时必须使用新名称。
 - 官方 Skill Hub 使用签名索引、SHA-256、原子安装、锁文件、更新检测和版本回滚。
 - 技能包、依赖环境、配置与用户数据分离；普通卸载保留配置和用户数据。
 - Agent 在执行时可以把技能说明注入上下文，按技能要求调用工具。

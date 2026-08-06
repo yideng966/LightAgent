@@ -315,39 +315,6 @@ def _warmup_scheduler():
         logger.warning(f"[App] Scheduler warmup failed: {e}")
 
 
-def _sync_builtin_skills():
-    """Sync builtin skills from project skills/ to workspace skills/ on startup."""
-    import shutil
-    try:
-        workspace = conf().get("agent_workspace", "~/lightagent")
-        workspace = os.path.expanduser(workspace)
-        project_root = os.path.dirname(os.path.abspath(__file__))
-        builtin_dir = os.path.join(project_root, "skills")
-        custom_dir = os.path.join(workspace, "skills")
-
-        if not os.path.isdir(builtin_dir):
-            return
-
-        os.makedirs(custom_dir, exist_ok=True)
-        synced = 0
-        for name in os.listdir(builtin_dir):
-            src = os.path.join(builtin_dir, name)
-            if not os.path.isdir(src) or not os.path.isfile(os.path.join(src, "SKILL.md")):
-                continue
-            dst = os.path.join(custom_dir, name)
-            try:
-                if os.path.isdir(dst):
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst)
-                synced += 1
-            except Exception as e:
-                logger.warning(f"[App] Failed to sync builtin skill '{name}': {e}")
-        if synced:
-            logger.info(f"[App] Synced {synced} builtin skill(s) to workspace")
-    except Exception as e:
-        logger.warning(f"[App] Builtin skills sync failed: {e}")
-
-
 def _seed_project_knowledge():
     """Seed project documentation into the agent knowledge base on first run.
 
@@ -415,9 +382,6 @@ def run():
         web_console_enabled = conf().get("web_console", True)
         if web_console_enabled and "web" not in channel_names:
             channel_names.append("web")
-
-        # Sync builtin skills to workspace before channels start
-        _sync_builtin_skills()
 
         # Seed project documentation into knowledge base (idempotent, first-run only)
         _seed_project_knowledge()

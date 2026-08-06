@@ -58,7 +58,7 @@ class AppWechatGroupShutdownTest(unittest.TestCase):
                             "channel_type": const.WECHAT_GROUP,
                             "web_console": False,
                         }), \
-                        patch.object(app, "_sync_builtin_skills"), \
+                        patch("shutil.copytree") as copytree, \
                         patch.object(app, "_warmup_mcp_tools"), \
                         patch.object(app, "_warmup_scheduler"), \
                         patch.object(app, "ChannelManager", return_value=manager), \
@@ -74,6 +74,7 @@ class AppWechatGroupShutdownTest(unittest.TestCase):
                         app.run()
 
                 manager.start.assert_called_once_with([const.WECHAT_GROUP], first_start=True)
+                copytree.assert_not_called()
                 cleanup.assert_called_once_with(manager)
 
 

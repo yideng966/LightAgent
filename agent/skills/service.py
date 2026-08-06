@@ -14,6 +14,8 @@ from typing import Dict, List, Optional
 from common.log import logger
 from agent.skills.types import Skill, SkillEntry
 from agent.skills.manager import SkillManager
+from agent.skills.names import ensure_not_builtin_skill_name
+from agent.skills.frontmatter import parse_frontmatter
 
 try:
     import requests
@@ -107,6 +109,7 @@ class SkillService:
         name = payload.get("name")
         if not name:
             raise ValueError("skill name is required")
+        ensure_not_builtin_skill_name(name)
 
         payload_type = payload.get("type", "url")
 
@@ -161,6 +164,7 @@ class SkillService:
                     continue
                 dest = os.path.join(tmp_dir, rel_path)
                 self._download_file(url, dest)
+            self._validate_staged_skill_name(tmp_dir)
         except Exception:
             shutil.rmtree(tmp_dir, ignore_errors=True)
             raise
@@ -209,11 +213,25 @@ class SkillService:
                 if os.path.isdir(single):
                     extract_dir = single
 
+            self._validate_staged_skill_name(extract_dir)
+
             if os.path.exists(skill_dir):
                 shutil.rmtree(skill_dir)
             shutil.copytree(extract_dir, skill_dir)
 
         logger.info(f"[SkillService] add: skill '{name}' installed via package ({url})")
+
+    @staticmethod
+    def _validate_staged_skill_name(skill_dir: str) -> None:
+        skill_md = os.path.join(skill_dir, "SKILL.md")
+        if not os.path.isfile(skill_md):
+            return
+        with open(skill_md, "r", encoding="utf-8") as file:
+            declared_name = parse_frontmatter(file.read()).get("name")
+        if isinstance(declared_name, list):
+            declared_name = declared_name[0] if declared_name else ""
+        if declared_name:
+            ensure_not_builtin_skill_name(declared_name)
 
     # ------------------------------------------------------------------
     # open / close (enable / disable)

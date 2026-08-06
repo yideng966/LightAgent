@@ -20,12 +20,12 @@ LightAgent 提供多种方式获取技能：
 
 详细安装方式参考 [安装技能](/zh/skills/install) 和 [技能管理命令](/zh/cli/skill)。也可以通过对话 [创建技能](/zh/skills/create)，或向 [Skill Hub](https://skills.cowagent.ai/submit) 贡献你的技能。
 
-## 技能加载优先级
+## 技能加载规则
 
-1. **工作空间技能**（最高）：`~/lightagent/skills/`
-2. **项目内置技能**（最低）：`skills/`
+1. **项目内置技能**：直接从项目 `skills/` 目录加载，名称受保护。
+2. **工作空间技能**：从 `~/lightagent/skills/` 加载用户创建或安装的非同名技能。
 
-同名技能按优先级覆盖。
+工作空间技能不能覆盖项目内置同名技能。升级遗留的同名工作空间副本会被忽略但不会自动删除；通过 Skill Hub、GitHub、GitLab、Git URL、ZIP、URL、本地目录、Cloud 或对话创建自定义版本时，必须使用新名称。
 
 ## 技能文件结构
 

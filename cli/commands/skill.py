@@ -17,6 +17,8 @@ from urllib.parse import urlparse
 import click
 import requests
 
+from agent.skills.names import BuiltinSkillNameError, ensure_not_builtin_skill_name
+
 logger = logging.getLogger(__name__)
 
 from cli.utils import (
@@ -276,6 +278,11 @@ def _batch_install_skills(discovered, spec, skills_dir, source, result: InstallR
         if not _SAFE_NAME_RE.match(safe_name):
             result.messages.append(f"  Skipping '{sname}' (invalid name)")
             continue
+        try:
+            ensure_not_builtin_skill_name(safe_name)
+        except BuiltinSkillNameError as exc:
+            result.messages.append(f"  Skipping '{sname}' ({exc})")
+            continue
         target_dir = os.path.join(skills_dir, safe_name)
         if os.path.exists(target_dir):
             shutil.rmtree(target_dir)
@@ -302,6 +309,16 @@ def _read_file_text(path: str) -> str:
             return f.read()
     except Exception:
         return ""
+
+
+def _check_staged_skill_name(skill_dir: str, fallback_name: str = "") -> str:
+    skill_md = os.path.join(skill_dir, "SKILL.md")
+    declared = ""
+    if os.path.isfile(skill_md):
+        declared = _parse_skill_frontmatter(_read_file_text(skill_md)).get("name") or ""
+    name = str(declared or fallback_name)
+    _check_skill_name(name)
+    return name
 
 
 def _install_local(path: str, result: InstallResult):
@@ -520,6 +537,7 @@ def _install_targz_bytes(content: bytes, name: str, skills_dir: str, result: Ins
             safe_name = re.sub(r'[^a-zA-Z0-9_\\-]', '-', sname)[:64]
             if not _SAFE_NAME_RE.match(safe_name):
                 safe_name = name
+            _check_skill_name(safe_name)
             target = os.path.join(skills_dir, safe_name)
             if os.path.exists(target):
                 shutil.rmtree(target)
@@ -586,6 +604,10 @@ def _check_skill_name(name: str):
         raise SkillInstallError(
             f"Invalid skill name '{name}'. Use only letters, digits, hyphens, and underscores."
         )
+    try:
+        ensure_not_builtin_skill_name(name)
+    except BuiltinSkillNameError as exc:
+        raise SkillInstallError(str(exc)) from exc
 
 
 def _check_github_spec(spec: str):
@@ -687,26 +709,49 @@ def _list_local():
 
 
 def _merge_builtin_into_config(config: dict, builtin_dir: str, skills_dir: str):
-    """Scan builtin and custom dirs, add any new skills into config dict."""
+    """Merge disk skills while keeping builtin names authoritative."""
     dirty = False
-    for d, source in [(builtin_dir, "builtin"), (skills_dir, "custom")]:
-        if not os.path.isdir(d):
-            continue
-        for name in os.listdir(d):
+    builtin_names = set()
+
+    if os.path.isdir(builtin_dir):
+        for name in os.listdir(builtin_dir):
             if name.startswith(".") or name in ("skills_config.json",):
                 continue
-            skill_path = os.path.join(d, name)
+            skill_path = os.path.join(builtin_dir, name)
             if not os.path.isdir(skill_path):
                 continue
             if not os.path.isfile(os.path.join(skill_path, "SKILL.md")):
                 continue
-            if name in config:
+            builtin_names.add(name)
+            current = dict(config.get(name) or {})
+            merged = dict(current)
+            merged.update({
+                "name": name,
+                "description": _read_skill_description(skill_path),
+                "source": "builtin",
+            })
+            merged.setdefault("enabled", True)
+            merged.setdefault("category", "skill")
+            if current != merged:
+                config[name] = merged
+                dirty = True
+
+    if os.path.isdir(skills_dir):
+        for name in os.listdir(skills_dir):
+            if name.startswith(".") or name in ("skills_config.json",):
+                continue
+            if name in builtin_names or name in config:
+                continue
+            skill_path = os.path.join(skills_dir, name)
+            if not os.path.isdir(skill_path):
+                continue
+            if not os.path.isfile(os.path.join(skill_path, "SKILL.md")):
                 continue
             desc = _read_skill_description(skill_path)
             config[name] = {
                 "name": name,
                 "description": desc,
-                "source": source,
+                "source": "custom",
                 "enabled": True,
                 "category": "skill",
             }
@@ -1294,6 +1339,7 @@ def _install_github(spec, result: InstallResult, subpath=None, skill_name=None, 
             api_dest = os.path.join(api_tmp, skill_name)
             os.makedirs(api_dest)
             _download_github_dir(owner, repo, branch, subpath.strip("/"), api_dest)
+            _check_staged_skill_name(api_dest, skill_name)
             if os.path.exists(target_dir):
                 shutil.rmtree(target_dir)
             shutil.copytree(api_dest, target_dir)
@@ -1352,6 +1398,8 @@ def _install_from_repo_root(repo_root, spec, subpath, skill_name, skills_dir, so
             result.messages.append(f"Installed '{skill_name}' from {source}.")
             return
 
+        if len(discovered) == 1:
+            _check_skill_name(discovered[0][0])
         _batch_install_skills(discovered, spec, skills_dir, source, result)
 
 
@@ -1426,6 +1474,7 @@ def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, 
             safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '-', sname)[:64]
             if not _SAFE_NAME_RE.match(safe_name):
                 safe_name = name
+            _check_skill_name(safe_name)
             target = os.path.join(skills_dir, safe_name)
             if os.path.exists(target):
                 shutil.rmtree(target)
@@ -1436,6 +1485,7 @@ def _install_zip_bytes(content, name, skills_dir, result: InstallResult = None, 
                 result.messages.append(f"Installed '{safe_name}' from {source_label}.")
             return
 
+        _check_skill_name(name)
         target = os.path.join(skills_dir, name)
         if os.path.exists(target):
             shutil.rmtree(target)

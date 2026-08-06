@@ -15,6 +15,13 @@ import sys
 from pathlib import Path
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from agent.skills.names import BuiltinSkillNameError, ensure_not_builtin_skill_name
+
+
 SKILL_TEMPLATE = """---
 name: {skill_name}
 description: [TODO: Complete and informative explanation of what the skill does and when to use it. Include WHEN to use this skill - specific scenarios, file types, or tasks that trigger it.]
@@ -202,6 +209,12 @@ def init_skill(skill_name, path):
     Returns:
         Path to created skill directory, or None if error
     """
+    try:
+        ensure_not_builtin_skill_name(skill_name)
+    except BuiltinSkillNameError as exc:
+        print(f"Error: {exc}")
+        return None
+
     # Determine skill directory path
     skill_dir = Path(path).resolve() / skill_name
 

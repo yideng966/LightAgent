@@ -20,6 +20,7 @@ import requests
 
 from agent.skills.frontmatter import parse_frontmatter
 from agent.skills.capabilities import capability_status, require_capabilities
+from agent.skills.names import BuiltinSkillNameError, ensure_not_builtin_skill_name
 from agent.skills.registry import (
     LegacySkillRegistryClient, RegistryError, RegistrySecurityError,
     SkillRegistryClient,
@@ -29,7 +30,6 @@ from cli.utils import SKILL_HUB_API, get_builtin_skills_dir, get_skills_dir, get
 from common.log import logger
 
 
-PROTECTED_SKILL_NAMES = {"image-generation", "knowledge-wiki", "skill-creator"}
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$")
 _MAX_PACKAGE_BYTES = 50 * 1024 * 1024
 _MAX_EXTRACTED_BYTES = 200 * 1024 * 1024
@@ -512,8 +512,10 @@ class SkillLifecycleManager:
         name = str(skill.get("name", ""))
         if not _NAME_RE.match(name):
             raise RegistrySecurityError("注册表包含非法技能名称")
-        if name in PROTECTED_SKILL_NAMES or os.path.isdir(os.path.join(get_builtin_skills_dir(), name)):
-            raise RegistrySecurityError(f"技能 {name} 是 LightAgent 内置保留名称")
+        try:
+            ensure_not_builtin_skill_name(name, get_builtin_skills_dir())
+        except BuiltinSkillNameError as exc:
+            raise RegistrySecurityError(str(exc)) from exc
         if skill.get("status", "active") in ("yanked", "revoked"):
             raise RegistrySecurityError(f"技能 {name} 当前不可安装")
         if expected_version and str(skill.get("version")) != str(expected_version):

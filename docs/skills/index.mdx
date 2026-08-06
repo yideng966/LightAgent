@@ -19,12 +19,12 @@ LightAgent offers multiple ways to acquire skills:
 
 See [Install Skills](/skills/install) and [Skill Management Commands](/cli/skill) for details. You can also [create skills](/skills/create) through conversation.
 
-## Skill Loading Priority
+## Skill Loading Rules
 
-1. **Workspace skills** (highest): `~/lightagent/skills/`
-2. **Project built-in skills** (lowest): `skills/`
+1. **Project built-in skills** are loaded directly from `skills/` and their names are protected.
+2. **Workspace skills** load user-created or installed non-conflicting skills from `~/lightagent/skills/`.
 
-Skills with the same name are overridden by priority.
+A workspace skill cannot override a project builtin with the same name. Legacy workspace copies are ignored but not deleted. Custom versions installed or created through Skill Hub, GitHub, GitLab, Git URLs, ZIP, URL, local directories, Cloud, or conversation must use a different name.
 
 ## Skill File Structure
 

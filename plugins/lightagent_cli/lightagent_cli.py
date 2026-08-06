@@ -1273,7 +1273,7 @@ class LightAgentCliPlugin(Plugin):
 
         skill_dir = None
         source = None
-        for d, src in [(skills_dir, "custom"), (builtin_dir, "builtin")]:
+        for d, src in [(builtin_dir, "builtin"), (skills_dir, "custom")]:
             candidate = os.path.join(d, name)
             if os.path.isdir(candidate):
                 skill_dir = candidate

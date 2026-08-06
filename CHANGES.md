@@ -1,5 +1,40 @@
 # CHANGES
 
+## 2026-08-06
+
+### 修复内置技能工作区副本覆盖运行路径
+
+- 内置技能改为始终从项目代码目录加载，启动时不再复制到工作区；升级遗留的同名工作区副本会被忽略但不会自动删除。
+- Agent、终端 CLI 和聊天命令统一以内置技能为准，并校正历史配置中错误的自定义来源标识，同时保留启停状态和展示配置。
+- 官方 Skill Hub、在线仓库、归档包、本地目录、Cloud 安装和技能创建入口统一拒绝内置保留名称，防止出现安装成功但运行时不生效的同名副本。
+- 生图技能即使遇到工作区历史副本，也会从项目内置目录加载项目配置、自定义 Provider 和代理设置，图片持久化目录保持不变。
+
+关键文件：
+
+- `app.py`
+- `agent/skills/names.py`
+- `agent/skills/loader.py`
+- `agent/skills/manager.py`
+- `agent/skills/lifecycle.py`
+- `agent/skills/service.py`
+- `cli/commands/skill.py`
+- `plugins/lightagent_cli/lightagent_cli.py`
+- `skills/skill-creator/`
+- `tests/test_skill_builtin_precedence.py`
+- `tests/test_skill_install_sources.py`
+- `tests/test_image_generation_custom_provider.py`
+- `plans/20260805_内置技能运行路径通用修复方案.md`
+
+验证记录：
+
+- 核心技能路径、安装来源、生图配置和启动退出回归：36 项通过。
+- Skill Hub、生命周期、Runner、微信群技能权限、报告模板和路径安全相关回归：96 项通过，1 项按既有条件跳过。
+- 新增内置 frontmatter 声明名保护测试按 TDD 完成红灯与绿灯验证。
+- 全量 Python 回归：1299 项通过，1 项按既有条件跳过。
+- Python 语法编译和 `git diff --check`：通过。
+- 隔离临时配置启动 `python app.py` 并访问 Web 端口 19901：返回 HTTP 200；技能管理器确认 `image-generation` 来源为 `builtin` 且路径指向项目内置目录。
+- Docker 构建未执行：本机 `com.docker.service` 当前为 Stopped，Docker daemon 不可用；未连接远端部署环境。
+
 ## 2026-08-04
 
 ### 发布 LightAgent 2.2.10 并回退图片摘要判定调整
