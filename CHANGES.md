@@ -2,6 +2,27 @@
 
 ## 2026-08-06
 
+### 发布 LightAgent 2.2.11
+
+- 将内置技能运行路径修复发布为 `v2.2.11`：容器和源码运行都以内置代码目录为唯一来源，工作区同名历史副本不再覆盖生图等内置技能。
+- 将 `cli/VERSION` 与 `pyproject.toml` 同步更新为 `2.2.11`，新增面向用户的版本化发行说明和中文发布计划。
+- 本次发布在标签工作流完成后继续更新实际部署容器，并验证镜像版本、技能路径、配置加载和错误日志；生产配置、工作区与图片数据保持原挂载不变。
+
+关键文件：
+
+- `cli/VERSION`
+- `pyproject.toml`
+- `docs/releases/v2.2.11.md`
+- `plans/20260806_发布2.2.11.md`
+- `CHANGES.md`
+
+验证记录：
+
+- 功能分支与合并后 `master` 分别运行全量 Python 回归：每次均为 1299 项通过，1 项按既有条件跳过。
+- `python -X utf8 -m unittest tests.test_release_notes tests.test_release_version tests.test_docker_deployment`：19 项通过。
+- 发行说明校验、版本来源一致性和 `git diff --check`：通过。
+- GitHub Release、Docker 多架构镜像构建和远端容器验收待标签推送后执行。
+
 ### 修复内置技能工作区副本覆盖运行路径
 
 - 内置技能改为始终从项目代码目录加载，启动时不再复制到工作区；升级遗留的同名工作区副本会被忽略但不会自动删除。
